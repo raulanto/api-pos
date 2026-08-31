@@ -4,6 +4,7 @@ from app.modules.usuarios.domain.entities import Usuario
 from app.modules.usuarios.domain.exceptions import RolNoEncontrado, SucursalNoEncontrada, EmailDuplicado
 from app.modules.usuarios.application.ports.usuario_repository import UsuarioRepository
 from app.modules.usuarios.application.ports.catalogos_repository import RolRepository, SucursalRepository
+from app.modules.usuarios.domain.password_policy import validar_password
 from app.core.security import get_password_hash
 
 @dataclass
@@ -26,6 +27,8 @@ class CrearUsuarioUseCase:
         self._sucursal_repo = sucursal_repo
 
     async def ejecutar(self, data: CrearUsuarioInput) -> Usuario:
+        validar_password(data.password_plano, data.email)
+
         # Validate Rol
         rol = await self._rol_repo.obtener_por_id(data.rol_id)
         if not rol:

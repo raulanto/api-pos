@@ -28,6 +28,7 @@ class PermisoORM(Base):
 class RolORM(Base):
     __tablename__ = "rol"
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    codigo = Column(String(50), unique=True, nullable=True, index=True)
     nombre = Column(String(50), nullable=False)
     descripcion = Column(String(255), nullable=False)
     permisos = relationship("PermisoORM", secondary=rol_permiso_table)
@@ -44,3 +45,16 @@ class UsuarioORM(Base, TimestampMixin, SoftDeleteMixin):
 
     sucursal = relationship("SucursalORM")
     rol = relationship("RolORM")
+
+class RefreshTokenORM(Base):
+    __tablename__ = "refresh_token"
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=False, index=True)
+    token_hash = Column(String(128), unique=True, nullable=False, index=True)
+    expira_en = Column(DateTime(timezone=True), nullable=False)
+    revocado = Column(Boolean, default=False, nullable=False)
+    user_agent = Column(String(255), nullable=True)
+    ip = Column(String(64), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+    usuario = relationship("UsuarioORM")

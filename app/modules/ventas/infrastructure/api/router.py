@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
-from app.modules.usuarios.domain.entities import Usuario
+from app.core.dependencies import require_permission, UsuarioAutenticado
 from app.modules.ventas.infrastructure.api.schemas import CrearVentaRequest, VentaResponse
 from app.modules.ventas.application.use_cases.crear_venta import CrearVentaUseCase, CrearVentaInput, LineaInput, PagoInput
 from app.modules.ventas.infrastructure.persistence.repositories_impl import SqlAlchemyVentaRepository, SqlAlchemyCajaTurnoRepository
@@ -28,7 +27,7 @@ def get_crear_venta_use_case(db: AsyncSession = Depends(get_db)) -> CrearVentaUs
 async def crear_venta(
     body: CrearVentaRequest,
     use_case: CrearVentaUseCase = Depends(get_crear_venta_use_case),
-    usuario_actual: Usuario = Depends(get_current_user)
+    usuario_actual: UsuarioAutenticado = Depends(require_permission("ventas.crear")),
 ):
     if not usuario_actual.sucursal_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El usuario no tiene una sucursal asignada")

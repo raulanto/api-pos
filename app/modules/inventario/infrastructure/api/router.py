@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
-from app.modules.usuarios.domain.entities import Usuario
+from app.core.dependencies import require_permission, UsuarioAutenticado
 from app.modules.inventario.infrastructure.api.schemas import (
     CrearCategoriaRequest, CategoriaResponse,
     CrearProductoRequest, ProductoResponse,
@@ -37,13 +36,11 @@ def get_aplicar_movimiento_use_case(db: AsyncSession = Depends(get_db)) -> Aplic
         movimiento_repo=SqlAlchemyMovimientoRepository(db)
     )
 
-# Mock get_current_user dependency for compilation, ideally it should come from app.core.dependencies
-
 @router.post("/categorias", response_model=CategoriaResponse, status_code=status.HTTP_201_CREATED)
 async def crear_categoria(
     body: CrearCategoriaRequest,
     use_case: CrearCategoriaUseCase = Depends(get_crear_categoria_use_case),
-    usuario_actual: Usuario = Depends(get_current_user)
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.crear")),
 ):
     try:
         categoria = await use_case.ejecutar(CrearCategoriaInput(
@@ -58,6 +55,7 @@ async def crear_categoria(
 async def crear_producto(
     body: CrearProductoRequest,
     use_case: CrearProductoUseCase = Depends(get_crear_producto_use_case),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.crear")),
 ):
     try:
         producto = await use_case.ejecutar(CrearProductoInput(
@@ -80,7 +78,7 @@ async def crear_producto(
 async def aplicar_movimiento(
     body: AplicarMovimientoRequest,
     use_case: AplicarMovimientoUseCase = Depends(get_aplicar_movimiento_use_case),
-    usuario_actual: Usuario = Depends(get_current_user)
+    usuario_actual: UsuarioAutenticado = Depends(require_permission("inventario.movimiento")),
 ):
     if not usuario_actual.sucursal_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El usuario no tiene una sucursal asignada")

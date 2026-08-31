@@ -1,6 +1,8 @@
-from app.modules.usuarios.domain.entities import Usuario, Rol, Permiso, Sucursal
-from app.modules.usuarios.infrastructure.persistence.orm_models import UsuarioORM, RolORM, PermisoORM, SucursalORM
-from datetime import datetime, timezone
+from app.modules.usuarios.domain.entities import Usuario, Rol, Permiso, Sucursal, RefreshToken
+from app.modules.usuarios.infrastructure.persistence.orm_models import (
+    UsuarioORM, RolORM, PermisoORM, SucursalORM, RefreshTokenORM,
+)
+
 
 def to_domain_permiso(orm: PermisoORM) -> Permiso:
     return Permiso(id=orm.id, codigo=orm.codigo, descripcion=orm.descripcion)
@@ -10,6 +12,7 @@ def to_domain_rol(orm: RolORM) -> Rol:
         id=orm.id,
         nombre=orm.nombre,
         descripcion=orm.descripcion,
+        codigo=orm.codigo,
         permisos=[to_domain_permiso(p) for p in orm.permisos] if orm.permisos else []
     )
 
@@ -46,4 +49,28 @@ def to_orm_usuario(entidad: Usuario) -> UsuarioORM:
         password_hash=entidad.password_hash,
         activo=entidad.activo,
         last_login_at=entidad.last_login_at
+    )
+
+def to_domain_refresh_token(orm: RefreshTokenORM) -> RefreshToken:
+    return RefreshToken(
+        id=orm.id,
+        usuario_id=orm.usuario_id,
+        token_hash=orm.token_hash,
+        expira_en=orm.expira_en,
+        revocado=orm.revocado,
+        user_agent=orm.user_agent,
+        ip=orm.ip,
+        created_at=orm.created_at,
+    )
+
+def to_orm_refresh_token(entidad: RefreshToken) -> RefreshTokenORM:
+    return RefreshTokenORM(
+        id=entidad.id,
+        usuario_id=entidad.usuario_id,
+        token_hash=entidad.token_hash,
+        expira_en=entidad.expira_en,
+        revocado=entidad.revocado,
+        user_agent=entidad.user_agent,
+        ip=entidad.ip,
+        created_at=entidad.created_at,
     )

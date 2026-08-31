@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
-from app.modules.usuarios.domain.entities import Usuario
+from app.core.dependencies import require_permission, UsuarioAutenticado
 from app.modules.reportes.infrastructure.api.schemas import CorteDeCajaResponse
 from app.modules.reportes.application.use_cases.corte_de_caja import CorteDeCajaUseCase
 from app.modules.reportes.infrastructure.persistence.reporte_query_impl import SqlAlchemyReporteQueryImpl
@@ -17,7 +16,7 @@ def get_corte_caja_use_case(db: AsyncSession = Depends(get_db)) -> CorteDeCajaUs
 async def calcular_corte_caja(
     caja_turno_id: UUID,
     use_case: CorteDeCajaUseCase = Depends(get_corte_caja_use_case),
-    usuario_actual: Usuario = Depends(get_current_user)
+    usuario_actual: UsuarioAutenticado = Depends(require_permission("reportes.leer")),
 ):
     try:
         corte = await use_case.ejecutar(caja_turno_id)

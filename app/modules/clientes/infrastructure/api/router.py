@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
-from app.modules.usuarios.domain.entities import Usuario
+from app.core.dependencies import require_permission, UsuarioAutenticado, verificar_alcance_sucursal
 from app.modules.clientes.infrastructure.api.schemas import CrearClienteRequest, ClienteResponse
 from app.modules.clientes.application.use_cases.crear_cliente import CrearClienteUseCase, CrearClienteInput
 from app.modules.clientes.application.use_cases.obtener_cliente import ObtenerClienteUseCase
@@ -22,7 +21,7 @@ def get_obtener_cliente_use_case(db: AsyncSession = Depends(get_db)) -> ObtenerC
 async def crear_cliente(
     body: CrearClienteRequest,
     use_case: CrearClienteUseCase = Depends(get_crear_cliente_use_case),
-    usuario_actual: Usuario = Depends(get_current_user)
+    usuario_actual: UsuarioAutenticado = Depends(require_permission("clientes.crear")),
 ):
     if not usuario_actual.sucursal_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El usuario no tiene una sucursal asignada")
@@ -41,10 +40,11 @@ async def crear_cliente(
 async def obtener_cliente(
     cliente_id: UUID,
     use_case: ObtenerClienteUseCase = Depends(get_obtener_cliente_use_case),
-    usuario_actual: Usuario = Depends(get_current_user)
+    usuario_actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
 ):
     try:
         cliente = await use_case.ejecutar(cliente_id)
-        return cliente
     except ClienteNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    verificar_alcance_sucursal(usuario_actual, cliente.sucursal_id)
+    return cliente
