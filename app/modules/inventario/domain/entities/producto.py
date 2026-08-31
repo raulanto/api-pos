@@ -2,29 +2,28 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
-from app.modules.inventario.domain.value_objects import TipoProducto, TipoMovimiento
+from app.modules.inventario.domain.value_objects import TipoProducto
 
-@dataclass
-class Categoria:
-    id: UUID
-    nombre: str
-    categoria_padre_id: UUID | None
-    activo: bool
 
-    @staticmethod
-    def crear(nombre: str, categoria_padre_id: UUID | None = None) -> "Categoria":
-        return Categoria(id=uuid4(), nombre=nombre, categoria_padre_id=categoria_padre_id, activo=True)
+"""
+    Entidad que representa un producto.
 
-    def actualizar(self, nombre: str | None = None, categoria_padre_id: UUID | None = None,
-                   cambiar_padre: bool = False) -> None:
-        if nombre is not None:
-            self.nombre = nombre
-        if cambiar_padre:
-            self.categoria_padre_id = categoria_padre_id
-
-    def desactivar(self) -> None:
-        self.activo = False
-
+    @param id: ID del producto.
+    @param sku: SKU del producto.
+    @param codigo_barras: Código de barras del producto.
+    @param nombre: Nombre del producto.
+    @param descripcion: Descripción del producto.
+    @param categoria_id: ID de la categoría.
+    @param unidad_medida: Unidad de medida del producto.
+    @param precio_venta: Precio de venta del producto.
+    @param costo: Costo del producto.
+    @param impuesto_tasa: Tasa de impuesto.
+    @param tipo: Tipo de producto.
+    @param permite_stock_negativo: Permite stock negativo.
+    @param activo: Indica si el producto está activo.
+    @param created_at: Fecha de creación.
+    @return: Instancia de la clase Producto.
+"""
 @dataclass
 class Producto:
     id: UUID
@@ -42,6 +41,22 @@ class Producto:
     activo: bool
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+
+    """
+    Método estático para crear un producto.
+
+    @param sku: SKU del producto.
+    @param nombre: Nombre del producto.
+    @param categoria_id: ID de la categoría.
+    @param unidad_medida: Unidad de medida del producto.
+    @param precio_venta: Precio de venta del producto.
+    @param costo: Costo del producto.
+    @param impuesto_tasa: Tasa de impuesto.
+    @param permite_stock_negativo: Permite stock negativo.
+    @param codigo_barras: Código de barras del producto.
+    @param descripcion: Descripción del producto.
+    @return: Instancia de la clase Producto.
+    """
     @staticmethod
     def crear(
         sku: str, nombre: str, categoria_id: UUID, unidad_medida: str,
@@ -65,6 +80,22 @@ class Producto:
             activo=True
         )
 
+    """
+    Método para actualizar un producto.
+
+    @param self: Instancia de la clase Producto.
+    @param nombre: Nombre del producto.
+    @param descripcion: Descripción del producto.
+    @param categoria_id: ID de la categoría.
+    @param unidad_medida: Unidad de medida del producto.
+    @param precio_venta: Precio de venta del producto.
+    @param costo: Costo del producto.
+    @param impuesto_tasa: Tasa de impuesto.
+    @param permite_stock_negativo: Permite stock negativo.
+    @param codigo_barras: Código de barras del producto.
+    @param cambiar_codigo_barras: Indica si se debe cambiar el código de barras.
+    @return: None
+    """
     def actualizar(
         self,
         nombre: str | None = None,
@@ -97,51 +128,11 @@ class Producto:
         if cambiar_codigo_barras:
             self.codigo_barras = codigo_barras
 
+    """
+    Método para desactivar un producto.
+
+    @param self: Instancia de la clase Producto.
+    @return: None
+    """
     def desactivar(self) -> None:
         self.activo = False
-
-@dataclass
-class Existencia:
-    id: UUID
-    producto_id: UUID
-    sucursal_id: UUID
-    cantidad: Decimal
-    stock_minimo: Decimal
-    stock_maximo: Decimal | None
-    updated_at: datetime = field(default_factory=datetime.utcnow)
-
-@dataclass
-class MovimientoInventario:
-    id: UUID
-    producto_id: UUID
-    sucursal_id: UUID
-    tipo: TipoMovimiento
-    cantidad: Decimal
-    costo_unitario: Decimal | None
-    referencia_tipo: str
-    referencia_id: UUID | None
-    usuario_id: UUID
-    motivo: str | None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-
-    @staticmethod
-    def crear(
-        producto_id: UUID, sucursal_id: UUID, tipo: TipoMovimiento, cantidad: Decimal,
-        referencia_tipo: str, usuario_id: UUID, referencia_id: UUID | None = None,
-        costo_unitario: Decimal | None = None, motivo: str | None = None
-    ) -> "MovimientoInventario":
-        if cantidad < 0:
-            raise ValueError("La cantidad del movimiento debe ser siempre positiva.")
-        
-        return MovimientoInventario(
-            id=uuid4(),
-            producto_id=producto_id,
-            sucursal_id=sucursal_id,
-            tipo=tipo,
-            cantidad=cantidad,
-            costo_unitario=costo_unitario,
-            referencia_tipo=referencia_tipo,
-            referencia_id=referencia_id,
-            usuario_id=usuario_id,
-            motivo=motivo
-        )

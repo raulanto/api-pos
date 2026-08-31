@@ -2,6 +2,25 @@ from app.modules.inventario.domain.entities import Categoria, Producto, Existenc
 from app.modules.inventario.domain.value_objects import TipoProducto, TipoMovimiento
 from app.modules.inventario.infrastructure.persistence.orm_models import CategoriaORM, ProductoORM, ExistenciaORM, MovimientoInventarioORM
 
+"""
+    Mappers para transformar entidades de dominio a ORM y viceversa.
+    
+    - Entidad -> ORM: Para guardar en base de datos.
+    - ORM -> Entidad: Para devolver datos al servicio/API.
+    @params:
+    - orm: Modelo ORM.
+    - entidad: Entidad de dominio.
+    
+    @returns:
+    - Categoria
+    - CategoriaORM
+    - Producto
+    - ProductoORM
+    - Existencia
+    - ExistenciaORM
+    - MovimientoInventario
+    - MovimientoInventarioORM
+"""
 def to_domain_categoria(orm: CategoriaORM) -> Categoria:
     return Categoria(
         id=orm.id,
@@ -10,6 +29,13 @@ def to_domain_categoria(orm: CategoriaORM) -> Categoria:
         activo=orm.activo
     )
 
+"""
+    Transforma una categoría ORM a una entidad de dominio.
+    @params:
+    - orm: Modelo ORM.
+    @returns:
+    - Categoria
+"""
 def to_orm_categoria(entidad: Categoria) -> CategoriaORM:
     return CategoriaORM(
         id=entidad.id,
@@ -18,6 +44,13 @@ def to_orm_categoria(entidad: Categoria) -> CategoriaORM:
         activo=entidad.activo
     )
 
+"""
+    Transforma un producto ORM a una entidad de dominio.
+    @params:
+    - orm: Modelo ORM.
+    @returns:
+    - Producto
+"""
 def to_domain_producto(orm: ProductoORM) -> Producto:
     return Producto(
         id=orm.id,
@@ -36,6 +69,13 @@ def to_domain_producto(orm: ProductoORM) -> Producto:
         created_at=orm.created_at
     )
 
+"""
+    Transforma un producto de dominio a ORM.
+    @params:
+    - entidad: Entidad de dominio.
+    @returns:
+    - ProductoORM
+"""
 def to_orm_producto(entidad: Producto) -> ProductoORM:
     return ProductoORM(
         id=entidad.id,
@@ -53,6 +93,13 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         activo=entidad.activo
     )
 
+"""
+    Transforma una existencia ORM a una entidad de dominio.
+    @params:
+    - orm: Modelo ORM.
+    @returns:
+    - Existencia
+"""
 def to_domain_existencia(orm: ExistenciaORM) -> Existencia:
     return Existencia(
         id=orm.id,
@@ -64,6 +111,13 @@ def to_domain_existencia(orm: ExistenciaORM) -> Existencia:
         updated_at=orm.updated_at
     )
 
+"""
+    Transforma una existencia de dominio a ORM.
+    @params:
+    - entidad: Entidad de dominio.
+    @returns:
+    - ExistenciaORM
+"""
 def to_orm_existencia(entidad: Existencia) -> ExistenciaORM:
     return ExistenciaORM(
         id=entidad.id,
@@ -74,6 +128,13 @@ def to_orm_existencia(entidad: Existencia) -> ExistenciaORM:
         stock_maximo=entidad.stock_maximo
     )
 
+"""
+    Transforma un movimiento ORM a una entidad de dominio.
+    @params:
+    - orm: Modelo ORM.
+    @returns:
+    - MovimientoInventario
+"""
 def to_domain_movimiento(orm: MovimientoInventarioORM) -> MovimientoInventario:
     return MovimientoInventario(
         id=orm.id,
@@ -89,6 +150,13 @@ def to_domain_movimiento(orm: MovimientoInventarioORM) -> MovimientoInventario:
         created_at=orm.created_at,
     )
 
+"""
+    Transforma un movimiento de dominio a ORM.
+    @params:
+    - entidad: Entidad de dominio.
+    @returns:
+    - MovimientoInventarioORM
+"""
 def to_orm_movimiento(entidad: MovimientoInventario) -> MovimientoInventarioORM:
     return MovimientoInventarioORM(
         id=entidad.id,

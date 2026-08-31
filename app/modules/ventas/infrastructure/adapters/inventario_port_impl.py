@@ -6,7 +6,7 @@ from app.modules.inventario.application.use_cases.aplicar_movimiento import (
     AplicarMovimientoUseCase, AplicarMovimientoInput,
 )
 from app.modules.inventario.domain.value_objects import TipoMovimiento
-from app.modules.inventario.infrastructure.persistence.repositories_impl import (
+from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyProductoRepository,
     SqlAlchemyExistenciaRepository,
     SqlAlchemyMovimientoRepository,
