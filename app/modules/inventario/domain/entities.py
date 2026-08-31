@@ -15,6 +15,16 @@ class Categoria:
     def crear(nombre: str, categoria_padre_id: UUID | None = None) -> "Categoria":
         return Categoria(id=uuid4(), nombre=nombre, categoria_padre_id=categoria_padre_id, activo=True)
 
+    def actualizar(self, nombre: str | None = None, categoria_padre_id: UUID | None = None,
+                   cambiar_padre: bool = False) -> None:
+        if nombre is not None:
+            self.nombre = nombre
+        if cambiar_padre:
+            self.categoria_padre_id = categoria_padre_id
+
+    def desactivar(self) -> None:
+        self.activo = False
+
 @dataclass
 class Producto:
     id: UUID
@@ -54,6 +64,41 @@ class Producto:
             permite_stock_negativo=permite_stock_negativo,
             activo=True
         )
+
+    def actualizar(
+        self,
+        nombre: str | None = None,
+        descripcion: str | None = None,
+        categoria_id: UUID | None = None,
+        unidad_medida: str | None = None,
+        precio_venta: Decimal | None = None,
+        costo: Decimal | None = None,
+        impuesto_tasa: Decimal | None = None,
+        permite_stock_negativo: bool | None = None,
+        codigo_barras: str | None = None,
+        cambiar_codigo_barras: bool = False,
+    ) -> None:
+        if nombre is not None:
+            self.nombre = nombre
+        if descripcion is not None:
+            self.descripcion = descripcion
+        if categoria_id is not None:
+            self.categoria_id = categoria_id
+        if unidad_medida is not None:
+            self.unidad_medida = unidad_medida
+        if precio_venta is not None:
+            self.precio_venta = precio_venta
+        if costo is not None:
+            self.costo = costo
+        if impuesto_tasa is not None:
+            self.impuesto_tasa = impuesto_tasa
+        if permite_stock_negativo is not None:
+            self.permite_stock_negativo = permite_stock_negativo
+        if cambiar_codigo_barras:
+            self.codigo_barras = codigo_barras
+
+    def desactivar(self) -> None:
+        self.activo = False
 
 @dataclass
 class Existencia:

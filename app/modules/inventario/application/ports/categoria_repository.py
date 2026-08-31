@@ -7,4 +7,17 @@ class CategoriaRepository(ABC):
     async def guardar(self, categoria: Categoria) -> None: ...
 
     @abstractmethod
+    async def actualizar(self, categoria: Categoria) -> None: ...
+
+    @abstractmethod
     async def obtener_por_id(self, categoria_id: UUID) -> Categoria | None: ...
+
+    @abstractmethod
+    async def listar(
+        self,
+        activo: bool | None = None,
+        categoria_padre_id: UUID | None = None,
+    ) -> list[Categoria]: ...
+
+    @abstractmethod
+    async def tiene_productos_activos(self, categoria_id: UUID) -> bool: ...

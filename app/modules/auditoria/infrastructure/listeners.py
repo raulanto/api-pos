@@ -21,3 +21,5 @@ async def registrar_auditoria(payload: dict, db: AsyncSession) -> None:
 
 # Suscribir los handlers al event_bus global
 event_bus.suscribir("VentaCreada", registrar_auditoria)
+event_bus.suscribir("MovimientoInventarioRegistrado", registrar_auditoria)
+event_bus.suscribir("TransferenciaInventarioRegistrada", registrar_auditoria)

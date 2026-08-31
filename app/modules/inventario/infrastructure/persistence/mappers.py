@@ -74,6 +74,21 @@ def to_orm_existencia(entidad: Existencia) -> ExistenciaORM:
         stock_maximo=entidad.stock_maximo
     )
 
+def to_domain_movimiento(orm: MovimientoInventarioORM) -> MovimientoInventario:
+    return MovimientoInventario(
+        id=orm.id,
+        producto_id=orm.producto_id,
+        sucursal_id=orm.sucursal_id,
+        tipo=TipoMovimiento(orm.tipo),
+        cantidad=orm.cantidad,
+        costo_unitario=orm.costo_unitario,
+        referencia_tipo=orm.referencia_tipo,
+        referencia_id=orm.referencia_id,
+        usuario_id=orm.usuario_id,
+        motivo=orm.motivo,
+        created_at=orm.created_at,
+    )
+
 def to_orm_movimiento(entidad: MovimientoInventario) -> MovimientoInventarioORM:
     return MovimientoInventarioORM(
         id=entidad.id,
