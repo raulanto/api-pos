@@ -8,6 +8,18 @@ from app.modules.clientes.domain.entities import Cliente
 from app.modules.clientes.domain.exceptions import EmailClienteDuplicado
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
 
+
+"""
+    CrearClienteInput
+    Descripcion: Clase que representa los datos de entrada para crear un cliente.
+    Atributos:
+    - sucursal_id: ID de la sucursal.
+    - nombre: Nombre del cliente.
+    - email: Email del cliente.
+    - telefono: Telefono del cliente.
+    - rfc_identificacion: RFC del cliente.
+    - limite_credito: Límite de crédito del cliente.
+"""
 @dataclass
 class CrearClienteInput:
     sucursal_id: UUID
@@ -17,10 +29,24 @@ class CrearClienteInput:
     rfc_identificacion: str | None = None
     limite_credito: Decimal = Decimal("0")
 
+
+"""
+    CrearClienteUseCase
+    Descripcion: Clase que representa el caso de uso para crear un cliente.
+    Métodos:
+    - ejecutar: Ejecuta el caso de uso para crear un cliente.
+"""
 class CrearClienteUseCase:
     def __init__(self, cliente_repo: ClienteRepository):
         self._cliente_repo = cliente_repo
 
+    """
+        Método para ejecutar el caso de uso para crear un cliente.
+        Parámetros:
+        - data: Datos de entrada para crear un cliente.
+        Retorna:
+        - Cliente: Cliente creado.
+    """
     async def ejecutar(self, data: CrearClienteInput) -> Cliente:
         if data.email:
             existente = await self._cliente_repo.buscar_por_email(data.email)
