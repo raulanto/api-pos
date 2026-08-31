@@ -3,7 +3,9 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago
-from app.modules.ventas.domain.exceptions import VentaSinLineas, VentaYaCancelada
+from app.modules.ventas.domain.exceptions import (
+    VentaSinLineas, VentaYaCancelada, TurnoYaCerrado,
+)
 
 @dataclass
 class DetalleVenta:
@@ -53,13 +55,16 @@ class Venta:
     pagos: list[Pago] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+    idempotency_key: str | None = None
+
     @staticmethod
     def crear(sucursal_id: UUID, caja_turno_id: UUID, usuario_id: UUID,
               cliente_id: UUID | None, lineas: list[DetalleVenta], pagos: list[Pago],
-              descuento_total: Decimal = Decimal("0")) -> "Venta":
+              descuento_total: Decimal = Decimal("0"),
+              idempotency_key: str | None = None) -> "Venta":
         if not lineas:
             raise VentaSinLineas("Una venta debe tener al menos una línea")
-        
+
         venta_id = uuid4()
         for linea in lineas:
             linea.venta_id = venta_id
@@ -70,7 +75,7 @@ class Venta:
             id=venta_id, sucursal_id=sucursal_id, caja_turno_id=caja_turno_id,
             usuario_id=usuario_id, cliente_id=cliente_id,
             estado=EstadoVenta.PENDIENTE_PAGO, lineas=lineas, pagos=pagos,
-            descuento_total=descuento_total
+            descuento_total=descuento_total, idempotency_key=idempotency_key
         )
 
     @property
@@ -95,12 +100,45 @@ class Venta:
             raise VentaYaCancelada(f"La venta {self.id} ya está cancelada")
         self.estado = EstadoVenta.CANCELADA
 
+ESTADO_TURNO_ABIERTO = "abierto"
+ESTADO_TURNO_CERRADO = "cerrado"
+
+
 @dataclass
 class CajaTurno:
     id: UUID
     sucursal_id: UUID
     usuario_id: UUID
     saldo_inicial: Decimal
-    estado: str # "abierto" or "cerrado"
+    estado: str  # "abierto" | "cerrado"
     abierto_en: datetime
     cerrado_en: datetime | None = None
+    saldo_final_declarado: Decimal | None = None
+    # diferencia = saldo_final_declarado - saldo_esperado
+    # (positivo => sobrante, negativo => faltante)
+    diferencia: Decimal | None = None
+
+    @staticmethod
+    def abrir(sucursal_id: UUID, usuario_id: UUID, saldo_inicial: Decimal) -> "CajaTurno":
+        if saldo_inicial < 0:
+            raise ValueError("El saldo inicial no puede ser negativo")
+        return CajaTurno(
+            id=uuid4(),
+            sucursal_id=sucursal_id,
+            usuario_id=usuario_id,
+            saldo_inicial=saldo_inicial,
+            estado=ESTADO_TURNO_ABIERTO,
+            abierto_en=datetime.utcnow(),
+        )
+
+    @property
+    def esta_abierto(self) -> bool:
+        return self.estado == ESTADO_TURNO_ABIERTO
+
+    def cerrar(self, saldo_final_declarado: Decimal, saldo_esperado: Decimal) -> None:
+        if not self.esta_abierto:
+            raise TurnoYaCerrado(f"El turno {self.id} ya está cerrado")
+        self.saldo_final_declarado = saldo_final_declarado
+        self.diferencia = saldo_final_declarado - saldo_esperado
+        self.estado = ESTADO_TURNO_CERRADO
+        self.cerrado_en = datetime.utcnow()

@@ -15,7 +15,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
     async def guardar(self, usuario: Usuario) -> None:
         orm = to_orm_usuario(usuario)
         await self._db.merge(orm)
-        await self._db.commit()
+        await self._db.flush()
 
     async def obtener_por_id(self, usuario_id: UUID) -> Usuario | None:
         stmt = select(UsuarioORM).where(UsuarioORM.id == usuario_id)

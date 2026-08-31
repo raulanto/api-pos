@@ -117,7 +117,6 @@ async def crear_categoria(
         )
     except Exception as e:
         raise _traducir_create(e)
-    await db.commit()
     return categoria
 
 
@@ -163,7 +162,6 @@ async def actualizar_categoria(
         )
     except Exception as e:
         raise _traducir(e)
-    await db.commit()
     return categoria
 
 
@@ -177,7 +175,6 @@ async def desactivar_categoria(
         categoria = await DesactivarCategoriaUseCase(_cat_repo(db)).ejecutar(categoria_id)
     except Exception as e:
         raise _traducir(e)
-    await db.commit()
     return categoria
 
 
@@ -202,7 +199,6 @@ async def crear_producto(
         )
     except Exception as e:
         raise _traducir_create(e)
-    await db.commit()
     return producto
 
 
@@ -266,7 +262,6 @@ async def actualizar_producto(
         )
     except Exception as e:
         raise _traducir(e)
-    await db.commit()
     return producto
 
 
@@ -283,7 +278,6 @@ async def desactivar_producto(
         )
     except Exception as e:
         raise _traducir(e)
-    await db.commit()
     return producto
 
 
@@ -334,7 +328,6 @@ async def configurar_umbrales(
         )
     except Exception as e:
         raise _traducir(e)
-    await db.commit()
     return existencia
 
 
@@ -375,7 +368,6 @@ async def aplicar_movimiento(
         ))
     except Exception as e:
         raise _traducir(e)
-    await db.commit()
     return {"status": "ok"}
 
 
@@ -404,7 +396,6 @@ async def transferir_stock(
         ))
     except Exception as e:
         raise _traducir(e)
-    await db.commit()
     return {"status": "ok"}
 
 

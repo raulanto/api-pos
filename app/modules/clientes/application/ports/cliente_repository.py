@@ -12,3 +12,6 @@ class ClienteRepository(ABC):
 
     @abstractmethod
     async def incrementar_saldo(self, cliente_id: UUID, monto: Decimal) -> None: ...
+
+    @abstractmethod
+    async def decrementar_saldo(self, cliente_id: UUID, monto: Decimal) -> None: ...

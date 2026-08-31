@@ -36,7 +36,7 @@ class SqlAlchemyRolRepository(RolRepository):
     async def crear(self, rol: Rol) -> Rol:
         orm = RolORM(id=rol.id, codigo=rol.codigo, nombre=rol.nombre, descripcion=rol.descripcion)
         self._db.add(orm)
-        await self._db.commit()
+        await self._db.flush()
         return rol
 
     async def actualizar_datos(self, rol_id: UUID, nombre: str, descripcion: str) -> None:
@@ -44,12 +44,12 @@ class SqlAlchemyRolRepository(RolRepository):
         if orm is not None:
             orm.nombre = nombre
             orm.descripcion = descripcion
-            await self._db.commit()
+            await self._db.flush()
 
     async def eliminar(self, rol_id: UUID) -> None:
         await self._db.execute(delete(rol_permiso_table).where(rol_permiso_table.c.rol_id == rol_id))
         await self._db.execute(delete(RolORM).where(RolORM.id == rol_id))
-        await self._db.commit()
+        await self._db.flush()
 
     async def tiene_usuarios(self, rol_id: UUID) -> bool:
         from app.modules.usuarios.infrastructure.persistence.orm_models import UsuarioORM
@@ -68,7 +68,7 @@ class SqlAlchemyRolRepository(RolRepository):
                 insert(rol_permiso_table),
                 [{"rol_id": rol_id, "permiso_id": pid} for pid in nuevos],
             )
-            await self._db.commit()
+            await self._db.flush()
 
     async def quitar_permiso(self, rol_id: UUID, permiso_id: UUID) -> None:
         await self._db.execute(
@@ -77,7 +77,7 @@ class SqlAlchemyRolRepository(RolRepository):
                 rol_permiso_table.c.permiso_id == permiso_id,
             )
         )
-        await self._db.commit()
+        await self._db.flush()
 
 
 class SqlAlchemyPermisoRepository(PermisoRepository):

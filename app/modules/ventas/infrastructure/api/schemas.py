@@ -1,9 +1,18 @@
-from pydantic import BaseModel, Field
+from datetime import datetime
+from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
-from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
 from app.modules.ventas.domain.value_objects import MetodoPago, EstadoVenta
 
+_ORM = ConfigDict(from_attributes=True)
+
+
+# --------------------------------------------------------------------------- #
+# Ventas
+# --------------------------------------------------------------------------- #
 class LineaVentaRequest(BaseModel):
     producto_id: UUID
     cantidad: Decimal = Field(gt=0)
@@ -11,9 +20,11 @@ class LineaVentaRequest(BaseModel):
     descuento_linea: Decimal = Field(default=Decimal("0"), ge=0)
     impuesto_tasa: Decimal = Field(default=Decimal("0"), ge=0)
 
+
 class PagoRequest(BaseModel):
     monto: Decimal = Field(gt=0)
     metodo_pago: MetodoPago
+
 
 class CrearVentaRequest(BaseModel):
     caja_turno_id: UUID
@@ -22,7 +33,14 @@ class CrearVentaRequest(BaseModel):
     lineas: List[LineaVentaRequest]
     pagos: List[PagoRequest]
 
+
+class AnularVentaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    motivo: Optional[str] = Field(default=None, max_length=255)
+
+
 class LineaVentaResponse(BaseModel):
+    model_config = _ORM
     id: UUID
     producto_id: UUID
     cantidad: Decimal
@@ -31,12 +49,16 @@ class LineaVentaResponse(BaseModel):
     impuesto_tasa: Decimal
     subtotal: Decimal
 
+
 class PagoResponse(BaseModel):
+    model_config = _ORM
     id: UUID
     monto: Decimal
     metodo_pago: MetodoPago
 
+
 class VentaResponse(BaseModel):
+    model_config = _ORM
     id: UUID
     sucursal_id: UUID
     caja_turno_id: UUID
@@ -47,5 +69,59 @@ class VentaResponse(BaseModel):
     total: Decimal
     monto_pagado: Decimal
     saldo_pendiente: Decimal
+    created_at: datetime
     lineas: List[LineaVentaResponse]
     pagos: List[PagoResponse]
+
+
+class VentaListItem(BaseModel):
+    model_config = _ORM
+    id: UUID
+    sucursal_id: UUID
+    caja_turno_id: UUID
+    usuario_id: UUID
+    cliente_id: Optional[UUID]
+    estado: EstadoVenta
+    total: Decimal
+    saldo_pendiente: Decimal
+    created_at: datetime
+
+
+class VentasPaginadas(BaseModel):
+    items: List[VentaListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+# --------------------------------------------------------------------------- #
+# Caja
+# --------------------------------------------------------------------------- #
+class AbrirCajaTurnoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    saldo_inicial: Decimal = Field(ge=0)
+
+
+class CerrarCajaTurnoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    saldo_final_declarado: Decimal = Field(ge=0)
+
+
+class CajaTurnoResponse(BaseModel):
+    model_config = _ORM
+    id: UUID
+    sucursal_id: UUID
+    usuario_id: UUID
+    saldo_inicial: Decimal
+    estado: str
+    abierto_en: datetime
+    cerrado_en: Optional[datetime]
+    saldo_final_declarado: Optional[Decimal]
+    diferencia: Optional[Decimal]
+
+
+class ResumenTurnoResponse(BaseModel):
+    turno: CajaTurnoResponse
+    total_efectivo: Decimal
+    cantidad_ventas: int
+    saldo_esperado: Decimal

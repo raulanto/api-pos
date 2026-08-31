@@ -8,3 +8,11 @@ class InventarioPort(ABC):
         self, producto_id: UUID, sucursal_id: UUID, cantidad: Decimal,
         referencia_venta_id: UUID, usuario_id: UUID
     ) -> None: ...
+
+    @abstractmethod
+    async def reingresar_stock(
+        self, producto_id: UUID, sucursal_id: UUID, cantidad: Decimal,
+        referencia_venta_id: UUID, usuario_id: UUID
+    ) -> None:
+        """Devuelve stock al anular una venta (movimiento de ENTRADA)."""
+        ...

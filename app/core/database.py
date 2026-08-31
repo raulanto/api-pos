@@ -14,6 +14,19 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Unidad de trabajo por request.
+
+    El commit/rollback vive AQUÍ, no en los repositorios. Un request = una
+    transacción: si el handler termina bien se hace un único commit; si algo
+    lanza (excepción de dominio, HTTPException, error de integridad) se revierte
+    todo. Los repositorios solo hacen `add`/`flush`; ninguno llama `commit()`.
+    """
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

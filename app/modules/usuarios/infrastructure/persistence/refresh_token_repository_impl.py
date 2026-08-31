@@ -16,7 +16,7 @@ class SqlAlchemyRefreshTokenRepository(RefreshTokenRepository):
 
     async def guardar(self, token: RefreshToken) -> None:
         self._db.add(to_orm_refresh_token(token))
-        await self._db.commit()
+        await self._db.flush()
 
     async def obtener_por_hash(self, token_hash: str) -> RefreshToken | None:
         stmt = select(RefreshTokenORM).where(RefreshTokenORM.token_hash == token_hash)
@@ -27,7 +27,7 @@ class SqlAlchemyRefreshTokenRepository(RefreshTokenRepository):
         await self._db.execute(
             update(RefreshTokenORM).where(RefreshTokenORM.id == token_id).values(revocado=True)
         )
-        await self._db.commit()
+        await self._db.flush()
 
     async def revocar_todos_del_usuario(self, usuario_id: UUID) -> None:
         await self._db.execute(
@@ -35,4 +35,4 @@ class SqlAlchemyRefreshTokenRepository(RefreshTokenRepository):
             .where(RefreshTokenORM.usuario_id == usuario_id, RefreshTokenORM.revocado.is_(False))
             .values(revocado=True)
         )
-        await self._db.commit()
+        await self._db.flush()

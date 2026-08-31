@@ -13,6 +13,8 @@ class CajaTurnoORM(Base):
     estado = Column(String(20), nullable=False, default="abierto")
     abierto_en = Column(DateTime(timezone=True), nullable=False)
     cerrado_en = Column(DateTime(timezone=True), nullable=True)
+    saldo_final_declarado = Column(Numeric(12, 2), nullable=True)
+    diferencia = Column(Numeric(12, 2), nullable=True)
 
 class VentaORM(Base, TimestampMixin):
     __tablename__ = "venta"
@@ -23,7 +25,8 @@ class VentaORM(Base, TimestampMixin):
     cliente_id = Column(PGUUID(as_uuid=True), ForeignKey("cliente.id"), nullable=True)
     estado = Column(String(30), nullable=False)
     descuento_total = Column(Numeric(12, 2), nullable=False, default=0)
-    
+    idempotency_key = Column(String(80), nullable=True, unique=True)
+
     lineas = relationship("DetalleVentaORM", backref="venta", cascade="all, delete-orphan")
     pagos = relationship("PagoORM", backref="venta", cascade="all, delete-orphan")
 

@@ -10,7 +10,23 @@ def to_domain_caja_turno(orm: CajaTurnoORM) -> CajaTurno:
         saldo_inicial=orm.saldo_inicial,
         estado=orm.estado,
         abierto_en=orm.abierto_en,
-        cerrado_en=orm.cerrado_en
+        cerrado_en=orm.cerrado_en,
+        saldo_final_declarado=orm.saldo_final_declarado,
+        diferencia=orm.diferencia,
+    )
+
+
+def to_orm_caja_turno(entidad: CajaTurno) -> CajaTurnoORM:
+    return CajaTurnoORM(
+        id=entidad.id,
+        sucursal_id=entidad.sucursal_id,
+        usuario_id=entidad.usuario_id,
+        saldo_inicial=entidad.saldo_inicial,
+        estado=entidad.estado,
+        abierto_en=entidad.abierto_en,
+        cerrado_en=entidad.cerrado_en,
+        saldo_final_declarado=entidad.saldo_final_declarado,
+        diferencia=entidad.diferencia,
     )
 
 def to_orm_venta(entidad: Venta) -> VentaORM:
@@ -22,6 +38,7 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
         cliente_id=entidad.cliente_id,
         estado=entidad.estado.value,
         descuento_total=entidad.descuento_total,
+        idempotency_key=entidad.idempotency_key,
         created_at=entidad.created_at
     )
     orm.lineas = [
@@ -55,6 +72,7 @@ def to_domain_venta(orm: VentaORM) -> Venta:
         cliente_id=orm.cliente_id,
         estado=EstadoVenta(orm.estado),
         descuento_total=orm.descuento_total,
+        idempotency_key=orm.idempotency_key,
         created_at=orm.created_at,
         lineas=[
             DetalleVenta(
