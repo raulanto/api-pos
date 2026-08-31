@@ -19,8 +19,11 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from app.shared.infrastructure.orm_base import Base
-from app.modules.usuarios.infrastructure.persistence.orm_models import *
-from app.modules.inventario.infrastructure.persistence.orm_models import *
+from app.modules.usuarios.infrastructure.persistence.orm_models import UsuarioORM, RolORM, PermisoORM
+from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM, CategoriaORM, ExistenciaORM, MovimientoInventarioORM
+from app.modules.clientes.infrastructure.persistence.orm_models import ClienteORM
+from app.modules.ventas.infrastructure.persistence.orm_models import VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM
+
 target_metadata = Base.metadata
 
 from app.core.config import settings

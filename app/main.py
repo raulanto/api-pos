@@ -19,9 +19,13 @@ app.add_middleware(
 
 from app.modules.usuarios.infrastructure.api.router import router as usuarios_router
 from app.modules.inventario.infrastructure.api.router import router as inventario_router
+from app.modules.clientes.infrastructure.api.router import router as clientes_router
+from app.modules.ventas.infrastructure.api.router import router as ventas_router
 
 app.include_router(usuarios_router, prefix="/api/v1/usuarios", tags=["usuarios"])
 app.include_router(inventario_router, prefix="/api/v1/inventario", tags=["inventario"])
+app.include_router(clientes_router, prefix="/api/v1/clientes", tags=["clientes"])
+app.include_router(ventas_router, prefix="/api/v1/ventas", tags=["ventas"])
 
 @app.get("/health")
 def health_check():
