@@ -1,17 +1,22 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import (
     require_permission, UsuarioAutenticado, sucursal_scope, verificar_alcance_sucursal,
 )
+from app.shared.responses import (
+    ApiResponse, EnvelopeRoute, Page, PageParams, Sort,
+    page_params, make_sort_dependency, ok, page_response,
+)
+from app.shared.filtering import active_filters
 from app.modules.clientes.domain import exceptions as cexc
-from app.modules.clientes.application.dtos import FiltroClientes, Paginacion
+from app.modules.clientes.application.dtos import FiltroClientes
 from app.modules.clientes.infrastructure.api.schemas import (
     CrearClienteRequest, ActualizarClienteRequest, AbonarClienteRequest,
-    CambiarLimiteCreditoRequest, ClienteResponse, ClientesPaginados,
+    CambiarLimiteCreditoRequest, ClienteResponse,
 )
 from app.modules.clientes.infrastructure.persistence.cliente_repository_impl import (
     SqlAlchemyClienteRepository,
@@ -28,18 +33,21 @@ from app.modules.clientes.application.use_cases.gestionar_cliente import (
     CambiarLimiteCreditoUseCase, CambiarLimiteCreditoInput,
 )
 # Lectura cruzada (solo lectura) del historial de compras del cliente.
-from app.modules.ventas.application.dtos import FiltroVentas, Paginacion as PaginacionVentas
+from app.modules.ventas.application.dtos import FiltroVentas
 from app.modules.ventas.application.use_cases.listar_ventas import ListarVentasUseCase
 from app.modules.ventas.infrastructure.persistence.repositories_impl import SqlAlchemyVentaRepository
-from app.modules.ventas.infrastructure.api.schemas import VentaListItem, VentasPaginadas
+from app.modules.ventas.infrastructure.api.schemas import VentaListItem
 
-router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
 
 _NOT_FOUND = (cexc.ClienteNoEncontrado,)
 _CONFLICT = (cexc.EmailClienteDuplicado, cexc.ClienteConDeuda)
 _BAD_REQUEST = (
     cexc.AbonoInvalido, cexc.LimiteCreditoInvalido, cexc.LimiteCreditoExcedido, ValueError,
 )
+
+_ORDEN_CLIENTES = make_sort_dependency({"created_at", "nombre", "saldo_credito"}, "nombre:asc")
+_ORDEN_VENTAS = make_sort_dependency({"created_at"}, "created_at:desc")
 
 
 def _traducir(error: Exception) -> HTTPException:
@@ -83,7 +91,9 @@ async def _obtener_en_alcance(db: AsyncSession, actual: UsuarioAutenticado, clie
 
 
 # ========================================================================== #
-@router.post("/", response_model=ClienteResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=ApiResponse[ClienteResponse], status_code=status.HTTP_201_CREATED,
+)
 async def crear_cliente(
     body: CrearClienteRequest,
     db: AsyncSession = Depends(get_db),
@@ -91,7 +101,7 @@ async def crear_cliente(
 ):
     sucursal_id = _exige_sucursal(actual)
     try:
-        return await CrearClienteUseCase(_repo(db)).ejecutar(CrearClienteInput(
+        cliente = await CrearClienteUseCase(_repo(db)).ejecutar(CrearClienteInput(
             sucursal_id=sucursal_id,
             nombre=body.nombre,
             email=body.email,
@@ -101,59 +111,63 @@ async def crear_cliente(
         ))
     except Exception as e:
         raise _traducir(e)
+    return ok(cliente)
 
 
-@router.get("/", response_model=ClientesPaginados)
+@router.get("/", response_model=ApiResponse[list[ClienteResponse]])
 async def listar_clientes(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
     q: str | None = Query(default=None, description="Busca en nombre y email"),
     activo: bool | None = Query(default=None),
     con_saldo_pendiente: bool = Query(default=False),
     sucursal_id: UUID | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_CLIENTES),
 ):
     efectiva = _sucursal_efectiva(actual, sucursal_id)
-    pagina = await ListarClientesUseCase(_repo(db)).ejecutar(
-        FiltroClientes(
-            sucursal_id=efectiva, activo=activo, busqueda=q,
-            con_saldo_pendiente=con_saldo_pendiente,
-        ),
-        Paginacion(limit=limit, offset=offset),
+    filtro = FiltroClientes(
+        sucursal_id=efectiva, activo=activo, busqueda=q,
+        con_saldo_pendiente=con_saldo_pendiente,
     )
-    return ClientesPaginados(items=pagina.items, total=pagina.total, limit=limit, offset=offset)
+    pagina: Page = await ListarClientesUseCase(_repo(db)).ejecutar(filtro, paginacion, orden)
+    return page_response(
+        request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
+    )
 
 
-@router.get("/{cliente_id}", response_model=ClienteResponse)
+@router.get("/{cliente_id}", response_model=ApiResponse[ClienteResponse])
 async def obtener_cliente(
     cliente_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
 ):
-    return await _obtener_en_alcance(db, actual, cliente_id)
+    return ok(await _obtener_en_alcance(db, actual, cliente_id))
 
 
-@router.get("/{cliente_id}/ventas", response_model=VentasPaginadas)
+@router.get("/{cliente_id}/ventas", response_model=ApiResponse[list[VentaListItem]])
 async def historial_ventas_cliente(
     cliente_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_VENTAS),
 ):
     await _obtener_en_alcance(db, actual, cliente_id)  # valida existencia + alcance
+    filtro = FiltroVentas(cliente_id=cliente_id)
     pagina = await ListarVentasUseCase(SqlAlchemyVentaRepository(db)).ejecutar(
-        FiltroVentas(cliente_id=cliente_id),
-        PaginacionVentas(limit=limit, offset=offset),
+        filtro, paginacion, orden,
     )
-    return VentasPaginadas(
-        items=[VentaListItem.model_validate(v) for v in pagina.items],
-        total=pagina.total, limit=limit, offset=offset,
+    pagina.items = [VentaListItem.model_validate(v) for v in pagina.items]
+    return page_response(
+        request, pagina, paginacion, sort=orden,
+        filters={"cliente_id": str(cliente_id)},
     )
 
 
-@router.patch("/{cliente_id}", response_model=ClienteResponse)
+@router.patch("/{cliente_id}", response_model=ApiResponse[ClienteResponse])
 async def actualizar_cliente(
     cliente_id: UUID,
     body: ActualizarClienteRequest,
@@ -162,7 +176,7 @@ async def actualizar_cliente(
 ):
     await _obtener_en_alcance(db, actual, cliente_id)
     try:
-        return await ActualizarClienteUseCase(_repo(db)).ejecutar(ActualizarClienteInput(
+        cliente = await ActualizarClienteUseCase(_repo(db)).ejecutar(ActualizarClienteInput(
             cliente_id=cliente_id,
             nombre=body.nombre,
             email=body.email,
@@ -172,9 +186,10 @@ async def actualizar_cliente(
         ))
     except Exception as e:
         raise _traducir(e)
+    return ok(cliente)
 
 
-@router.patch("/{cliente_id}/desactivar", response_model=ClienteResponse)
+@router.patch("/{cliente_id}/desactivar", response_model=ApiResponse[ClienteResponse])
 async def desactivar_cliente(
     cliente_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -182,12 +197,13 @@ async def desactivar_cliente(
 ):
     await _obtener_en_alcance(db, actual, cliente_id)
     try:
-        return await DesactivarClienteUseCase(_repo(db)).ejecutar(cliente_id)
+        cliente = await DesactivarClienteUseCase(_repo(db)).ejecutar(cliente_id)
     except Exception as e:
         raise _traducir(e)
+    return ok(cliente)
 
 
-@router.post("/{cliente_id}/abonar", response_model=ClienteResponse)
+@router.post("/{cliente_id}/abonar", response_model=ApiResponse[ClienteResponse])
 async def abonar_cliente(
     cliente_id: UUID,
     body: AbonarClienteRequest,
@@ -196,14 +212,15 @@ async def abonar_cliente(
 ):
     await _obtener_en_alcance(db, actual, cliente_id)
     try:
-        return await AbonarClienteUseCase(_repo(db)).ejecutar(AbonarClienteInput(
+        cliente = await AbonarClienteUseCase(_repo(db)).ejecutar(AbonarClienteInput(
             cliente_id=cliente_id, monto=body.monto,
         ))
     except Exception as e:
         raise _traducir(e)
+    return ok(cliente)
 
 
-@router.patch("/{cliente_id}/credito", response_model=ClienteResponse)
+@router.patch("/{cliente_id}/credito", response_model=ApiResponse[ClienteResponse])
 async def cambiar_limite_credito(
     cliente_id: UUID,
     body: CambiarLimiteCreditoRequest,
@@ -212,8 +229,9 @@ async def cambiar_limite_credito(
 ):
     await _obtener_en_alcance(db, actual, cliente_id)
     try:
-        return await CambiarLimiteCreditoUseCase(_repo(db)).ejecutar(CambiarLimiteCreditoInput(
+        cliente = await CambiarLimiteCreditoUseCase(_repo(db)).ejecutar(CambiarLimiteCreditoInput(
             cliente_id=cliente_id, nuevo_limite=body.limite_credito,
         ))
     except Exception as e:
         raise _traducir(e)
+    return ok(cliente)

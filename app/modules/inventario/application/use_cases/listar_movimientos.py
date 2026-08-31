@@ -2,7 +2,8 @@ from uuid import UUID
 
 from app.modules.inventario.domain.entities import MovimientoInventario
 from app.modules.inventario.domain.exceptions import MovimientoNoEncontrado
-from app.modules.inventario.application.dtos import FiltroMovimientos, Paginacion, Pagina
+from app.modules.inventario.application.dtos import FiltroMovimientos
+from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.application.ports.movimiento_repository import MovimientoRepository
 
 
@@ -10,8 +11,10 @@ class ListarMovimientosUseCase:
     def __init__(self, movimiento_repo: MovimientoRepository):
         self._repo = movimiento_repo
 
-    async def ejecutar(self, filtro: FiltroMovimientos, paginacion: Paginacion) -> Pagina:
-        return await self._repo.listar(filtro, paginacion)
+    async def ejecutar(
+        self, filtro: FiltroMovimientos, paginacion: PageParams, orden: Sort
+    ) -> Page:
+        return await self._repo.listar(filtro, paginacion, orden)
 
 
 class ObtenerMovimientoUseCase:

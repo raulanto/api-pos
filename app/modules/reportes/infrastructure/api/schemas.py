@@ -98,22 +98,4 @@ class ClienteSaldoResponse(BaseModel):
     limite_credito: Decimal
 
 
-class ProductosMasVendidosResponse(BaseModel):
-    items: List[ProductoRankingResponse]
-    total: int
-    limit: int
-    offset: int
 
-
-class VentasPorUsuarioResponse(BaseModel):
-    items: List[VentaPorUsuarioResponse]
-    total: int
-    limit: int
-    offset: int
-
-
-class ClientesConSaldoResponse(BaseModel):
-    items: List[ClienteSaldoResponse]
-    total: int
-    limit: int
-    offset: int

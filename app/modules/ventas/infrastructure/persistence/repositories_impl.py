@@ -7,7 +7,8 @@ from sqlalchemy.orm import selectinload
 
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
-from app.modules.ventas.application.dtos import FiltroVentas, Paginacion, Pagina
+from app.modules.ventas.application.dtos import FiltroVentas
+from app.shared.responses import Page, PageParams, Sort
 from app.modules.ventas.domain.entities import Venta, CajaTurno, ESTADO_TURNO_ABIERTO
 from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago
 from app.modules.ventas.infrastructure.persistence.orm_models import (
@@ -22,6 +23,10 @@ from app.modules.ventas.infrastructure.persistence.mappers import (
 
 
 class SqlAlchemyVentaRepository(VentaRepository):
+    _ORDEN = {
+        "created_at": VentaORM.created_at,
+    }
+
     def __init__(self, db: AsyncSession):
         self._db = db
 
@@ -53,7 +58,9 @@ class SqlAlchemyVentaRepository(VentaRepository):
         )
         await self._db.flush()
 
-    async def listar(self, filtro: FiltroVentas, paginacion: Paginacion) -> Pagina:
+    async def listar(
+        self, filtro: FiltroVentas, paginacion: PageParams, orden: Sort
+    ) -> Page:
         condiciones = []
         if filtro.sucursal_id is not None:
             condiciones.append(VentaORM.sucursal_id == filtro.sucursal_id)
@@ -68,6 +75,9 @@ class SqlAlchemyVentaRepository(VentaRepository):
         if filtro.hasta is not None:
             condiciones.append(VentaORM.created_at <= filtro.hasta)
 
+        col = self._ORDEN.get(orden.field, VentaORM.created_at)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
         total = await self._db.scalar(
             select(func.count()).select_from(VentaORM).where(*condiciones)
         )
@@ -75,11 +85,11 @@ class SqlAlchemyVentaRepository(VentaRepository):
             select(VentaORM)
             .options(selectinload(VentaORM.lineas), selectinload(VentaORM.pagos))
             .where(*condiciones)
-            .order_by(VentaORM.created_at.desc())
+            .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Pagina(items=[to_domain_venta(o) for o in filas], total=int(total or 0))
+        return Page(items=[to_domain_venta(o) for o in filas], total=int(total or 0))
 
 
 class SqlAlchemyCajaTurnoRepository(CajaTurnoRepository):

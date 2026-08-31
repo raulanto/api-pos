@@ -1,12 +1,17 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status, HTTPException
+from fastapi import APIRouter, Depends, Query, status, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado, verificar_alcance_sucursal
-from app.modules.inventario.application.dtos import FiltroMovimientos, Paginacion
+from app.shared.responses import (
+    ApiResponse, EnvelopeRoute, PageParams, Sort,
+    page_params, make_sort_dependency, ok, page_response,
+)
+from app.shared.filtering import active_filters
+from app.modules.inventario.application.dtos import FiltroMovimientos
 from app.modules.inventario.domain.value_objects import TipoMovimiento
 from app.modules.inventario.application.use_cases.listar_movimientos import (
     ListarMovimientosUseCase, ObtenerMovimientoUseCase,
@@ -19,11 +24,13 @@ from app.modules.inventario.application.use_cases.transferir_stock import (
 )
 from app.modules.inventario.infrastructure.adapters.event_port_impl import EventPortImpl
 from app.modules.inventario.infrastructure.api.schemas import (
-    AplicarMovimientoRequest, TransferenciaRequest, MovimientoResponse, MovimientosPaginados,
+    AplicarMovimientoRequest, TransferenciaRequest, MovimientoResponse,
 )
 from .common import mov_repo, prod_repo, exist_repo, sucursal_efectiva, traducir
 
-router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
+
+_ORDEN_MOV = make_sort_dependency({"created_at", "cantidad"}, "created_at:desc")
 
 """
     Endpoint para aplicar movimientos.
@@ -67,7 +74,7 @@ async def aplicar_movimiento(
         ))
     except Exception as e:
         raise traducir(e)
-    return {"status": "ok"}
+    return ok({"status": "ok"})
 
 
 """
@@ -103,7 +110,7 @@ async def transferir_stock(
         ))
     except Exception as e:
         raise traducir(e)
-    return {"status": "ok"}
+    return ok({"status": "ok"})
 
 """
     Endpoint para listar movimientos.
@@ -117,10 +124,11 @@ async def transferir_stock(
     @param hasta: Fecha hasta.
     @param limit: Límite de resultados.
     @param offset: Desplazamiento de resultados.
-    @return: Instancia de la clase MovimientosPaginados.
+    @return: ApiResponse[list[MovimientoResponse]]
 """
-@router.get("/movimientos", response_model=MovimientosPaginados)
+@router.get("/movimientos", response_model=ApiResponse[list[MovimientoResponse]])
 async def listar_movimientos(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     producto_id: UUID | None = Query(default=None),
@@ -128,17 +136,17 @@ async def listar_movimientos(
     tipo: TipoMovimiento | None = Query(default=None),
     desde: datetime | None = Query(default=None),
     hasta: datetime | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_MOV),
 ):
     efectivo = sucursal_efectiva(actual, sucursal_id)
-    pagina = await ListarMovimientosUseCase(mov_repo(db)).ejecutar(
-        FiltroMovimientos(
-            producto_id=producto_id, sucursal_id=efectivo, tipo=tipo, desde=desde, hasta=hasta,
-        ),
-        Paginacion(limit=limit, offset=offset),
+    filtro = FiltroMovimientos(
+        producto_id=producto_id, sucursal_id=efectivo, tipo=tipo, desde=desde, hasta=hasta,
     )
-    return MovimientosPaginados(items=pagina.items, total=pagina.total, limit=limit, offset=offset)
+    pagina = await ListarMovimientosUseCase(mov_repo(db)).ejecutar(filtro, paginacion, orden)
+    return page_response(
+        request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
+    )
 
 """
     Endpoint para obtener un movimiento.
@@ -148,7 +156,7 @@ async def listar_movimientos(
     @param actual: Usuario autenticado.
     @return: Instancia de la clase MovimientoResponse.
 """
-@router.get("/movimientos/{movimiento_id}", response_model=MovimientoResponse)
+@router.get("/movimientos/{movimiento_id}", response_model=ApiResponse[MovimientoResponse])
 async def obtener_movimiento(
     movimiento_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -159,4 +167,4 @@ async def obtener_movimiento(
     except Exception as e:
         raise traducir(e)
     verificar_alcance_sucursal(actual, movimiento.sucursal_id)
-    return movimiento
+    return ok(movimiento)

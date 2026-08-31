@@ -2,7 +2,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.modules.inventario.application.ports.movimiento_repository import MovimientoRepository
-from app.modules.inventario.application.dtos import FiltroMovimientos, Paginacion, Pagina
+from app.modules.inventario.application.dtos import FiltroMovimientos
+from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.domain.entities import MovimientoInventario
 from app.modules.inventario.infrastructure.persistence.orm_models import MovimientoInventarioORM
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_movimiento, to_orm_movimiento
@@ -61,7 +62,14 @@ class SqlAlchemyMovimientoRepository(MovimientoRepository):
         @returns:
         - Pagina
     """
-    async def listar(self, filtro: FiltroMovimientos, paginacion: Paginacion) -> Pagina:
+    _ORDEN = {
+        "created_at": MovimientoInventarioORM.created_at,
+        "cantidad": MovimientoInventarioORM.cantidad,
+    }
+
+    async def listar(
+        self, filtro: FiltroMovimientos, paginacion: PageParams, orden: Sort
+    ) -> Page:
         condiciones = []
         if filtro.producto_id is not None:
             condiciones.append(MovimientoInventarioORM.producto_id == filtro.producto_id)
@@ -74,14 +82,17 @@ class SqlAlchemyMovimientoRepository(MovimientoRepository):
         if filtro.hasta is not None:
             condiciones.append(MovimientoInventarioORM.created_at <= filtro.hasta)
 
+        col = self._ORDEN.get(orden.field, MovimientoInventarioORM.created_at)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
         total = await self._db.scalar(
             select(func.count()).select_from(MovimientoInventarioORM).where(*condiciones)
         )
         filas = (await self._db.execute(
             select(MovimientoInventarioORM)
             .where(*condiciones)
-            .order_by(MovimientoInventarioORM.created_at.desc())
+            .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Pagina(items=[to_domain_movimiento(o) for o in filas], total=int(total or 0))
+        return Page(items=[to_domain_movimiento(o) for o in filas], total=int(total or 0))

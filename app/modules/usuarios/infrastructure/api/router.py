@@ -9,6 +9,10 @@ from app.core.dependencies import (
     invalidar_cache_permisos, sucursal_scope, verificar_alcance_sucursal,
 )
 from app.core.rate_limit import login_rate_limiter
+from app.shared.responses import (
+    ApiResponse, EnvelopeRoute, PageParams, Sort,
+    page_params, make_sort_dependency, ok, page_response,
+)
 from app.modules.usuarios.infrastructure.api.schemas import (
     CrearUsuarioRequest, EditarUsuarioRequest, CambiarRolRequest, CambiarPasswordRequest,
     UsuarioResponse, LoginRequest, TokenResponse, RefreshRequest, LogoutRequest,
@@ -34,11 +38,15 @@ from app.modules.usuarios.domain.exceptions import (
     RefreshTokenInvalido,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
 
 _BAD_REQUEST = (
     RolNoEncontrado, SucursalNoEncontrada, EmailDuplicado, PasswordInvalida,
     UltimoAdminActivo, AutoDesactivacionNoPermitida,
+)
+
+_ORDEN_USUARIOS = make_sort_dependency(
+    {"nombre", "email", "created_at", "last_login_at"}, "nombre:asc"
 )
 
 
@@ -82,7 +90,7 @@ def get_cerrar_sesion_use_case(db: AsyncSession = Depends(get_db)) -> CerrarSesi
 # --------------------------------------------------------------------------- #
 # Autenticación
 # --------------------------------------------------------------------------- #
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=ApiResponse[TokenResponse])
 async def login(
     body: LoginRequest,
     request: Request,
@@ -91,14 +99,15 @@ async def login(
     ua, ip = _cliente_info(request)
     login_rate_limiter.check(clave=f"{ip}:{body.email}")
     try:
-        return await use_case.ejecutar(AutenticarUsuarioInput(
+        token = await use_case.ejecutar(AutenticarUsuarioInput(
             email=body.email, password_plano=body.password, user_agent=ua, ip=ip,
         ))
     except CredencialesInvalidas as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    return ok(token)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=ApiResponse[TokenResponse])
 async def refrescar(
     body: RefreshRequest,
     request: Request,
@@ -106,11 +115,12 @@ async def refrescar(
 ):
     ua, ip = _cliente_info(request)
     try:
-        return await use_case.ejecutar(RefrescarTokenInput(
+        token = await use_case.ejecutar(RefrescarTokenInput(
             refresh_token=body.refresh_token, user_agent=ua, ip=ip,
         ))
     except RefreshTokenInvalido as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    return ok(token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -125,21 +135,27 @@ async def logout(
 # --------------------------------------------------------------------------- #
 # CRUD de usuarios
 # --------------------------------------------------------------------------- #
-@router.get("/me", response_model=UsuarioResponse)
+@router.get("/me", response_model=ApiResponse[UsuarioResponse])
 async def usuario_actual(actual: UsuarioAutenticado = Depends(get_current_user)):
-    return actual.usuario
+    return ok(actual.usuario)
 
 
-@router.get("", response_model=list[UsuarioResponse])
+@router.get("", response_model=ApiResponse[list[UsuarioResponse]])
 async def listar_usuarios(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.leer")),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_USUARIOS),
 ):
-    use_case = ListarUsuariosUseCase(SqlAlchemyUsuarioRepository(db))
-    return await use_case.ejecutar(ListarUsuariosInput(sucursal_id=sucursal_scope(actual)))
+    entrada = ListarUsuariosInput(sucursal_id=sucursal_scope(actual))
+    pagina = await ListarUsuariosUseCase(SqlAlchemyUsuarioRepository(db)).ejecutar(
+        entrada, paginacion, orden,
+    )
+    return page_response(request, pagina, paginacion, sort=orden)
 
 
-@router.get("/{usuario_id}", response_model=UsuarioResponse)
+@router.get("/{usuario_id}", response_model=ApiResponse[UsuarioResponse])
 async def obtener_usuario(
     usuario_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -151,17 +167,19 @@ async def obtener_usuario(
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     verificar_alcance_sucursal(actual, usuario.sucursal_id)
-    return usuario
+    return ok(usuario)
 
 
-@router.post("", response_model=UsuarioResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=ApiResponse[UsuarioResponse], status_code=status.HTTP_201_CREATED,
+)
 async def crear_usuario(
     body: CrearUsuarioRequest,
     use_case: CrearUsuarioUseCase = Depends(get_crear_usuario_use_case),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.crear")),
 ):
     try:
-        return await use_case.ejecutar(CrearUsuarioInput(
+        usuario = await use_case.ejecutar(CrearUsuarioInput(
             sucursal_id=body.sucursal_id,
             rol_id=body.rol_id,
             nombre=body.nombre,
@@ -170,9 +188,10 @@ async def crear_usuario(
         ))
     except _BAD_REQUEST as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return ok(usuario)
 
 
-@router.patch("/{usuario_id}", response_model=UsuarioResponse)
+@router.patch("/{usuario_id}", response_model=ApiResponse[UsuarioResponse])
 async def editar_usuario(
     usuario_id: UUID,
     body: EditarUsuarioRequest,
@@ -191,14 +210,15 @@ async def editar_usuario(
         _sucursal_presente="sucursal_id" in body.model_fields_set,
     )
     try:
-        return await use_case.ejecutar(data)
+        usuario = await use_case.ejecutar(data)
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except _BAD_REQUEST as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return ok(usuario)
 
 
-@router.patch("/{usuario_id}/rol", response_model=UsuarioResponse)
+@router.patch("/{usuario_id}/rol", response_model=ApiResponse[UsuarioResponse])
 async def cambiar_rol(
     usuario_id: UUID,
     body: CambiarRolRequest,
@@ -210,16 +230,18 @@ async def cambiar_rol(
         rol_repo=SqlAlchemyRolRepository(db),
     )
     try:
-        usuario = await use_case.ejecutar(CambiarRolUsuarioInput(usuario_id=usuario_id, nuevo_rol_id=body.rol_id))
+        usuario = await use_case.ejecutar(
+            CambiarRolUsuarioInput(usuario_id=usuario_id, nuevo_rol_id=body.rol_id)
+        )
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except _BAD_REQUEST as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     invalidar_cache_permisos(usuario.rol_id)
-    return usuario
+    return ok(usuario)
 
 
-@router.patch("/{usuario_id}/desactivar", response_model=UsuarioResponse)
+@router.patch("/{usuario_id}/desactivar", response_model=ApiResponse[UsuarioResponse])
 async def desactivar_usuario(
     usuario_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -230,13 +252,14 @@ async def desactivar_usuario(
         rol_repo=SqlAlchemyRolRepository(db),
     )
     try:
-        return await use_case.ejecutar(DesactivarUsuarioInput(
+        usuario = await use_case.ejecutar(DesactivarUsuarioInput(
             usuario_id=usuario_id, solicitante_id=actual.id,
         ))
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except _BAD_REQUEST as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return ok(usuario)
 
 
 @router.post("/{usuario_id}/cambiar-password", status_code=status.HTTP_204_NO_CONTENT)
@@ -248,7 +271,10 @@ async def cambiar_password(
 ):
     es_propia = usuario_id == actual.id
     if not es_propia and not actual.tiene_permiso("usuarios.editar"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No puede cambiar la contraseña de otro usuario")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puede cambiar la contraseña de otro usuario",
+        )
 
     use_case = CambiarPasswordUseCase(
         usuario_repo=SqlAlchemyUsuarioRepository(db),

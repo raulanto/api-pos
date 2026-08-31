@@ -2,7 +2,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func, or_
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
-from app.modules.inventario.application.dtos import FiltroProductos, Paginacion, Pagina
+from app.modules.inventario.application.dtos import FiltroProductos
+from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.domain.entities import Producto
 from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_producto, to_orm_producto
@@ -119,7 +120,16 @@ class SqlAlchemyProductoRepository(ProductoRepository):
         @returns:
         - Pagina
     """ 
-    async def listar(self, filtro: FiltroProductos, paginacion: Paginacion) -> Pagina:
+    _ORDEN = {
+        "nombre": ProductoORM.nombre,
+        "sku": ProductoORM.sku,
+        "precio_venta": ProductoORM.precio_venta,
+        "created_at": ProductoORM.created_at,
+    }
+
+    async def listar(
+        self, filtro: FiltroProductos, paginacion: PageParams, orden: Sort
+    ) -> Page:
         condiciones = []
         if filtro.categoria_id is not None:
             condiciones.append(ProductoORM.categoria_id == filtro.categoria_id)
@@ -133,14 +143,17 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 ProductoORM.codigo_barras.ilike(patron),
             ))
 
+        col = self._ORDEN.get(orden.field, ProductoORM.nombre)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
         total = await self._db.scalar(
             select(func.count()).select_from(ProductoORM).where(*condiciones)
         )
         filas = (await self._db.execute(
             select(ProductoORM)
             .where(*condiciones)
-            .order_by(ProductoORM.nombre)
+            .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Pagina(items=[to_domain_producto(o) for o in filas], total=int(total or 0))
+        return Page(items=[to_domain_producto(o) for o in filas], total=int(total or 0))

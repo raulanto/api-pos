@@ -56,12 +56,3 @@ class ProductoResponse(BaseModel):
     permite_stock_negativo: bool
     activo: bool
 
-
-"""
-    Response paginada para productos.
-"""
-class ProductosPaginados(BaseModel):
-    items: list[ProductoResponse]
-    total: int
-    limit: int
-    offset: int

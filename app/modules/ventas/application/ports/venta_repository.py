@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 from app.modules.ventas.domain.entities import Venta
 from app.modules.ventas.domain.value_objects import EstadoVenta
-from app.modules.ventas.application.dtos import FiltroVentas, Paginacion, Pagina
+from app.modules.ventas.application.dtos import FiltroVentas
+from app.shared.responses import Page, PageParams, Sort
 
 class VentaRepository(ABC):
     @abstractmethod
@@ -18,4 +19,6 @@ class VentaRepository(ABC):
     async def actualizar_estado(self, venta_id: UUID, estado: EstadoVenta) -> None: ...
 
     @abstractmethod
-    async def listar(self, filtro: FiltroVentas, paginacion: Paginacion) -> Pagina: ...
+    async def listar(
+        self, filtro: FiltroVentas, paginacion: PageParams, orden: Sort
+    ) -> Page: ...

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado
+from app.shared.responses import ApiResponse, EnvelopeRoute, ok
 from app.modules.inventario.application.use_cases.crear_categoria import (
     CrearCategoriaUseCase, CrearCategoriaInput,
 )
@@ -17,17 +18,13 @@ from app.modules.inventario.infrastructure.api.schemas import (
 )
 from .common import cat_repo, traducir, traducir_create
 
-router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
 
-"""
-    Endpoint para crear una categoría.
 
-    @param body: Cuerpo de la solicitud.
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @return: Instancia de la clase CategoriaResponse.
-"""
-@router.post("/categorias", response_model=CategoriaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/categorias", response_model=ApiResponse[CategoriaResponse],
+    status_code=status.HTTP_201_CREATED,
+)
 async def crear_categoria(
     body: CrearCategoriaRequest,
     db: AsyncSession = Depends(get_db),
@@ -39,57 +36,36 @@ async def crear_categoria(
         )
     except Exception as e:
         raise traducir_create(e)
-    return categoria
+    return ok(categoria)
 
-"""
-    Endpoint para listar categorías.
 
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @param activo: Indica si la categoría está activa.
-    @param categoria_padre_id: ID de la categoría padre.
-    @return: Instancia de la clase CategoriaResponse.
-"""
-@router.get("/categorias", response_model=list[CategoriaResponse])
+@router.get("/categorias", response_model=ApiResponse[list[CategoriaResponse]])
 async def listar_categorias(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     activo: bool | None = Query(default=None),
     categoria_padre_id: UUID | None = Query(default=None),
 ):
-    return await ListarCategoriasUseCase(cat_repo(db)).ejecutar(
+    categorias = await ListarCategoriasUseCase(cat_repo(db)).ejecutar(
         activo=activo, categoria_padre_id=categoria_padre_id
     )
+    return ok(categorias)
 
-"""
-    Endpoint para obtener una categoría.
 
-    @param categoria_id: ID de la categoría.
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @return: Instancia de la clase CategoriaResponse.
-"""
-@router.get("/categorias/{categoria_id}", response_model=CategoriaResponse)
+@router.get("/categorias/{categoria_id}", response_model=ApiResponse[CategoriaResponse])
 async def obtener_categoria(
     categoria_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
 ):
     try:
-        return await ObtenerCategoriaUseCase(cat_repo(db)).ejecutar(categoria_id)
+        categoria = await ObtenerCategoriaUseCase(cat_repo(db)).ejecutar(categoria_id)
     except Exception as e:
         raise traducir(e)
+    return ok(categoria)
 
-"""
-    Endpoint para actualizar una categoría.
 
-    @param categoria_id: ID de la categoría.
-    @param body: Cuerpo de la solicitud.
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @return: Instancia de la clase CategoriaResponse.
-"""
-@router.patch("/categorias/{categoria_id}", response_model=CategoriaResponse)
+@router.patch("/categorias/{categoria_id}", response_model=ApiResponse[CategoriaResponse])
 async def actualizar_categoria(
     categoria_id: UUID,
     body: ActualizarCategoriaRequest,
@@ -107,17 +83,12 @@ async def actualizar_categoria(
         )
     except Exception as e:
         raise traducir(e)
-    return categoria
+    return ok(categoria)
 
-"""
-    Endpoint para desactivar una categoría.
 
-    @param categoria_id: ID de la categoría.
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @return: Instancia de la clase CategoriaResponse.
-"""
-@router.patch("/categorias/{categoria_id}/desactivar", response_model=CategoriaResponse)
+@router.patch(
+    "/categorias/{categoria_id}/desactivar", response_model=ApiResponse[CategoriaResponse],
+)
 async def desactivar_categoria(
     categoria_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -127,4 +98,4 @@ async def desactivar_categoria(
         categoria = await DesactivarCategoriaUseCase(cat_repo(db)).ejecutar(categoria_id)
     except Exception as e:
         raise traducir(e)
-    return categoria
+    return ok(categoria)

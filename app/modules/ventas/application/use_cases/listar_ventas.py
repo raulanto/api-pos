@@ -2,16 +2,19 @@ from uuid import UUID
 
 from app.modules.ventas.domain.entities import Venta
 from app.modules.ventas.domain.exceptions import VentaNoEncontrada
-from app.modules.ventas.application.dtos import FiltroVentas, Paginacion, Pagina
+from app.modules.ventas.application.dtos import FiltroVentas
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
+from app.shared.responses import Page, PageParams, Sort
 
 
 class ListarVentasUseCase:
     def __init__(self, venta_repo: VentaRepository):
         self._repo = venta_repo
 
-    async def ejecutar(self, filtro: FiltroVentas, paginacion: Paginacion) -> Pagina:
-        return await self._repo.listar(filtro, paginacion)
+    async def ejecutar(
+        self, filtro: FiltroVentas, paginacion: PageParams, orden: Sort
+    ) -> Page:
+        return await self._repo.listar(filtro, paginacion, orden)
 
 
 class ObtenerVentaUseCase:

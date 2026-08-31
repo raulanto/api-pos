@@ -1,20 +1,25 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import (
     require_permission, UsuarioAutenticado, sucursal_scope, verificar_alcance_sucursal,
 )
-from app.modules.ventas.application.dtos import FiltroVentas, Paginacion
+from app.shared.responses import (
+    ApiResponse, EnvelopeRoute, PageParams, Sort,
+    page_params, make_sort_dependency, ok, page_response,
+)
+from app.shared.filtering import active_filters
+from app.modules.ventas.application.dtos import FiltroVentas
 from app.modules.ventas.domain.value_objects import EstadoVenta
 from app.modules.ventas.domain import exceptions as vexc
 from app.modules.clientes.domain.exceptions import LimiteCreditoExcedido, ClienteNoEncontrado
 from app.modules.inventario.domain.exceptions import StockInsuficiente, ProductoNoEncontrado
 from app.modules.ventas.infrastructure.api.schemas import (
-    CrearVentaRequest, AnularVentaRequest, VentaResponse, VentaListItem, VentasPaginadas,
+    CrearVentaRequest, AnularVentaRequest, VentaResponse, VentaListItem,
     AbrirCajaTurnoRequest, CerrarCajaTurnoRequest, CajaTurnoResponse, ResumenTurnoResponse,
 )
 from app.modules.ventas.application.use_cases.crear_venta import (
@@ -40,8 +45,10 @@ from app.modules.clientes.infrastructure.persistence.cliente_repository_impl imp
 from app.modules.ventas.infrastructure.adapters.inventario_port_impl import InventarioPortImpl
 from app.modules.ventas.infrastructure.adapters.event_port_impl import EventPortImpl
 
-router = APIRouter()
-caja_router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
+caja_router = APIRouter(route_class=EnvelopeRoute)
+
+_ORDEN_VENTAS = make_sort_dependency({"created_at"}, "created_at:desc")
 
 
 # --------------------------------------------------------------------------- #
@@ -109,7 +116,9 @@ def _anular_use_case(db: AsyncSession) -> AnularVentaUseCase:
 # ========================================================================== #
 # VENTAS
 # ========================================================================== #
-@router.post("/", response_model=VentaResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=ApiResponse[VentaResponse], status_code=status.HTTP_201_CREATED,
+)
 async def crear_venta(
     body: CrearVentaRequest,
     db: AsyncSession = Depends(get_db),
@@ -134,13 +143,15 @@ async def crear_venta(
         idempotency_key=idempotency_key,
     )
     try:
-        return await _venta_use_case(db).ejecutar(entrada)
+        venta = await _venta_use_case(db).ejecutar(entrada)
     except Exception as e:
         raise _traducir(e)
+    return ok(venta)
 
 
-@router.get("/", response_model=VentasPaginadas)
+@router.get("/", response_model=ApiResponse[list[VentaListItem]])
 async def listar_ventas(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("ventas.leer")),
     sucursal_id: UUID | None = Query(default=None),
@@ -149,24 +160,24 @@ async def listar_ventas(
     estado: EstadoVenta | None = Query(default=None),
     desde: datetime | None = Query(default=None),
     hasta: datetime | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_VENTAS),
 ):
     efectiva = _sucursal_efectiva(actual, sucursal_id)
+    filtro = FiltroVentas(
+        sucursal_id=efectiva, caja_turno_id=caja_turno_id, cliente_id=cliente_id,
+        estado=estado, desde=desde, hasta=hasta,
+    )
     pagina = await ListarVentasUseCase(SqlAlchemyVentaRepository(db)).ejecutar(
-        FiltroVentas(
-            sucursal_id=efectiva, caja_turno_id=caja_turno_id, cliente_id=cliente_id,
-            estado=estado, desde=desde, hasta=hasta,
-        ),
-        Paginacion(limit=limit, offset=offset),
+        filtro, paginacion, orden,
     )
-    return VentasPaginadas(
-        items=[VentaListItem.model_validate(v) for v in pagina.items],
-        total=pagina.total, limit=limit, offset=offset,
+    pagina.items = [VentaListItem.model_validate(v) for v in pagina.items]
+    return page_response(
+        request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
     )
 
 
-@router.get("/{venta_id}", response_model=VentaResponse)
+@router.get("/{venta_id}", response_model=ApiResponse[VentaResponse])
 async def obtener_venta(
     venta_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -177,10 +188,10 @@ async def obtener_venta(
     except Exception as e:
         raise _traducir(e)
     verificar_alcance_sucursal(actual, venta.sucursal_id)
-    return venta
+    return ok(venta)
 
 
-@router.patch("/{venta_id}/anular", response_model=VentaResponse)
+@router.patch("/{venta_id}/anular", response_model=ApiResponse[VentaResponse])
 async def anular_venta(
     venta_id: UUID,
     body: AnularVentaRequest,
@@ -190,7 +201,7 @@ async def anular_venta(
     try:
         existente = await ObtenerVentaUseCase(SqlAlchemyVentaRepository(db)).ejecutar(venta_id)
         verificar_alcance_sucursal(actual, existente.sucursal_id)
-        return await _anular_use_case(db).ejecutar(AnularVentaInput(
+        venta = await _anular_use_case(db).ejecutar(AnularVentaInput(
             venta_id=venta_id,
             usuario_id=actual.id,
             motivo=body.motivo,
@@ -200,12 +211,15 @@ async def anular_venta(
         raise
     except Exception as e:
         raise _traducir(e)
+    return ok(venta)
 
 
 # ========================================================================== #
 # CAJA
 # ========================================================================== #
-@caja_router.post("/abrir", response_model=CajaTurnoResponse, status_code=status.HTTP_201_CREATED)
+@caja_router.post(
+    "/abrir", response_model=ApiResponse[CajaTurnoResponse], status_code=status.HTTP_201_CREATED,
+)
 async def abrir_turno(
     body: AbrirCajaTurnoRequest,
     db: AsyncSession = Depends(get_db),
@@ -213,16 +227,17 @@ async def abrir_turno(
 ):
     sucursal_id = _exige_sucursal(actual)
     try:
-        return await AbrirCajaTurnoUseCase(
+        turno = await AbrirCajaTurnoUseCase(
             SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db)
         ).ejecutar(AbrirCajaTurnoInput(
             sucursal_id=sucursal_id, usuario_id=actual.id, saldo_inicial=body.saldo_inicial,
         ))
     except Exception as e:
         raise _traducir(e)
+    return ok(turno)
 
 
-@caja_router.post("/{turno_id}/cerrar", response_model=CajaTurnoResponse)
+@caja_router.post("/{turno_id}/cerrar", response_model=ApiResponse[CajaTurnoResponse])
 async def cerrar_turno(
     turno_id: UUID,
     body: CerrarCajaTurnoRequest,
@@ -230,7 +245,7 @@ async def cerrar_turno(
     actual: UsuarioAutenticado = Depends(require_permission("ventas.crear")),
 ):
     try:
-        return await CerrarCajaTurnoUseCase(
+        turno = await CerrarCajaTurnoUseCase(
             SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db)
         ).ejecutar(CerrarCajaTurnoInput(
             caja_turno_id=turno_id,
@@ -240,23 +255,25 @@ async def cerrar_turno(
         ))
     except Exception as e:
         raise _traducir(e)
+    return ok(turno)
 
 
-@caja_router.get("/actual", response_model=CajaTurnoResponse)
+@caja_router.get("/actual", response_model=ApiResponse[CajaTurnoResponse])
 async def turno_actual(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("ventas.leer")),
 ):
     sucursal_id = _exige_sucursal(actual)
     try:
-        return await ObtenerTurnoActualUseCase(SqlAlchemyCajaTurnoRepository(db)).ejecutar(
+        turno = await ObtenerTurnoActualUseCase(SqlAlchemyCajaTurnoRepository(db)).ejecutar(
             actual.id, sucursal_id
         )
     except Exception as e:
         raise _traducir(e)
+    return ok(turno)
 
 
-@caja_router.get("/{turno_id}", response_model=ResumenTurnoResponse)
+@caja_router.get("/{turno_id}", response_model=ApiResponse[ResumenTurnoResponse])
 async def resumen_turno(
     turno_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -267,9 +284,9 @@ async def resumen_turno(
     except Exception as e:
         raise _traducir(e)
     verificar_alcance_sucursal(actual, resumen.turno.sucursal_id)
-    return ResumenTurnoResponse(
+    return ok(ResumenTurnoResponse(
         turno=CajaTurnoResponse.model_validate(resumen.turno),
         total_efectivo=resumen.total_efectivo,
         cantidad_ventas=resumen.cantidad_ventas,
         saldo_esperado=resumen.saldo_esperado,
-    )
+    ))

@@ -1,11 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado
-from app.modules.inventario.application.dtos import FiltroProductos, Paginacion
+from app.shared.responses import (
+    ApiResponse, EnvelopeRoute, PageParams, Sort,
+    page_params, make_sort_dependency, ok, page_response,
+)
+from app.shared.filtering import active_filters
+from app.modules.inventario.application.dtos import FiltroProductos
 from app.modules.inventario.application.use_cases.crear_producto import (
     CrearProductoUseCase, CrearProductoInput,
 )
@@ -14,11 +19,15 @@ from app.modules.inventario.application.use_cases.gestionar_productos import (
     ActualizarProductoUseCase, ActualizarProductoInput, DesactivarProductoUseCase,
 )
 from app.modules.inventario.infrastructure.api.schemas import (
-    CrearProductoRequest, ActualizarProductoRequest, ProductoResponse, ProductosPaginados,
+    CrearProductoRequest, ActualizarProductoRequest, ProductoResponse,
 )
 from .common import prod_repo, cat_repo, exist_repo, traducir, traducir_create
 
-router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
+
+_ORDEN_PRODUCTOS = make_sort_dependency(
+    {"nombre", "sku", "precio_venta", "created_at"}, "nombre:asc"
+)
 
 """
     Endpoint para crear un producto.
@@ -28,7 +37,10 @@ router = APIRouter()
     @param actual: Usuario autenticado.
     @return: Instancia de la clase ProductoResponse.
 """
-@router.post("/productos", response_model=ProductoResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/productos", response_model=ApiResponse[ProductoResponse],
+    status_code=status.HTTP_201_CREATED,
+)
 async def crear_producto(
     body: CrearProductoRequest,
     db: AsyncSession = Depends(get_db),
@@ -46,7 +58,7 @@ async def crear_producto(
         )
     except Exception as e:
         raise traducir_create(e)
-    return producto
+    return ok(producto)
 
 """
     Endpoint para listar productos.
@@ -58,23 +70,24 @@ async def crear_producto(
     @param q: Término de búsqueda.
     @param limit: Límite de resultados.
     @param offset: Desplazamiento de resultados.
-    @return: Instancia de la clase ProductosPaginados.
+    @return: ApiResponse[list[ProductoResponse]]
 """
-@router.get("/productos", response_model=ProductosPaginados)
+@router.get("/productos", response_model=ApiResponse[list[ProductoResponse]])
 async def listar_productos(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     categoria_id: UUID | None = Query(default=None),
     activo: bool | None = Query(default=None),
     q: str | None = Query(default=None, description="Busca en nombre, sku y código de barras"),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_PRODUCTOS),
 ):
-    pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(
-        FiltroProductos(categoria_id=categoria_id, activo=activo, busqueda=q),
-        Paginacion(limit=limit, offset=offset),
+    filtro = FiltroProductos(categoria_id=categoria_id, activo=activo, busqueda=q)
+    pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(filtro, paginacion, orden)
+    return page_response(
+        request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
     )
-    return ProductosPaginados(items=pagina.items, total=pagina.total, limit=limit, offset=offset)
 
 
 """
@@ -85,16 +98,17 @@ async def listar_productos(
     @param actual: Usuario autenticado.
     @return: Instancia de la clase ProductoResponse.
 """
-@router.get("/productos/buscar", response_model=ProductoResponse)
+@router.get("/productos/buscar", response_model=ApiResponse[ProductoResponse])
 async def buscar_producto_por_codigo_barras(
     codigo_barras: str = Query(min_length=1),
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
 ):
     try:
-        return await BuscarProductoPorCodigoBarrasUseCase(prod_repo(db)).ejecutar(codigo_barras)
+        producto = await BuscarProductoPorCodigoBarrasUseCase(prod_repo(db)).ejecutar(codigo_barras)
     except Exception as e:
         raise traducir(e)
+    return ok(producto)
 
 
 """
@@ -105,16 +119,17 @@ async def buscar_producto_por_codigo_barras(
     @param actual: Usuario autenticado.
     @return: Instancia de la clase ProductoResponse.
 """
-@router.get("/productos/{producto_id}", response_model=ProductoResponse)
+@router.get("/productos/{producto_id}", response_model=ApiResponse[ProductoResponse])
 async def obtener_producto(
     producto_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
 ):
     try:
-        return await ObtenerProductoUseCase(prod_repo(db)).ejecutar(producto_id)
+        producto = await ObtenerProductoUseCase(prod_repo(db)).ejecutar(producto_id)
     except Exception as e:
         raise traducir(e)
+    return ok(producto)
 
 
 """
@@ -126,7 +141,7 @@ async def obtener_producto(
     @param actual: Usuario autenticado.
     @return: Instancia de la clase ProductoResponse.
 """
-@router.patch("/productos/{producto_id}", response_model=ProductoResponse)
+@router.patch("/productos/{producto_id}", response_model=ApiResponse[ProductoResponse])
 async def actualizar_producto(
     producto_id: UUID,
     body: ActualizarProductoRequest,
@@ -145,7 +160,7 @@ async def actualizar_producto(
         )
     except Exception as e:
         raise traducir(e)
-    return producto
+    return ok(producto)
 
 
 """
@@ -157,7 +172,9 @@ async def actualizar_producto(
     @param confirmar_con_stock: Indica si se debe confirmar con stock.
     @return: Instancia de la clase ProductoResponse.
 """
-@router.patch("/productos/{producto_id}/desactivar", response_model=ProductoResponse)
+@router.patch(
+    "/productos/{producto_id}/desactivar", response_model=ApiResponse[ProductoResponse],
+)
 async def desactivar_producto(
     producto_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -170,4 +187,4 @@ async def desactivar_producto(
         )
     except Exception as e:
         raise traducir(e)
-    return producto
+    return ok(producto)

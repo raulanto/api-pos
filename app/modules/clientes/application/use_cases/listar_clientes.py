@@ -1,31 +1,15 @@
-from app.modules.clientes.application.dtos import FiltroClientes, Paginacion, Pagina
+from app.modules.clientes.application.dtos import FiltroClientes
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
+from app.shared.responses import Page, PageParams, Sort
 
-"""
-    ListarClientesUseCase
-    Descripcion: Clase que representa el caso de uso para listar clientes.
-    Métodos:
-    - ejecutar: Ejecuta el caso de uso para listar clientes.
-"""
+
 class ListarClientesUseCase:
-    """
-        Método para ejecutar el caso de uso para listar clientes.
-        Parámetros:
-        - filtro: Filtro para listar clientes.
-        - paginacion: Paginacion para listar clientes.
-        Retorna:
-        - Pagina: Pagina de clientes.
-    """
+    """Lista clientes paginados. No arma el sobre HTTP: devuelve un `Page`."""
+
     def __init__(self, cliente_repo: ClienteRepository):
         self._repo = cliente_repo
 
-    """
-        Método para ejecutar el caso de uso para listar clientes.
-        Parámetros:
-        - filtro: Filtro para listar clientes.
-        - paginacion: Paginacion para listar clientes.
-        Retorna:
-        - Pagina: Pagina de clientes.
-    """
-    async def ejecutar(self, filtro: FiltroClientes, paginacion: Paginacion) -> Pagina:
-        return await self._repo.listar(filtro, paginacion)
+    async def ejecutar(
+        self, filtro: FiltroClientes, paginacion: PageParams, orden: Sort
+    ) -> Page:
+        return await self._repo.listar(filtro, paginacion, orden)

@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.dependencies import (
     get_current_user, require_permission, UsuarioAutenticado, invalidar_cache_permisos,
 )
+from app.shared.responses import ApiResponse, EnvelopeRoute, ok
 from app.modules.usuarios.infrastructure.api.schemas import (
     RolResponse, PermisoResponse, CrearRolRequest, EditarRolRequest, AsignarPermisosRequest,
 )
@@ -26,7 +27,7 @@ from app.modules.usuarios.domain.exceptions import (
     UsuarioNoEncontrado,
 )
 
-router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
 
 _CONFLICT = (RolAdminProtegido, CodigoRolDuplicado, UsuarioNoEncontrado)
 
@@ -39,15 +40,17 @@ def _permiso_repo(db: AsyncSession) -> SqlAlchemyPermisoRepository:
     return SqlAlchemyPermisoRepository(db)
 
 
-@router.get("", response_model=list[RolResponse])
+@router.get("", response_model=ApiResponse[list[RolResponse]])
 async def listar_roles(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("roles.gestionar")),
 ):
-    return await ListarRolesUseCase(_rol_repo(db)).ejecutar()
+    return ok(await ListarRolesUseCase(_rol_repo(db)).ejecutar())
 
 
-@router.post("", response_model=RolResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=ApiResponse[RolResponse], status_code=status.HTTP_201_CREATED,
+)
 async def crear_rol(
     body: CrearRolRequest,
     db: AsyncSession = Depends(get_db),
@@ -55,7 +58,7 @@ async def crear_rol(
 ):
     use_case = CrearRolUseCase(_rol_repo(db), _permiso_repo(db))
     try:
-        return await use_case.ejecutar(CrearRolInput(
+        rol = await use_case.ejecutar(CrearRolInput(
             codigo=body.codigo, nombre=body.nombre,
             descripcion=body.descripcion, permiso_ids=body.permiso_ids,
         ))
@@ -63,9 +66,10 @@ async def crear_rol(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except _CONFLICT as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    return ok(rol)
 
 
-@router.patch("/{rol_id}", response_model=RolResponse)
+@router.patch("/{rol_id}", response_model=ApiResponse[RolResponse])
 async def editar_rol(
     rol_id: UUID,
     body: EditarRolRequest,
@@ -78,7 +82,7 @@ async def editar_rol(
         )
     except RolNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    return rol
+    return ok(rol)
 
 
 @router.delete("/{rol_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -96,7 +100,7 @@ async def eliminar_rol(
     invalidar_cache_permisos(rol_id)
 
 
-@router.post("/{rol_id}/permisos", response_model=RolResponse)
+@router.post("/{rol_id}/permisos", response_model=ApiResponse[RolResponse])
 async def asignar_permisos(
     rol_id: UUID,
     body: AsignarPermisosRequest,
@@ -111,10 +115,10 @@ async def asignar_permisos(
     except PermisoNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     invalidar_cache_permisos(rol_id)
-    return rol
+    return ok(rol)
 
 
-@router.delete("/{rol_id}/permisos/{permiso_id}", response_model=RolResponse)
+@router.delete("/{rol_id}/permisos/{permiso_id}", response_model=ApiResponse[RolResponse])
 async def quitar_permiso(
     rol_id: UUID,
     permiso_id: UUID,
@@ -126,16 +130,16 @@ async def quitar_permiso(
     except RolNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     invalidar_cache_permisos(rol_id)
-    return rol
+    return ok(rol)
 
 
 # Catálogo de permisos: solo lectura, cualquier sesión válida.
-permisos_router = APIRouter()
+permisos_router = APIRouter(route_class=EnvelopeRoute)
 
 
-@permisos_router.get("", response_model=list[PermisoResponse])
+@permisos_router.get("", response_model=ApiResponse[list[PermisoResponse]])
 async def listar_permisos(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(get_current_user),
 ):
-    return await ListarPermisosUseCase(_permiso_repo(db)).ejecutar()
+    return ok(await ListarPermisosUseCase(_permiso_repo(db)).ejecutar())

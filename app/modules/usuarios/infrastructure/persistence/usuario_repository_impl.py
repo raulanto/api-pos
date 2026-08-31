@@ -6,9 +6,17 @@ from app.modules.usuarios.application.ports.usuario_repository import UsuarioRep
 from app.modules.usuarios.domain.entities import Usuario, ROL_ADMIN
 from app.modules.usuarios.infrastructure.persistence.orm_models import UsuarioORM, RolORM
 from app.modules.usuarios.infrastructure.persistence.mappers import to_domain_usuario, to_orm_usuario
+from app.shared.responses import Page, PageParams, Sort
 
 
 class SqlAlchemyUsuarioRepository(UsuarioRepository):
+    _ORDEN = {
+        "nombre": UsuarioORM.nombre,
+        "email": UsuarioORM.email,
+        "created_at": UsuarioORM.created_at,
+        "last_login_at": UsuarioORM.last_login_at,
+    }
+
     def __init__(self, db: AsyncSession):
         self._db = db
 
@@ -29,14 +37,33 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         orm = result.scalar_one_or_none()
         return to_domain_usuario(orm) if orm else None
 
-    async def listar(self, sucursal_id: UUID | None = None, incluir_inactivos: bool = True) -> list[Usuario]:
-        stmt = select(UsuarioORM).order_by(UsuarioORM.nombre)
+    async def listar(
+        self,
+        paginacion: PageParams,
+        orden: Sort,
+        sucursal_id: UUID | None = None,
+        incluir_inactivos: bool = True,
+    ) -> Page:
+        condiciones = []
         if sucursal_id is not None:
-            stmt = stmt.where(UsuarioORM.sucursal_id == sucursal_id)
+            condiciones.append(UsuarioORM.sucursal_id == sucursal_id)
         if not incluir_inactivos:
-            stmt = stmt.where(UsuarioORM.activo.is_(True))
-        result = await self._db.execute(stmt)
-        return [to_domain_usuario(o) for o in result.scalars().all()]
+            condiciones.append(UsuarioORM.activo.is_(True))
+
+        col = self._ORDEN.get(orden.field, UsuarioORM.nombre)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
+        total = await self._db.scalar(
+            select(func.count()).select_from(UsuarioORM).where(*condiciones)
+        )
+        filas = (await self._db.execute(
+            select(UsuarioORM)
+            .where(*condiciones)
+            .order_by(orden_expr)
+            .limit(paginacion.limit)
+            .offset(paginacion.offset)
+        )).scalars().all()
+        return Page(items=[to_domain_usuario(o) for o in filas], total=int(total or 0))
 
     async def contar_admins_activos(self, excluir_usuario_id: UUID | None = None) -> int:
         stmt = (

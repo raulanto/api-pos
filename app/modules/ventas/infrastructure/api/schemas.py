@@ -87,13 +87,6 @@ class VentaListItem(BaseModel):
     created_at: datetime
 
 
-class VentasPaginadas(BaseModel):
-    items: List[VentaListItem]
-    total: int
-    limit: int
-    offset: int
-
-
 # --------------------------------------------------------------------------- #
 # Caja
 # --------------------------------------------------------------------------- #

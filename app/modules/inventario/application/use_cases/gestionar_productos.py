@@ -9,19 +9,22 @@ from app.modules.inventario.domain.exceptions import (
     ProductoNoEncontrado, CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado,
     ProductoConStockActivo,
 )
-from app.modules.inventario.application.dtos import FiltroProductos, Paginacion, Pagina
+from app.modules.inventario.application.dtos import FiltroProductos
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
 from app.modules.inventario.application.ports.categoria_repository import CategoriaRepository
 from app.modules.inventario.application.ports.existencia_repository import ExistenciaRepository
 from app.modules.inventario.application.use_cases.crear_producto import _traducir_integridad
+from app.shared.responses import Page, PageParams, Sort
 
 
 class ListarProductosUseCase:
     def __init__(self, producto_repo: ProductoRepository):
         self._repo = producto_repo
 
-    async def ejecutar(self, filtro: FiltroProductos, paginacion: Paginacion) -> Pagina:
-        return await self._repo.listar(filtro, paginacion)
+    async def ejecutar(
+        self, filtro: FiltroProductos, paginacion: PageParams, orden: Sort
+    ) -> Page:
+        return await self._repo.listar(filtro, paginacion, orden)
 
 
 class ObtenerProductoUseCase:

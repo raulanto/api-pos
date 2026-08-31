@@ -56,12 +56,3 @@ class MovimientoResponse(BaseModel):
     motivo: Optional[str]
     created_at: datetime
 
-
-"""
-    Response paginada para movimientos.
-"""
-class MovimientosPaginados(BaseModel):
-    items: list[MovimientoResponse]
-    total: int
-    limit: int
-    offset: int

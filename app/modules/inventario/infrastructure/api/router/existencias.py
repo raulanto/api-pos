@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado, verificar_alcance_sucursal
+from app.shared.responses import ApiResponse, EnvelopeRoute, ok
 from app.modules.inventario.application.use_cases.consultar_existencias import (
     ConsultarExistenciasUseCase, ListarBajoStockUseCase,
     ConfigurarUmbralesUseCase, ConfigurarUmbralesInput,
@@ -14,18 +15,10 @@ from app.modules.inventario.infrastructure.api.schemas import (
 )
 from .common import exist_repo, prod_repo, sucursal_efectiva, traducir
 
-router = APIRouter()
+router = APIRouter(route_class=EnvelopeRoute)
 
-"""
-    Endpoint para listar existencias.
 
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @param producto_id: ID del producto.
-    @param sucursal_id: ID de la sucursal.
-    @return: Instancia de la clase ExistenciaResponse.
-"""
-@router.get("/existencias", response_model=list[ExistenciaResponse])
+@router.get("/existencias", response_model=ApiResponse[list[ExistenciaResponse]])
 async def listar_existencias(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
@@ -33,40 +26,26 @@ async def listar_existencias(
     sucursal_id: UUID | None = Query(default=None),
 ):
     efectivo = sucursal_efectiva(actual, sucursal_id)
-    return await ConsultarExistenciasUseCase(exist_repo(db)).ejecutar(
+    existencias = await ConsultarExistenciasUseCase(exist_repo(db)).ejecutar(
         producto_id=producto_id, sucursal_id=efectivo
     )
+    return ok(existencias)
 
-"""
-    Endpoint para listar existencias bajo stock.
 
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @param sucursal_id: ID de la sucursal.
-    @return: Instancia de la clase ExistenciaResponse.
-"""
-@router.get("/existencias/bajo-stock", response_model=list[ExistenciaResponse])
+@router.get("/existencias/bajo-stock", response_model=ApiResponse[list[ExistenciaResponse]])
 async def listar_bajo_stock(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     sucursal_id: UUID | None = Query(default=None),
 ):
     efectivo = sucursal_efectiva(actual, sucursal_id)
-    return await ListarBajoStockUseCase(exist_repo(db)).ejecutar(sucursal_id=efectivo)
+    existencias = await ListarBajoStockUseCase(exist_repo(db)).ejecutar(sucursal_id=efectivo)
+    return ok(existencias)
 
-"""
-    Endpoint para configurar umbrales de stock.
 
-    @param producto_id: ID del producto.
-    @param sucursal_id: ID de la sucursal.
-    @param body: Cuerpo de la solicitud.
-    @param db: Sesión de la base de datos.
-    @param actual: Usuario autenticado.
-    @return: Instancia de la clase ExistenciaResponse.
-"""
 @router.patch(
     "/existencias/{producto_id}/{sucursal_id}/umbrales",
-    response_model=ExistenciaResponse,
+    response_model=ApiResponse[ExistenciaResponse],
 )
 async def configurar_umbrales(
     producto_id: UUID,
@@ -85,4 +64,4 @@ async def configurar_umbrales(
         )
     except Exception as e:
         raise traducir(e)
-    return existencia
+    return ok(existencia)

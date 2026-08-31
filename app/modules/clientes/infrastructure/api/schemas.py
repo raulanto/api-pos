@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -50,8 +50,3 @@ class ClienteResponse(BaseModel):
     created_at: datetime
 
 
-class ClientesPaginados(BaseModel):
-    items: List[ClienteResponse]
-    total: int
-    limit: int
-    offset: int

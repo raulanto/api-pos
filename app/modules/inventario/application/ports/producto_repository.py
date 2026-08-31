@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 from app.modules.inventario.domain.entities import Producto
-from app.modules.inventario.application.dtos import FiltroProductos, Paginacion, Pagina
+from app.modules.inventario.application.dtos import FiltroProductos
+from app.shared.responses import Page, PageParams, Sort
 
 class ProductoRepository(ABC):
     @abstractmethod
@@ -22,4 +23,6 @@ class ProductoRepository(ABC):
     ) -> Producto | None: ...
 
     @abstractmethod
-    async def listar(self, filtro: FiltroProductos, paginacion: Paginacion) -> Pagina: ...
+    async def listar(
+        self, filtro: FiltroProductos, paginacion: PageParams, orden: Sort
+    ) -> Page: ...

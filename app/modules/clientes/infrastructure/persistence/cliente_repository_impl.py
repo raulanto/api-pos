@@ -5,15 +5,23 @@ from sqlalchemy import select, update, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
-from app.modules.clientes.application.dtos import FiltroClientes, Paginacion, Pagina
+from app.modules.clientes.application.dtos import FiltroClientes
 from app.modules.clientes.domain.entities import Cliente
 from app.modules.clientes.infrastructure.persistence.orm_models import ClienteORM
 from app.modules.clientes.infrastructure.persistence.mappers import to_domain_cliente, to_orm_cliente
+from app.shared.responses import Page, PageParams, Sort
 
 # Escrituras con `flush`, nunca `commit`: la transacción la cierra get_db().
 
 
 class SqlAlchemyClienteRepository(ClienteRepository):
+    # Mapa nombre lógico (whitelist del router) -> columna ORM.
+    _ORDEN = {
+        "created_at": ClienteORM.created_at,
+        "nombre": ClienteORM.nombre,
+        "saldo_credito": ClienteORM.saldo_credito,
+    }
+
     def __init__(self, db: AsyncSession):
         self._db = db
 
@@ -48,7 +56,9 @@ class SqlAlchemyClienteRepository(ClienteRepository):
         orm = (await self._db.execute(stmt)).scalars().first()
         return to_domain_cliente(orm) if orm else None
 
-    async def listar(self, filtro: FiltroClientes, paginacion: Paginacion) -> Pagina:
+    async def listar(
+        self, filtro: FiltroClientes, paginacion: PageParams, orden: Sort
+    ) -> Page:
         condiciones = []
         if filtro.sucursal_id is not None:
             condiciones.append(ClienteORM.sucursal_id == filtro.sucursal_id)
@@ -63,17 +73,20 @@ class SqlAlchemyClienteRepository(ClienteRepository):
                 ClienteORM.email.ilike(patron),
             ))
 
+        col = self._ORDEN.get(orden.field, ClienteORM.nombre)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
         total = await self._db.scalar(
             select(func.count()).select_from(ClienteORM).where(*condiciones)
         )
         filas = (await self._db.execute(
             select(ClienteORM)
             .where(*condiciones)
-            .order_by(ClienteORM.nombre)
+            .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Pagina(items=[to_domain_cliente(o) for o in filas], total=int(total or 0))
+        return Page(items=[to_domain_cliente(o) for o in filas], total=int(total or 0))
 
     async def incrementar_saldo(self, cliente_id: UUID, monto: Decimal) -> None:
         await self._db.execute(
