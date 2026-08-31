@@ -4,6 +4,23 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from datetime import datetime
 from app.shared.infrastructure.orm_base import Base
 
+
+"""
+    Tabla: log_auditoria
+    Descripcion: Tabla que almacena los logs de auditoria.
+    Columnas:
+    - id: ID del log.
+    - usuario_id: ID del usuario.
+    - modulo: Modulo.
+    - accion: Accion.
+    - entidad: Entidad.
+    - entidad_id: ID de la entidad.
+    - detalle: Detalle.
+    - ip_address: Direccion IP.
+    - fecha: Fecha.
+    Relaciones:
+    - usuario_id: FK a usuario.id
+"""
 class LogAuditoriaORM(Base):
     __tablename__ = "log_auditoria"
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
