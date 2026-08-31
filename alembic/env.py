@@ -20,6 +20,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 from app.shared.infrastructure.orm_base import Base
 from app.modules.usuarios.infrastructure.persistence.orm_models import *
+from app.modules.inventario.infrastructure.persistence.orm_models import *
 target_metadata = Base.metadata
 
 from app.core.config import settings
