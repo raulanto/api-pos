@@ -1,10 +1,17 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric
+from sqlalchemy import Column, String, ForeignKey, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.shared.infrastructure.orm_base import Base, TimestampMixin, SoftDeleteMixin
 
 class ClienteORM(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "cliente"
+    # Email único sólo entre clientes activos: un cliente dado de baja libera su email.
+    __table_args__ = (
+        Index(
+            "uq_cliente_email_activo", "email",
+            unique=True, postgresql_where=Column("activo"),
+        ),
+    )
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sucursal_id = Column(PGUUID(as_uuid=True), ForeignKey("sucursal.id"), nullable=False)
     nombre = Column(String(150), nullable=False)

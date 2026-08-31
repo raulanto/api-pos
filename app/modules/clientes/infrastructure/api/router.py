@@ -1,50 +1,219 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from app.core.dependencies import require_permission, UsuarioAutenticado, verificar_alcance_sucursal
-from app.modules.clientes.infrastructure.api.schemas import CrearClienteRequest, ClienteResponse
-from app.modules.clientes.application.use_cases.crear_cliente import CrearClienteUseCase, CrearClienteInput
-from app.modules.clientes.application.use_cases.obtener_cliente import ObtenerClienteUseCase
-from app.modules.clientes.infrastructure.persistence.cliente_repository_impl import SqlAlchemyClienteRepository
-from app.modules.clientes.domain.exceptions import ClienteNoEncontrado
 from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.core.dependencies import (
+    require_permission, UsuarioAutenticado, sucursal_scope, verificar_alcance_sucursal,
+)
+from app.modules.clientes.domain import exceptions as cexc
+from app.modules.clientes.application.dtos import FiltroClientes, Paginacion
+from app.modules.clientes.infrastructure.api.schemas import (
+    CrearClienteRequest, ActualizarClienteRequest, AbonarClienteRequest,
+    CambiarLimiteCreditoRequest, ClienteResponse, ClientesPaginados,
+)
+from app.modules.clientes.infrastructure.persistence.cliente_repository_impl import (
+    SqlAlchemyClienteRepository,
+)
+from app.modules.clientes.application.use_cases.crear_cliente import (
+    CrearClienteUseCase, CrearClienteInput,
+)
+from app.modules.clientes.application.use_cases.obtener_cliente import ObtenerClienteUseCase
+from app.modules.clientes.application.use_cases.listar_clientes import ListarClientesUseCase
+from app.modules.clientes.application.use_cases.gestionar_cliente import (
+    ActualizarClienteUseCase, ActualizarClienteInput,
+    DesactivarClienteUseCase,
+    AbonarClienteUseCase, AbonarClienteInput,
+    CambiarLimiteCreditoUseCase, CambiarLimiteCreditoInput,
+)
+# Lectura cruzada (solo lectura) del historial de compras del cliente.
+from app.modules.ventas.application.dtos import FiltroVentas, Paginacion as PaginacionVentas
+from app.modules.ventas.application.use_cases.listar_ventas import ListarVentasUseCase
+from app.modules.ventas.infrastructure.persistence.repositories_impl import SqlAlchemyVentaRepository
+from app.modules.ventas.infrastructure.api.schemas import VentaListItem, VentasPaginadas
 
 router = APIRouter()
 
-def get_crear_cliente_use_case(db: AsyncSession = Depends(get_db)) -> CrearClienteUseCase:
-    return CrearClienteUseCase(SqlAlchemyClienteRepository(db))
+_NOT_FOUND = (cexc.ClienteNoEncontrado,)
+_CONFLICT = (cexc.EmailClienteDuplicado, cexc.ClienteConDeuda)
+_BAD_REQUEST = (
+    cexc.AbonoInvalido, cexc.LimiteCreditoInvalido, cexc.LimiteCreditoExcedido, ValueError,
+)
 
-def get_obtener_cliente_use_case(db: AsyncSession = Depends(get_db)) -> ObtenerClienteUseCase:
-    return ObtenerClienteUseCase(SqlAlchemyClienteRepository(db))
 
+def _traducir(error: Exception) -> HTTPException:
+    if isinstance(error, _NOT_FOUND):
+        return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(error))
+    if isinstance(error, _CONFLICT):
+        return HTTPException(status.HTTP_409_CONFLICT, detail=str(error))
+    if isinstance(error, _BAD_REQUEST):
+        return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error))
+    raise error
+
+
+def _repo(db: AsyncSession) -> SqlAlchemyClienteRepository:
+    return SqlAlchemyClienteRepository(db)
+
+
+def _exige_sucursal(actual: UsuarioAutenticado) -> UUID:
+    if not actual.sucursal_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, detail="El usuario no tiene una sucursal asignada"
+        )
+    return actual.sucursal_id
+
+
+def _sucursal_efectiva(actual: UsuarioAutenticado, pedida: UUID | None) -> UUID | None:
+    alcance = sucursal_scope(actual)
+    if alcance is None:
+        return pedida
+    if pedida is not None and pedida != alcance:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Fuera del alcance de su sucursal")
+    return alcance
+
+
+async def _obtener_en_alcance(db: AsyncSession, actual: UsuarioAutenticado, cliente_id: UUID):
+    try:
+        cliente = await ObtenerClienteUseCase(_repo(db)).ejecutar(cliente_id)
+    except Exception as e:
+        raise _traducir(e)
+    verificar_alcance_sucursal(actual, cliente.sucursal_id)
+    return cliente
+
+
+# ========================================================================== #
 @router.post("/", response_model=ClienteResponse, status_code=status.HTTP_201_CREATED)
 async def crear_cliente(
     body: CrearClienteRequest,
-    use_case: CrearClienteUseCase = Depends(get_crear_cliente_use_case),
-    usuario_actual: UsuarioAutenticado = Depends(require_permission("clientes.crear")),
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.crear")),
 ):
-    if not usuario_actual.sucursal_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El usuario no tiene una sucursal asignada")
+    sucursal_id = _exige_sucursal(actual)
+    try:
+        return await CrearClienteUseCase(_repo(db)).ejecutar(CrearClienteInput(
+            sucursal_id=sucursal_id,
+            nombre=body.nombre,
+            email=body.email,
+            telefono=body.telefono,
+            rfc_identificacion=body.rfc_identificacion,
+            limite_credito=body.limite_credito,
+        ))
+    except Exception as e:
+        raise _traducir(e)
 
-    cliente = await use_case.ejecutar(CrearClienteInput(
-        sucursal_id=usuario_actual.sucursal_id,
-        nombre=body.nombre,
-        email=body.email,
-        telefono=body.telefono,
-        rfc_identificacion=body.rfc_identificacion,
-        limite_credito=body.limite_credito
-    ))
-    return cliente
+
+@router.get("/", response_model=ClientesPaginados)
+async def listar_clientes(
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
+    q: str | None = Query(default=None, description="Busca en nombre y email"),
+    activo: bool | None = Query(default=None),
+    con_saldo_pendiente: bool = Query(default=False),
+    sucursal_id: UUID | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    efectiva = _sucursal_efectiva(actual, sucursal_id)
+    pagina = await ListarClientesUseCase(_repo(db)).ejecutar(
+        FiltroClientes(
+            sucursal_id=efectiva, activo=activo, busqueda=q,
+            con_saldo_pendiente=con_saldo_pendiente,
+        ),
+        Paginacion(limit=limit, offset=offset),
+    )
+    return ClientesPaginados(items=pagina.items, total=pagina.total, limit=limit, offset=offset)
+
 
 @router.get("/{cliente_id}", response_model=ClienteResponse)
 async def obtener_cliente(
     cliente_id: UUID,
-    use_case: ObtenerClienteUseCase = Depends(get_obtener_cliente_use_case),
-    usuario_actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
 ):
+    return await _obtener_en_alcance(db, actual, cliente_id)
+
+
+@router.get("/{cliente_id}/ventas", response_model=VentasPaginadas)
+async def historial_ventas_cliente(
+    cliente_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    await _obtener_en_alcance(db, actual, cliente_id)  # valida existencia + alcance
+    pagina = await ListarVentasUseCase(SqlAlchemyVentaRepository(db)).ejecutar(
+        FiltroVentas(cliente_id=cliente_id),
+        PaginacionVentas(limit=limit, offset=offset),
+    )
+    return VentasPaginadas(
+        items=[VentaListItem.model_validate(v) for v in pagina.items],
+        total=pagina.total, limit=limit, offset=offset,
+    )
+
+
+@router.patch("/{cliente_id}", response_model=ClienteResponse)
+async def actualizar_cliente(
+    cliente_id: UUID,
+    body: ActualizarClienteRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.editar")),
+):
+    await _obtener_en_alcance(db, actual, cliente_id)
     try:
-        cliente = await use_case.ejecutar(cliente_id)
-    except ClienteNoEncontrado as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    verificar_alcance_sucursal(usuario_actual, cliente.sucursal_id)
-    return cliente
+        return await ActualizarClienteUseCase(_repo(db)).ejecutar(ActualizarClienteInput(
+            cliente_id=cliente_id,
+            nombre=body.nombre,
+            email=body.email,
+            cambiar_email=body.cambiar_email,
+            telefono=body.telefono,
+            rfc_identificacion=body.rfc_identificacion,
+        ))
+    except Exception as e:
+        raise _traducir(e)
+
+
+@router.patch("/{cliente_id}/desactivar", response_model=ClienteResponse)
+async def desactivar_cliente(
+    cliente_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.eliminar")),
+):
+    await _obtener_en_alcance(db, actual, cliente_id)
+    try:
+        return await DesactivarClienteUseCase(_repo(db)).ejecutar(cliente_id)
+    except Exception as e:
+        raise _traducir(e)
+
+
+@router.post("/{cliente_id}/abonar", response_model=ClienteResponse)
+async def abonar_cliente(
+    cliente_id: UUID,
+    body: AbonarClienteRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.editar")),
+):
+    await _obtener_en_alcance(db, actual, cliente_id)
+    try:
+        return await AbonarClienteUseCase(_repo(db)).ejecutar(AbonarClienteInput(
+            cliente_id=cliente_id, monto=body.monto,
+        ))
+    except Exception as e:
+        raise _traducir(e)
+
+
+@router.patch("/{cliente_id}/credito", response_model=ClienteResponse)
+async def cambiar_limite_credito(
+    cliente_id: UUID,
+    body: CambiarLimiteCreditoRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.credito.gestionar")),
+):
+    await _obtener_en_alcance(db, actual, cliente_id)
+    try:
+        return await CambiarLimiteCreditoUseCase(_repo(db)).ejecutar(CambiarLimiteCreditoInput(
+            cliente_id=cliente_id, nuevo_limite=body.limite_credito,
+        ))
+    except Exception as e:
+        raise _traducir(e)
