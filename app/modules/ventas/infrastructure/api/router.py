@@ -26,6 +26,7 @@ def get_crear_venta_use_case(db: AsyncSession = Depends(get_db)) -> CrearVentaUs
 @router.post("/", response_model=VentaResponse, status_code=status.HTTP_201_CREATED)
 async def crear_venta(
     body: CrearVentaRequest,
+    db: AsyncSession = Depends(get_db),
     use_case: CrearVentaUseCase = Depends(get_crear_venta_use_case),
     usuario_actual: UsuarioAutenticado = Depends(require_permission("ventas.crear")),
 ):
@@ -58,6 +59,9 @@ async def crear_venta(
         # Router Exception handler in app.core.exceptions will catch these domain exceptions if we have them mapped,
         # otherwise we can map them here
         venta = await use_case.ejecutar(input_data)
+        # El descuento de stock y el evento de auditoría se registran con `flush`
+        # dentro del caso de uso; este commit los confirma en una sola transacción.
+        await db.commit()
         return venta
     except CajaNoAbierta as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

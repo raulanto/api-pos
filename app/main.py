@@ -17,6 +17,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Registra los listeners de auditoría en el event_bus global (efecto de import).
+from app.modules.auditoria.infrastructure import listeners as _auditoria_listeners  # noqa: F401,E402
+
 from app.modules.usuarios.infrastructure.api.router import router as usuarios_router
 from app.modules.usuarios.infrastructure.api.roles_router import router as roles_router, permisos_router
 from app.modules.inventario.infrastructure.api.router import router as inventario_router

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, ForeignKey, Table, Numeric
+from sqlalchemy import Column, String, Boolean, ForeignKey, Table, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
 from app.shared.infrastructure.orm_base import Base, TimestampMixin, SoftDeleteMixin
@@ -12,9 +12,21 @@ class CategoriaORM(Base, SoftDeleteMixin):
 
 class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "producto"
+    # SKU y código de barras son únicos SOLO entre productos activos: un producto
+    # dado de baja libera su SKU/código para que pueda reutilizarse.
+    __table_args__ = (
+        Index(
+            "uq_producto_sku_activo", "sku",
+            unique=True, postgresql_where=Column("activo"),
+        ),
+        Index(
+            "uq_producto_codigo_barras_activo", "codigo_barras",
+            unique=True, postgresql_where=Column("activo"),
+        ),
+    )
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    sku = Column(String(50), unique=True, nullable=False)
-    codigo_barras = Column(String(50), unique=True, nullable=True)
+    sku = Column(String(50), nullable=False)
+    codigo_barras = Column(String(50), nullable=True)
     nombre = Column(String(150), nullable=False)
     descripcion = Column(String, nullable=True)
     categoria_id = Column(PGUUID(as_uuid=True), ForeignKey("categoria.id"), nullable=False)
