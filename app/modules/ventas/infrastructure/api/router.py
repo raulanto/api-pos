@@ -8,6 +8,7 @@ from app.modules.ventas.application.use_cases.crear_venta import CrearVentaUseCa
 from app.modules.ventas.infrastructure.persistence.repositories_impl import SqlAlchemyVentaRepository, SqlAlchemyCajaTurnoRepository
 from app.modules.clientes.infrastructure.persistence.cliente_repository_impl import SqlAlchemyClienteRepository
 from app.modules.ventas.infrastructure.adapters.inventario_port_impl import InventarioPortImpl
+from app.modules.ventas.infrastructure.adapters.event_port_impl import EventPortImpl
 from app.modules.ventas.domain.exceptions import CajaNoAbierta, VentaCreditoSinCliente, VentaSinLineas
 from app.modules.clientes.domain.exceptions import LimiteCreditoExcedido
 from app.modules.inventario.domain.exceptions import StockInsuficiente
@@ -19,7 +20,8 @@ def get_crear_venta_use_case(db: AsyncSession = Depends(get_db)) -> CrearVentaUs
         venta_repo=SqlAlchemyVentaRepository(db),
         caja_repo=SqlAlchemyCajaTurnoRepository(db),
         inventario=InventarioPortImpl(db),
-        cliente_repo=SqlAlchemyClienteRepository(db)
+        cliente_repo=SqlAlchemyClienteRepository(db),
+        event_port=EventPortImpl(db)
     )
 
 @router.post("/", response_model=VentaResponse, status_code=status.HTTP_201_CREATED)

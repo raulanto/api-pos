@@ -23,6 +23,7 @@ from app.modules.usuarios.infrastructure.persistence.orm_models import UsuarioOR
 from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM, CategoriaORM, ExistenciaORM, MovimientoInventarioORM
 from app.modules.clientes.infrastructure.persistence.orm_models import ClienteORM
 from app.modules.ventas.infrastructure.persistence.orm_models import VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM
+from app.modules.auditoria.infrastructure.persistence.orm_models import LogAuditoriaORM
 
 target_metadata = Base.metadata
 

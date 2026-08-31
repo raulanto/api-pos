@@ -9,6 +9,7 @@ from app.modules.ventas.domain.exceptions import CajaNoAbierta, VentaCreditoSinC
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
 from app.modules.ventas.application.ports.inventario_port import InventarioPort
+from app.modules.ventas.application.ports.event_port import EventPort
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
 from app.modules.clientes.domain.exceptions import LimiteCreditoExcedido
 
@@ -41,12 +42,14 @@ class CrearVentaUseCase:
         venta_repo: VentaRepository,
         caja_repo: CajaTurnoRepository,
         inventario: InventarioPort,
-        cliente_repo: ClienteRepository
+        cliente_repo: ClienteRepository,
+        event_port: EventPort
     ):
         self._venta_repo = venta_repo
         self._caja_repo = caja_repo
         self._inventario = inventario
         self._cliente_repo = cliente_repo
+        self._event_port = event_port
 
     async def ejecutar(self, data: CrearVentaInput) -> Venta:
         turno = await self._caja_repo.obtener_por_id(data.caja_turno_id)
@@ -108,5 +111,14 @@ class CrearVentaUseCase:
                 referencia_venta_id=venta.id,
                 usuario_id=data.usuario_id
             )
+
+        await self._event_port.publicar("VentaCreada", {
+            "usuario_id": data.usuario_id,
+            "modulo": "ventas",
+            "accion": "crear_venta",
+            "entidad": "Venta",
+            "entidad_id": venta.id,
+            "detalle": f"Venta {venta.id} creada por {venta.total} en sucursal {data.sucursal_id}"
+        })
 
         return venta

@@ -1,0 +1,1 @@
+¿Quieres que trabajemos ahora en pruebas de integración, seeders (para inyectar roles/usuarios base o permisos), o tienes alguna otra prioridad para la siguiente fase?
