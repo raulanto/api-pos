@@ -1,0 +1,28 @@
+# Control de versiones
+.git
+.gitignore
+
+# Entornos y caches de Python
+.venv
+__pycache__/
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+alembic/versions/__pycache__
+
+# Secretos / config local (se inyecta vía env_file en runtime)
+.env
+
+# Artefactos de Docker (no se necesitan dentro de la imagen).
+# OJO: docker/ NO se ignora, ahí vive el entrypoint que sí va en la imagen.
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Datos locales
+data/uploads
+
+# Docs y notas
+*.md
+.agents

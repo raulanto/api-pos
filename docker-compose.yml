@@ -1,16 +1,46 @@
 services:
+  api:
+    build:
+      context: .
+      target: runtime
+    container_name: pos_api
+    ports:
+      - "8000:8000"
+    environment:
+      # Dentro de la red de compose el host de la base es "db", no "localhost".
+      # Esto pisa el DATABASE_URL de .env (pensado para correr fuera de Docker).
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-pos_db}
+    env_file:
+      - .env
+    volumes:
+      # Hot-reload en desarrollo. El venv vive en /opt/venv, así que este
+      # bind-mount no pisa las dependencias instaladas en la imagen.
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    # El ENTRYPOINT corre `alembic upgrade head` y luego ejecuta esto:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
+
   db:
     image: postgres:15-alpine
     container_name: pos_db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: pos_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: ${POSTGRES_DB:-pos_db}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-pos_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
 
 volumes:
   postgres_data:
