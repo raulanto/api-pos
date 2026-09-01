@@ -1,10 +1,20 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
+from sqlalchemy.orm import selectinload
 from app.modules.inventario.application.ports.categoria_repository import CategoriaRepository
+from app.modules.inventario.application.dtos import FiltroCategorias
 from app.modules.inventario.domain.entities import Categoria
 from app.modules.inventario.infrastructure.persistence.orm_models import CategoriaORM, ProductoORM
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_categoria, to_orm_categoria
+from app.shared.responses import Page, PageParams, Sort
+
+
+_ORDEN_CATEGORIA = {"nombre": CategoriaORM.nombre}
+
+
+def _opts_categoria(includes: frozenset[str]):
+    return [selectinload(CategoriaORM.padre)] if "padre" in includes else []
 
 
 """
@@ -65,11 +75,13 @@ class SqlAlchemyCategoriaRepository(CategoriaRepository):
         @returns:
         - Categoria | None
     """
-    async def obtener_por_id(self, categoria_id: UUID) -> Categoria | None:
+    async def obtener_por_id(
+        self, categoria_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Categoria | None:
         orm = (await self._db.execute(
-            select(CategoriaORM).where(CategoriaORM.id == categoria_id)
+            select(CategoriaORM).options(*_opts_categoria(includes)).where(CategoriaORM.id == categoria_id)
         )).scalar_one_or_none()
-        return to_domain_categoria(orm) if orm else None
+        return to_domain_categoria(orm, includes) if orm else None
 
     """
         Lista las categorías.
@@ -82,17 +94,36 @@ class SqlAlchemyCategoriaRepository(CategoriaRepository):
     """
     async def listar(
         self,
-        activo: bool | None = None,
-        categoria_padre_id: UUID | None = None,
-    ) -> list[Categoria]:
-        stmt = select(CategoriaORM)
-        if activo is not None:
-            stmt = stmt.where(CategoriaORM.activo == activo)
-        if categoria_padre_id is not None:
-            stmt = stmt.where(CategoriaORM.categoria_padre_id == categoria_padre_id)
-        stmt = stmt.order_by(CategoriaORM.nombre)
-        filas = (await self._db.execute(stmt)).scalars().all()
-        return [to_domain_categoria(o) for o in filas]
+        filtro: FiltroCategorias,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
+    ) -> Page:
+        condiciones = []
+        if filtro.activo is not None:
+            condiciones.append(CategoriaORM.activo == filtro.activo)
+        if filtro.categoria_padre_id is not None:
+            condiciones.append(CategoriaORM.categoria_padre_id == filtro.categoria_padre_id)
+        if filtro.busqueda:
+            condiciones.append(CategoriaORM.nombre.ilike(f"%{filtro.busqueda.strip()}%"))
+
+        col = _ORDEN_CATEGORIA.get(orden.field, CategoriaORM.nombre)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
+        total = await self._db.scalar(
+            select(func.count()).select_from(CategoriaORM).where(*condiciones)
+        )
+        filas = (await self._db.execute(
+            select(CategoriaORM)
+            .options(*_opts_categoria(includes))
+            .where(*condiciones)
+            .order_by(orden_expr)
+            .limit(paginacion.limit)
+            .offset(paginacion.offset)
+        )).scalars().all()
+        return Page(
+            items=[to_domain_categoria(o, includes) for o in filas], total=int(total or 0)
+        )
 
     """
         Verifica si una categoría tiene productos activos.

@@ -1,11 +1,21 @@
 from uuid import UUID
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
+from sqlalchemy.orm import selectinload
 from app.modules.inventario.application.ports.existencia_repository import ExistenciaRepository
+from app.modules.inventario.application.dtos import FiltroExistencias
 from app.modules.inventario.domain.entities import Existencia
 from app.modules.inventario.infrastructure.persistence.orm_models import ExistenciaORM, ProductoORM
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_existencia, to_orm_existencia
+from app.shared.responses import Page, PageParams, Sort
+
+
+_ORDEN_EXISTENCIA = {
+    "cantidad": ExistenciaORM.cantidad,
+    "stock_minimo": ExistenciaORM.stock_minimo,
+    "updated_at": ExistenciaORM.updated_at,
+}
 
 
 """
@@ -43,6 +53,48 @@ class SqlAlchemyExistenciaRepository(ExistenciaRepository):
             )
         )).scalar_one_or_none()
         return to_domain_existencia(orm) if orm else None
+
+    async def buscar(
+        self,
+        filtro: FiltroExistencias,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
+    ) -> Page:
+        condiciones = []
+        if filtro.producto_id is not None:
+            condiciones.append(ExistenciaORM.producto_id == filtro.producto_id)
+        if filtro.sucursal_id is not None:
+            condiciones.append(ExistenciaORM.sucursal_id == filtro.sucursal_id)
+
+        base = select(ExistenciaORM).where(*condiciones)
+        count_base = select(func.count()).select_from(ExistenciaORM).where(*condiciones)
+        if filtro.solo_bajo_stock:
+            base = base.join(ProductoORM, ProductoORM.id == ExistenciaORM.producto_id).where(
+                ProductoORM.activo.is_(True),
+                ExistenciaORM.cantidad <= ExistenciaORM.stock_minimo,
+            )
+            count_base = count_base.join(
+                ProductoORM, ProductoORM.id == ExistenciaORM.producto_id
+            ).where(
+                ProductoORM.activo.is_(True),
+                ExistenciaORM.cantidad <= ExistenciaORM.stock_minimo,
+            )
+
+        col = _ORDEN_EXISTENCIA.get(orden.field, ExistenciaORM.updated_at)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
+        total = await self._db.scalar(count_base)
+        opts = [selectinload(ExistenciaORM.producto)] if "producto" in includes else []
+        filas = (await self._db.execute(
+            base.options(*opts)
+            .order_by(orden_expr)
+            .limit(paginacion.limit)
+            .offset(paginacion.offset)
+        )).scalars().all()
+        return Page(
+            items=[to_domain_existencia(o, includes) for o in filas], total=int(total or 0)
+        )
 
     """
         Actualiza la cantidad de una existencia.

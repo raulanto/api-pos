@@ -139,8 +139,17 @@ async def logout(
 # CRUD de usuarios
 # --------------------------------------------------------------------------- #
 @router.get("/me", response_model=ApiResponse[UsuarioResponse])
-async def usuario_actual(actual: UsuarioAutenticado = Depends(get_current_user)):
-    return ok(actual.usuario)
+async def usuario_actual(
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(get_current_user),
+    include: frozenset[str] = Depends(_INC_USUARIOS),
+):
+    if not include:
+        return ok(actual.usuario)
+    usuario = await ObtenerUsuarioUseCase(SqlAlchemyUsuarioRepository(db)).ejecutar(
+        actual.id, include,
+    )
+    return ok(usuario)
 
 
 @router.get("", response_model=ApiResponse[list[UsuarioResponse]])

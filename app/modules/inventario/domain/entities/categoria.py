@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
 
@@ -12,6 +12,9 @@ class Categoria:
     nombre: str
     categoria_padre_id: UUID | None
     activo: bool
+
+    # Relación embebida opcional (`?include=padre`); la puebla el mapper.
+    padre: object | None = field(default=None, compare=False, repr=False)
 
     """
     Método estático para crear una categoría.

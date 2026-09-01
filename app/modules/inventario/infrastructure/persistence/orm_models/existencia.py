@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import Column, ForeignKey, Numeric
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from app.shared.infrastructure.orm_base import Base, TimestampMixin
 
@@ -28,3 +29,6 @@ class ExistenciaORM(Base):
     stock_minimo = Column(Numeric(12, 2), default=0, nullable=False)
     stock_maximo = Column(Numeric(12, 2), nullable=True)
     updated_at = Column(TimestampMixin.updated_at.type, default=TimestampMixin.updated_at.default, onupdate=TimestampMixin.updated_at.onupdate, nullable=False)
+
+    # Solo lectura, para `?include=producto`.
+    producto = relationship("ProductoORM", viewonly=True, lazy="raise")

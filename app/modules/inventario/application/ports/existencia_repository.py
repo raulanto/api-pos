@@ -2,10 +2,21 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 from decimal import Decimal
 from app.modules.inventario.domain.entities import Existencia
+from app.modules.inventario.application.dtos import FiltroExistencias
+from app.shared.responses import Page, PageParams, Sort
 
 class ExistenciaRepository(ABC):
     @abstractmethod
     async def obtener(self, producto_id: UUID, sucursal_id: UUID) -> Existencia | None: ...
+
+    @abstractmethod
+    async def buscar(
+        self,
+        filtro: FiltroExistencias,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
+    ) -> Page: ...
 
     @abstractmethod
     async def actualizar_cantidad(self, producto_id: UUID, sucursal_id: UUID, nueva_cantidad: Decimal) -> None: ...

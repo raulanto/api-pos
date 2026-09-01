@@ -13,9 +13,12 @@ from app.modules.usuarios.infrastructure.persistence.orm_models import (
 from app.modules.usuarios.infrastructure.persistence.mappers import (
     to_domain_rol, to_domain_sucursal, to_domain_permiso,
 )
+from app.shared.responses import Page, PageParams, Sort
 
 
 class SqlAlchemyRolRepository(RolRepository):
+    _ORDEN = {"nombre": RolORM.nombre, "codigo": RolORM.codigo}
+
     def __init__(self, db: AsyncSession):
         self._db = db
 
@@ -29,9 +32,18 @@ class SqlAlchemyRolRepository(RolRepository):
         orm = (await self._db.execute(stmt)).scalar_one_or_none()
         return to_domain_rol(orm) if orm else None
 
-    async def listar(self) -> list[Rol]:
-        stmt = select(RolORM).options(selectinload(RolORM.permisos)).order_by(RolORM.nombre)
-        return [to_domain_rol(o) for o in (await self._db.execute(stmt)).scalars().all()]
+    async def listar(self, paginacion: PageParams, orden: Sort) -> Page:
+        col = self._ORDEN.get(orden.field, RolORM.nombre)
+        orden_expr = col.desc() if orden.descending else col.asc()
+        total = await self._db.scalar(select(func.count()).select_from(RolORM))
+        filas = (await self._db.execute(
+            select(RolORM)
+            .options(selectinload(RolORM.permisos))
+            .order_by(orden_expr)
+            .limit(paginacion.limit)
+            .offset(paginacion.offset)
+        )).scalars().all()
+        return Page(items=[to_domain_rol(o) for o in filas], total=int(total or 0))
 
     async def crear(self, rol: Rol) -> Rol:
         orm = RolORM(id=rol.id, codigo=rol.codigo, nombre=rol.nombre, descripcion=rol.descripcion)
@@ -81,12 +93,22 @@ class SqlAlchemyRolRepository(RolRepository):
 
 
 class SqlAlchemyPermisoRepository(PermisoRepository):
+    _ORDEN = {"codigo": PermisoORM.codigo, "descripcion": PermisoORM.descripcion}
+
     def __init__(self, db: AsyncSession):
         self._db = db
 
-    async def listar(self) -> list[Permiso]:
-        stmt = select(PermisoORM).order_by(PermisoORM.codigo)
-        return [to_domain_permiso(o) for o in (await self._db.execute(stmt)).scalars().all()]
+    async def listar(self, paginacion: PageParams, orden: Sort) -> Page:
+        col = self._ORDEN.get(orden.field, PermisoORM.codigo)
+        orden_expr = col.desc() if orden.descending else col.asc()
+        total = await self._db.scalar(select(func.count()).select_from(PermisoORM))
+        filas = (await self._db.execute(
+            select(PermisoORM)
+            .order_by(orden_expr)
+            .limit(paginacion.limit)
+            .offset(paginacion.offset)
+        )).scalars().all()
+        return Page(items=[to_domain_permiso(o) for o in filas], total=int(total or 0))
 
     async def obtener_por_id(self, permiso_id: UUID) -> Permiso | None:
         orm = await self._db.get(PermisoORM, permiso_id)

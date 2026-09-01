@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import relationship
 from app.shared.infrastructure.orm_base import Base, SoftDeleteMixin
 
 
@@ -25,3 +26,6 @@ class CategoriaORM(Base, SoftDeleteMixin):
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(100), nullable=False)
     categoria_padre_id = Column(PGUUID(as_uuid=True), ForeignKey("categoria.id"), nullable=True)
+
+    # Solo lectura, para `?include=padre`.
+    padre = relationship("CategoriaORM", remote_side=[id], viewonly=True, lazy="raise")

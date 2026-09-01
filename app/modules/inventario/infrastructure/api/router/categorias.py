@@ -1,11 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado
-from app.shared.responses import ApiResponse, EnvelopeRoute, ok
+from app.shared.responses import (
+    ApiResponse, EnvelopeRoute, PageParams, Sort,
+    page_params, make_sort_dependency, make_include_dependency, ok, page_response,
+)
+from app.shared.filtering import active_filters
+from app.modules.inventario.application.dtos import FiltroCategorias
 from app.modules.inventario.application.use_cases.crear_categoria import (
     CrearCategoriaUseCase, CrearCategoriaInput,
 )
@@ -19,6 +24,9 @@ from app.modules.inventario.infrastructure.api.schemas import (
 from .common import cat_repo, traducir, traducir_create
 
 router = APIRouter(route_class=EnvelopeRoute)
+
+_ORDEN_CAT = make_sort_dependency({"nombre"}, "nombre:asc")
+_INC_CAT = make_include_dependency({"padre"})
 
 
 @router.post(
@@ -41,15 +49,25 @@ async def crear_categoria(
 
 @router.get("/categorias", response_model=ApiResponse[list[CategoriaResponse]])
 async def listar_categorias(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     activo: bool | None = Query(default=None),
     categoria_padre_id: UUID | None = Query(default=None),
+    q: str | None = Query(default=None, description="Busca en el nombre"),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_CAT),
+    include: frozenset[str] = Depends(_INC_CAT),
 ):
-    categorias = await ListarCategoriasUseCase(cat_repo(db)).ejecutar(
-        activo=activo, categoria_padre_id=categoria_padre_id
+    filtro = FiltroCategorias(
+        activo=activo, categoria_padre_id=categoria_padre_id, busqueda=q,
     )
-    return ok(categorias)
+    pagina = await ListarCategoriasUseCase(cat_repo(db)).ejecutar(
+        filtro, paginacion, orden, include,
+    )
+    return page_response(
+        request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
+    )
 
 
 @router.get("/categorias/{categoria_id}", response_model=ApiResponse[CategoriaResponse])
@@ -57,9 +75,10 @@ async def obtener_categoria(
     categoria_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
+    include: frozenset[str] = Depends(_INC_CAT),
 ):
     try:
-        categoria = await ObtenerCategoriaUseCase(cat_repo(db)).ejecutar(categoria_id)
+        categoria = await ObtenerCategoriaUseCase(cat_repo(db)).ejecutar(categoria_id, include)
     except Exception as e:
         raise traducir(e)
     return ok(categoria)

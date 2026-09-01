@@ -1,13 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import (
     get_current_user, require_permission, UsuarioAutenticado, invalidar_cache_permisos,
 )
-from app.shared.responses import ApiResponse, EnvelopeRoute, ok
+from app.shared.responses import (
+    ApiResponse, EnvelopeRoute, PageParams, Sort,
+    page_params, make_sort_dependency, ok, page_response,
+)
 from app.modules.usuarios.infrastructure.api.schemas import (
     RolResponse, PermisoResponse, CrearRolRequest, EditarRolRequest, AsignarPermisosRequest,
 )
@@ -30,6 +33,8 @@ from app.modules.usuarios.domain.exceptions import (
 router = APIRouter(route_class=EnvelopeRoute)
 
 _CONFLICT = (RolAdminProtegido, CodigoRolDuplicado, UsuarioNoEncontrado)
+_ORDEN_ROLES = make_sort_dependency({"nombre", "codigo"}, "nombre:asc")
+_ORDEN_PERMISOS = make_sort_dependency({"codigo", "descripcion"}, "codigo:asc")
 
 
 def _rol_repo(db: AsyncSession) -> SqlAlchemyRolRepository:
@@ -42,10 +47,14 @@ def _permiso_repo(db: AsyncSession) -> SqlAlchemyPermisoRepository:
 
 @router.get("", response_model=ApiResponse[list[RolResponse]])
 async def listar_roles(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("roles.gestionar")),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_ROLES),
 ):
-    return ok(await ListarRolesUseCase(_rol_repo(db)).ejecutar())
+    pagina = await ListarRolesUseCase(_rol_repo(db)).ejecutar(paginacion, orden)
+    return page_response(request, pagina, paginacion, sort=orden)
 
 
 @router.post(
@@ -139,7 +148,11 @@ permisos_router = APIRouter(route_class=EnvelopeRoute)
 
 @permisos_router.get("", response_model=ApiResponse[list[PermisoResponse]])
 async def listar_permisos(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(get_current_user),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_PERMISOS),
 ):
-    return ok(await ListarPermisosUseCase(_permiso_repo(db)).ejecutar())
+    pagina = await ListarPermisosUseCase(_permiso_repo(db)).ejecutar(paginacion, orden)
+    return page_response(request, pagina, paginacion, sort=orden)

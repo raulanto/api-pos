@@ -49,6 +49,7 @@ _BAD_REQUEST = (
 _ORDEN_CLIENTES = make_sort_dependency({"created_at", "nombre", "saldo_credito"}, "nombre:asc")
 _ORDEN_VENTAS = make_sort_dependency({"created_at"}, "created_at:desc")
 _INC_CLIENTES = make_include_dependency({"sucursal"})
+_INC_VENTAS = make_include_dependency({"cliente", "usuario", "caja_turno"})
 
 
 def _traducir(error: Exception) -> HTTPException:
@@ -164,11 +165,12 @@ async def historial_ventas_cliente(
     actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_VENTAS),
+    include: frozenset[str] = Depends(_INC_VENTAS),
 ):
     await _obtener_en_alcance(db, actual, cliente_id)  # valida existencia + alcance
     filtro = FiltroVentas(cliente_id=cliente_id)
     pagina = await ListarVentasUseCase(SqlAlchemyVentaRepository(db)).ejecutar(
-        filtro, paginacion, orden,
+        filtro, paginacion, orden, include,
     )
     pagina.items = [VentaListItem.model_validate(v) for v in pagina.items]
     return page_response(

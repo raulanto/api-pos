@@ -105,9 +105,12 @@ async def buscar_producto_por_codigo_barras(
     codigo_barras: str = Query(min_length=1),
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
+    include: frozenset[str] = Depends(_INC_PRODUCTOS),
 ):
     try:
         producto = await BuscarProductoPorCodigoBarrasUseCase(prod_repo(db)).ejecutar(codigo_barras)
+        if include:
+            producto = await ObtenerProductoUseCase(prod_repo(db)).ejecutar(producto.id, include)
     except Exception as e:
         raise traducir(e)
     return ok(producto)

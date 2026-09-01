@@ -26,3 +26,6 @@ class Existencia:
     stock_minimo: Decimal
     stock_maximo: Decimal | None
     updated_at: datetime = field(default_factory=datetime.utcnow)
+
+    # Relación embebida opcional (`?include=producto`); la puebla el mapper.
+    producto: object | None = field(default=None, compare=False, repr=False)

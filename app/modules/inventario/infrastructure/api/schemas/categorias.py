@@ -1,7 +1,10 @@
-from typing import Optional
+from typing import ClassVar, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.shared.responses import EmbeddableModel
+from app.shared.schemas.embeds import CategoriaEmbed
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -27,9 +30,11 @@ class ActualizarCategoriaRequest(BaseModel):
 """
     Response para una categoría.
 """
-class CategoriaResponse(BaseModel):
-    model_config = _ORM
+class CategoriaResponse(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("padre",)
     id: UUID
     nombre: str
     categoria_padre_id: Optional[UUID]
     activo: bool
+    # Embebida (?include=padre)
+    padre: Optional[CategoriaEmbed] = None

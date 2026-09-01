@@ -21,13 +21,16 @@ from app.modules.inventario.infrastructure.persistence.orm_models import Categor
     - MovimientoInventario
     - MovimientoInventarioORM
 """
-def to_domain_categoria(orm: CategoriaORM) -> Categoria:
-    return Categoria(
+def to_domain_categoria(orm: CategoriaORM, includes: frozenset[str] = frozenset()) -> Categoria:
+    categoria = Categoria(
         id=orm.id,
         nombre=orm.nombre,
         categoria_padre_id=orm.categoria_padre_id,
         activo=orm.activo
     )
+    if "padre" in includes:
+        categoria.padre = orm.padre
+    return categoria
 
 """
     Transforma una categoría ORM a una entidad de dominio.
@@ -105,8 +108,8 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
     @returns:
     - Existencia
 """
-def to_domain_existencia(orm: ExistenciaORM) -> Existencia:
-    return Existencia(
+def to_domain_existencia(orm: ExistenciaORM, includes: frozenset[str] = frozenset()) -> Existencia:
+    existencia = Existencia(
         id=orm.id,
         producto_id=orm.producto_id,
         sucursal_id=orm.sucursal_id,
@@ -115,6 +118,9 @@ def to_domain_existencia(orm: ExistenciaORM) -> Existencia:
         stock_maximo=orm.stock_maximo,
         updated_at=orm.updated_at
     )
+    if "producto" in includes:
+        existencia.producto = orm.producto
+    return existencia
 
 """
     Transforma una existencia de dominio a ORM.

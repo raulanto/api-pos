@@ -17,6 +17,7 @@ from app.modules.usuarios.domain.exceptions import (
 from app.modules.usuarios.application.ports.catalogos_repository import (
     RolRepository, PermisoRepository,
 )
+from app.shared.responses import Page, PageParams, Sort
 
 
 def _normalizar_codigo(codigo: str) -> str:
@@ -133,13 +134,13 @@ class ListarRolesUseCase:
     def __init__(self, rol_repo: RolRepository):
         self._rol_repo = rol_repo
 
-    async def ejecutar(self) -> list[Rol]:
-        return await self._rol_repo.listar()
+    async def ejecutar(self, paginacion: PageParams, orden: Sort) -> Page:
+        return await self._rol_repo.listar(paginacion, orden)
 
 
 class ListarPermisosUseCase:
     def __init__(self, permiso_repo: PermisoRepository):
         self._permiso_repo = permiso_repo
 
-    async def ejecutar(self) -> list[Permiso]:
-        return await self._permiso_repo.listar()
+    async def ejecutar(self, paginacion: PageParams, orden: Sort) -> Page:
+        return await self._permiso_repo.listar(paginacion, orden)

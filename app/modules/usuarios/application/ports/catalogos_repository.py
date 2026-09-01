@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 from app.modules.usuarios.domain.entities import Rol, Sucursal, Permiso
+from app.shared.responses import Page, PageParams, Sort
 
 
 class RolRepository(ABC):
@@ -11,7 +12,7 @@ class RolRepository(ABC):
     async def obtener_por_codigo(self, codigo: str) -> Rol | None: ...
 
     @abstractmethod
-    async def listar(self) -> list[Rol]: ...
+    async def listar(self, paginacion: PageParams, orden: Sort) -> Page: ...
 
     @abstractmethod
     async def crear(self, rol: Rol) -> Rol: ...
@@ -34,7 +35,7 @@ class RolRepository(ABC):
 
 class PermisoRepository(ABC):
     @abstractmethod
-    async def listar(self) -> list[Permiso]: ...
+    async def listar(self, paginacion: PageParams, orden: Sort) -> Page: ...
 
     @abstractmethod
     async def obtener_por_id(self, permiso_id: UUID) -> Permiso | None: ...

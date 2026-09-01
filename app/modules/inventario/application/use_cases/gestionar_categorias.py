@@ -5,7 +5,9 @@ from app.modules.inventario.domain.entities import Categoria
 from app.modules.inventario.domain.exceptions import (
     CategoriaNoEncontrada, JerarquiaCategoriaInvalida, CategoriaConProductosActivos,
 )
+from app.modules.inventario.application.dtos import FiltroCategorias
 from app.modules.inventario.application.ports.categoria_repository import CategoriaRepository
+from app.shared.responses import Page, PageParams, Sort
 
 
 class ListarCategoriasUseCase:
@@ -14,18 +16,22 @@ class ListarCategoriasUseCase:
 
     async def ejecutar(
         self,
-        activo: bool | None = None,
-        categoria_padre_id: UUID | None = None,
-    ) -> list[Categoria]:
-        return await self._repo.listar(activo=activo, categoria_padre_id=categoria_padre_id)
+        filtro: FiltroCategorias,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
+    ) -> Page:
+        return await self._repo.listar(filtro, paginacion, orden, includes)
 
 
 class ObtenerCategoriaUseCase:
     def __init__(self, categoria_repo: CategoriaRepository):
         self._repo = categoria_repo
 
-    async def ejecutar(self, categoria_id: UUID) -> Categoria:
-        categoria = await self._repo.obtener_por_id(categoria_id)
+    async def ejecutar(
+        self, categoria_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Categoria:
+        categoria = await self._repo.obtener_por_id(categoria_id, includes)
         if not categoria:
             raise CategoriaNoEncontrada(f"No existe la categoría {categoria_id}")
         return categoria

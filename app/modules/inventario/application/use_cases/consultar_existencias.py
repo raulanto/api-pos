@@ -4,28 +4,26 @@ from uuid import UUID
 
 from app.modules.inventario.domain.entities import Existencia
 from app.modules.inventario.domain.exceptions import ExistenciaNoEncontrada, ProductoNoEncontrado
+from app.modules.inventario.application.dtos import FiltroExistencias
 from app.modules.inventario.application.ports.existencia_repository import ExistenciaRepository
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
+from app.shared.responses import Page, PageParams, Sort
 
 
 class ConsultarExistenciasUseCase:
+    """Lista existencias paginadas (con o sin filtro `solo_bajo_stock`)."""
+
     def __init__(self, existencia_repo: ExistenciaRepository):
         self._repo = existencia_repo
 
     async def ejecutar(
         self,
-        producto_id: UUID | None = None,
-        sucursal_id: UUID | None = None,
-    ) -> list[Existencia]:
-        return await self._repo.listar(producto_id=producto_id, sucursal_id=sucursal_id)
-
-
-class ListarBajoStockUseCase:
-    def __init__(self, existencia_repo: ExistenciaRepository):
-        self._repo = existencia_repo
-
-    async def ejecutar(self, sucursal_id: UUID | None = None) -> list[Existencia]:
-        return await self._repo.listar_bajo_stock(sucursal_id=sucursal_id)
+        filtro: FiltroExistencias,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
+    ) -> Page:
+        return await self._repo.buscar(filtro, paginacion, orden, includes)
 
 
 @dataclass
