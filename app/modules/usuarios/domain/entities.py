@@ -47,6 +47,10 @@ class Usuario:
     last_login_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Relaciones embebidas opcionales (`?include=rol,sucursal`); las puebla el mapper.
+    rol: object | None = field(default=None, compare=False, repr=False)
+    sucursal: object | None = field(default=None, compare=False, repr=False)
+
     @staticmethod
     def crear(sucursal_id: UUID | None, rol_id: UUID, nombre: str, email: str, password_hash: str) -> "Usuario":
         return Usuario(

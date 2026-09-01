@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, ForeignKey, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import relationship
 from app.shared.infrastructure.orm_base import Base, TimestampMixin, SoftDeleteMixin
 
 class ClienteORM(Base, TimestampMixin, SoftDeleteMixin):
@@ -20,3 +21,6 @@ class ClienteORM(Base, TimestampMixin, SoftDeleteMixin):
     rfc_identificacion = Column(String(50), nullable=True)
     limite_credito = Column(Numeric(12, 2), default=0, nullable=False)
     saldo_credito = Column(Numeric(12, 2), default=0, nullable=False)
+
+    # Solo lectura, para `?include=sucursal`.
+    sucursal = relationship("SucursalORM", viewonly=True, lazy="raise")

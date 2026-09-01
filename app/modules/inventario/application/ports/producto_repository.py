@@ -12,7 +12,9 @@ class ProductoRepository(ABC):
     async def actualizar(self, producto: Producto) -> None: ...
 
     @abstractmethod
-    async def obtener_por_id(self, producto_id: UUID) -> Producto | None: ...
+    async def obtener_por_id(
+        self, producto_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Producto | None: ...
 
     @abstractmethod
     async def buscar_por_sku(self, sku: str, solo_activos: bool = True) -> Producto | None: ...
@@ -24,5 +26,9 @@ class ProductoRepository(ABC):
 
     @abstractmethod
     async def listar(
-        self, filtro: FiltroProductos, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroProductos,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page: ...

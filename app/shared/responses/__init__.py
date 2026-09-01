@@ -14,12 +14,14 @@ from app.shared.responses.pagination import (
     Page, PageParams, page_params, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE,
 )
 from app.shared.responses.sorting import Sort, make_sort_dependency
+from app.shared.responses.includes import make_include_dependency
+from app.shared.responses.embeddable import EmbeddableModel
 from app.shared.responses.builders import ok, page_response
 from app.shared.responses.routing import EnvelopeRoute
 
 __all__ = [
     "ApiResponse", "Meta", "PageMeta", "Links", "ErrorDetail", "ErrorResponse",
     "Page", "PageParams", "page_params", "DEFAULT_PAGE_SIZE", "MAX_PAGE_SIZE",
-    "Sort", "make_sort_dependency",
+    "Sort", "make_sort_dependency", "make_include_dependency", "EmbeddableModel",
     "ok", "page_response", "EnvelopeRoute",
 ]

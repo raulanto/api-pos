@@ -9,7 +9,7 @@ from app.core.dependencies import (
 )
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, Page, PageParams, Sort,
-    page_params, make_sort_dependency, ok, page_response,
+    page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
 from app.modules.clientes.domain import exceptions as cexc
@@ -48,6 +48,7 @@ _BAD_REQUEST = (
 
 _ORDEN_CLIENTES = make_sort_dependency({"created_at", "nombre", "saldo_credito"}, "nombre:asc")
 _ORDEN_VENTAS = make_sort_dependency({"created_at"}, "created_at:desc")
+_INC_CLIENTES = make_include_dependency({"sucursal"})
 
 
 def _traducir(error: Exception) -> HTTPException:
@@ -81,9 +82,14 @@ def _sucursal_efectiva(actual: UsuarioAutenticado, pedida: UUID | None) -> UUID 
     return alcance
 
 
-async def _obtener_en_alcance(db: AsyncSession, actual: UsuarioAutenticado, cliente_id: UUID):
+async def _obtener_en_alcance(
+    db: AsyncSession,
+    actual: UsuarioAutenticado,
+    cliente_id: UUID,
+    includes: frozenset[str] = frozenset(),
+):
     try:
-        cliente = await ObtenerClienteUseCase(_repo(db)).ejecutar(cliente_id)
+        cliente = await ObtenerClienteUseCase(_repo(db)).ejecutar(cliente_id, includes)
     except Exception as e:
         raise _traducir(e)
     verificar_alcance_sucursal(actual, cliente.sucursal_id)
@@ -125,13 +131,16 @@ async def listar_clientes(
     sucursal_id: UUID | None = Query(default=None),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_CLIENTES),
+    include: frozenset[str] = Depends(_INC_CLIENTES),
 ):
     efectiva = _sucursal_efectiva(actual, sucursal_id)
     filtro = FiltroClientes(
         sucursal_id=efectiva, activo=activo, busqueda=q,
         con_saldo_pendiente=con_saldo_pendiente,
     )
-    pagina: Page = await ListarClientesUseCase(_repo(db)).ejecutar(filtro, paginacion, orden)
+    pagina: Page = await ListarClientesUseCase(_repo(db)).ejecutar(
+        filtro, paginacion, orden, include,
+    )
     return page_response(
         request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
     )
@@ -142,8 +151,9 @@ async def obtener_cliente(
     cliente_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
+    include: frozenset[str] = Depends(_INC_CLIENTES),
 ):
-    return ok(await _obtener_en_alcance(db, actual, cliente_id))
+    return ok(await _obtener_en_alcance(db, actual, cliente_id, include))
 
 
 @router.get("/{cliente_id}/ventas", response_model=ApiResponse[list[VentaListItem]])

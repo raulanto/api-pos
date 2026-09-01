@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
-    page_params, make_sort_dependency, ok, page_response,
+    page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
 from app.modules.inventario.application.dtos import FiltroProductos
@@ -28,6 +28,7 @@ router = APIRouter(route_class=EnvelopeRoute)
 _ORDEN_PRODUCTOS = make_sort_dependency(
     {"nombre", "sku", "precio_venta", "created_at"}, "nombre:asc"
 )
+_INC_PRODUCTOS = make_include_dependency({"categoria", "existencias"})
 
 """
     Endpoint para crear un producto.
@@ -82,9 +83,10 @@ async def listar_productos(
     q: str | None = Query(default=None, description="Busca en nombre, sku y código de barras"),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_PRODUCTOS),
+    include: frozenset[str] = Depends(_INC_PRODUCTOS),
 ):
     filtro = FiltroProductos(categoria_id=categoria_id, activo=activo, busqueda=q)
-    pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(filtro, paginacion, orden)
+    pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(filtro, paginacion, orden, include)
     return page_response(
         request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
     )
@@ -124,9 +126,10 @@ async def obtener_producto(
     producto_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
+    include: frozenset[str] = Depends(_INC_PRODUCTOS),
 ):
     try:
-        producto = await ObtenerProductoUseCase(prod_repo(db)).ejecutar(producto_id)
+        producto = await ObtenerProductoUseCase(prod_repo(db)).ejecutar(producto_id, include)
     except Exception as e:
         raise traducir(e)
     return ok(producto)

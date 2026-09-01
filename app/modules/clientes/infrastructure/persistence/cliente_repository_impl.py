@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import select, update, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
 from app.modules.clientes.application.dtos import FiltroClientes
@@ -25,6 +26,9 @@ class SqlAlchemyClienteRepository(ClienteRepository):
     def __init__(self, db: AsyncSession):
         self._db = db
 
+    def _opts(self, includes: frozenset[str]):
+        return [selectinload(ClienteORM.sucursal)] if "sucursal" in includes else []
+
     async def guardar(self, cliente: Cliente) -> None:
         await self._db.merge(to_orm_cliente(cliente))
         await self._db.flush()
@@ -43,11 +47,13 @@ class SqlAlchemyClienteRepository(ClienteRepository):
         )
         await self._db.flush()
 
-    async def obtener_por_id(self, cliente_id: UUID) -> Cliente | None:
+    async def obtener_por_id(
+        self, cliente_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Cliente | None:
         orm = (await self._db.execute(
-            select(ClienteORM).where(ClienteORM.id == cliente_id)
+            select(ClienteORM).options(*self._opts(includes)).where(ClienteORM.id == cliente_id)
         )).scalar_one_or_none()
-        return to_domain_cliente(orm) if orm else None
+        return to_domain_cliente(orm, includes) if orm else None
 
     async def buscar_por_email(self, email: str, solo_activos: bool = True) -> Cliente | None:
         stmt = select(ClienteORM).where(func.lower(ClienteORM.email) == email.strip().lower())
@@ -57,7 +63,11 @@ class SqlAlchemyClienteRepository(ClienteRepository):
         return to_domain_cliente(orm) if orm else None
 
     async def listar(
-        self, filtro: FiltroClientes, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroClientes,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
         if filtro.sucursal_id is not None:
@@ -81,12 +91,15 @@ class SqlAlchemyClienteRepository(ClienteRepository):
         )
         filas = (await self._db.execute(
             select(ClienteORM)
+            .options(*self._opts(includes))
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Page(items=[to_domain_cliente(o) for o in filas], total=int(total or 0))
+        return Page(
+            items=[to_domain_cliente(o, includes) for o in filas], total=int(total or 0)
+        )
 
     async def incrementar_saldo(self, cliente_id: UUID, monto: Decimal) -> None:
         await self._db.execute(

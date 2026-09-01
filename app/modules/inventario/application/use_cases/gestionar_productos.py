@@ -22,17 +22,23 @@ class ListarProductosUseCase:
         self._repo = producto_repo
 
     async def ejecutar(
-        self, filtro: FiltroProductos, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroProductos,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
-        return await self._repo.listar(filtro, paginacion, orden)
+        return await self._repo.listar(filtro, paginacion, orden, includes)
 
 
 class ObtenerProductoUseCase:
     def __init__(self, producto_repo: ProductoRepository):
         self._repo = producto_repo
 
-    async def ejecutar(self, producto_id: UUID) -> Producto:
-        producto = await self._repo.obtener_por_id(producto_id)
+    async def ejecutar(
+        self, producto_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Producto:
+        producto = await self._repo.obtener_por_id(producto_id, includes)
         if not producto:
             raise ProductoNoEncontrado(f"No existe el producto {producto_id}")
         return producto

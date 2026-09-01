@@ -26,22 +26,34 @@ class SqlAlchemyVentaRepository(VentaRepository):
     _ORDEN = {
         "created_at": VentaORM.created_at,
     }
+    _INCLUDES = {
+        "cliente": VentaORM.cliente,
+        "usuario": VentaORM.usuario,
+        "caja_turno": VentaORM.caja_turno,
+    }
 
     def __init__(self, db: AsyncSession):
         self._db = db
+
+    def _opts(self, includes: frozenset[str]):
+        opts = [selectinload(VentaORM.lineas), selectinload(VentaORM.pagos)]
+        opts += [selectinload(self._INCLUDES[i]) for i in includes if i in self._INCLUDES]
+        return opts
 
     async def guardar(self, venta: Venta) -> None:
         self._db.add(to_orm_venta(venta))
         await self._db.flush()
 
-    async def obtener_por_id(self, venta_id: UUID) -> Venta | None:
+    async def obtener_por_id(
+        self, venta_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Venta | None:
         stmt = (
             select(VentaORM)
-            .options(selectinload(VentaORM.lineas), selectinload(VentaORM.pagos))
+            .options(*self._opts(includes))
             .where(VentaORM.id == venta_id)
         )
         orm = (await self._db.execute(stmt)).scalar_one_or_none()
-        return to_domain_venta(orm) if orm else None
+        return to_domain_venta(orm, includes) if orm else None
 
     async def obtener_por_idempotency_key(self, key: str) -> Venta | None:
         stmt = (
@@ -59,7 +71,11 @@ class SqlAlchemyVentaRepository(VentaRepository):
         await self._db.flush()
 
     async def listar(
-        self, filtro: FiltroVentas, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroVentas,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
         if filtro.sucursal_id is not None:
@@ -83,13 +99,15 @@ class SqlAlchemyVentaRepository(VentaRepository):
         )
         filas = (await self._db.execute(
             select(VentaORM)
-            .options(selectinload(VentaORM.lineas), selectinload(VentaORM.pagos))
+            .options(*self._opts(includes))
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Page(items=[to_domain_venta(o) for o in filas], total=int(total or 0))
+        return Page(
+            items=[to_domain_venta(o, includes) for o in filas], total=int(total or 0)
+        )
 
 
 class SqlAlchemyCajaTurnoRepository(CajaTurnoRepository):

@@ -29,6 +29,9 @@ class LogAuditoria:
     ip_address: Optional[str]
     fecha: datetime = field(default_factory=datetime.utcnow)
 
+    # Relación embebida opcional (`?include=usuario`); la puebla el mapper.
+    usuario: object | None = field(default=None, compare=False, repr=False)
+
     """
         Método estático para crear un nuevo log de auditoria.
         Parámetros:

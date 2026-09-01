@@ -63,7 +63,7 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
     ]
     return orm
 
-def to_domain_venta(orm: VentaORM) -> Venta:
+def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Venta:
     venta = Venta(
         id=orm.id,
         sucursal_id=orm.sucursal_id,
@@ -95,4 +95,10 @@ def to_domain_venta(orm: VentaORM) -> Venta:
             ) for p in orm.pagos
         ]
     )
+    if "cliente" in includes:
+        venta.cliente = orm.cliente
+    if "usuario" in includes:
+        venta.usuario = orm.usuario
+    if "caja_turno" in includes:
+        venta.caja_turno = orm.caja_turno
     return venta

@@ -1,12 +1,22 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.modules.inventario.application.ports.movimiento_repository import MovimientoRepository
 from app.modules.inventario.application.dtos import FiltroMovimientos
 from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.domain.entities import MovimientoInventario
 from app.modules.inventario.infrastructure.persistence.orm_models import MovimientoInventarioORM
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_movimiento, to_orm_movimiento
+
+
+def _opts_mov(includes: frozenset[str]):
+    opts = []
+    if "producto" in includes:
+        opts.append(selectinload(MovimientoInventarioORM.producto))
+    if "usuario" in includes:
+        opts.append(selectinload(MovimientoInventarioORM.usuario))
+    return opts
 
 
 """
@@ -47,11 +57,15 @@ class SqlAlchemyMovimientoRepository(MovimientoRepository):
         @returns:
         - MovimientoInventario | None
     """
-    async def obtener_por_id(self, movimiento_id: UUID) -> MovimientoInventario | None:
+    async def obtener_por_id(
+        self, movimiento_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> MovimientoInventario | None:
         orm = (await self._db.execute(
-            select(MovimientoInventarioORM).where(MovimientoInventarioORM.id == movimiento_id)
+            select(MovimientoInventarioORM)
+            .options(*_opts_mov(includes))
+            .where(MovimientoInventarioORM.id == movimiento_id)
         )).scalar_one_or_none()
-        return to_domain_movimiento(orm) if orm else None
+        return to_domain_movimiento(orm, includes) if orm else None
 
     """
         Lista los movimientos.
@@ -68,7 +82,11 @@ class SqlAlchemyMovimientoRepository(MovimientoRepository):
     }
 
     async def listar(
-        self, filtro: FiltroMovimientos, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroMovimientos,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
         if filtro.producto_id is not None:
@@ -90,9 +108,12 @@ class SqlAlchemyMovimientoRepository(MovimientoRepository):
         )
         filas = (await self._db.execute(
             select(MovimientoInventarioORM)
+            .options(*_opts_mov(includes))
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Page(items=[to_domain_movimiento(o) for o in filas], total=int(total or 0))
+        return Page(
+            items=[to_domain_movimiento(o, includes) for o in filas], total=int(total or 0)
+        )

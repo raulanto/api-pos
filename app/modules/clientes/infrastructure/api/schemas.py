@@ -1,9 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import ClassVar, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+
+from app.shared.responses import EmbeddableModel
+from app.shared.schemas.embeds import SucursalEmbed
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -36,8 +39,8 @@ class CambiarLimiteCreditoRequest(BaseModel):
     limite_credito: Decimal = Field(ge=0)
 
 
-class ClienteResponse(BaseModel):
-    model_config = _ORM
+class ClienteResponse(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("sucursal",)
     id: UUID
     sucursal_id: UUID
     nombre: str
@@ -48,5 +51,7 @@ class ClienteResponse(BaseModel):
     saldo_credito: Decimal
     activo: bool
     created_at: datetime
+    # Embebida (?include=sucursal)
+    sucursal: Optional[SucursalEmbed] = None
 
 

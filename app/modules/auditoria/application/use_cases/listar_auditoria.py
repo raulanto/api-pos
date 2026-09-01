@@ -15,17 +15,23 @@ class ListarAuditoriaUseCase:
         self._repo = repo
 
     async def ejecutar(
-        self, filtro: FiltroAuditoria, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroAuditoria,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
-        return await self._repo.listar(filtro, paginacion, orden)
+        return await self._repo.listar(filtro, paginacion, orden, includes)
 
 
 class ObtenerLogAuditoriaUseCase:
     def __init__(self, repo: AuditoriaRepository):
         self._repo = repo
 
-    async def ejecutar(self, log_id: UUID) -> LogAuditoria:
-        log = await self._repo.obtener_por_id(log_id)
+    async def ejecutar(
+        self, log_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> LogAuditoria:
+        log = await self._repo.obtener_por_id(log_id, includes)
         if log is None:
             raise LogNoEncontrado(f"No existe el registro de auditoría {log_id}")
         return log

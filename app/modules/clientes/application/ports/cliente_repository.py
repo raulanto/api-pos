@@ -20,14 +20,20 @@ class ClienteRepository(ABC):
     async def actualizar(self, cliente: Cliente) -> None: ...
 
     @abstractmethod
-    async def obtener_por_id(self, cliente_id: UUID) -> Cliente | None: ...
+    async def obtener_por_id(
+        self, cliente_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Cliente | None: ...
 
     @abstractmethod
     async def buscar_por_email(self, email: str, solo_activos: bool = True) -> Cliente | None: ...
 
     @abstractmethod
     async def listar(
-        self, filtro: FiltroClientes, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroClientes,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page: ...
 
     @abstractmethod

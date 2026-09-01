@@ -1,14 +1,13 @@
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.shared.responses import EmbeddableModel
+from app.shared.schemas.embeds import UsuarioEmbed
 
-_ORM = ConfigDict(from_attributes=True)
 
-
-class LogAuditoriaResponse(BaseModel):
-    model_config = _ORM
+class LogAuditoriaResponse(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("usuario",)
     id: UUID
     usuario_id: UUID
     modulo: str
@@ -18,3 +17,5 @@ class LogAuditoriaResponse(BaseModel):
     detalle: Optional[Any] = None
     ip_address: Optional[str] = None
     fecha: datetime
+    # Embebida (?include=usuario)
+    usuario: Optional[UsuarioEmbed] = None

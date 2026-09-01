@@ -1,11 +1,13 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import ClassVar, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.ventas.domain.value_objects import MetodoPago, EstadoVenta
+from app.shared.responses import EmbeddableModel
+from app.shared.schemas.embeds import ClienteEmbed, UsuarioEmbed, CajaTurnoEmbed
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -57,8 +59,8 @@ class PagoResponse(BaseModel):
     metodo_pago: MetodoPago
 
 
-class VentaResponse(BaseModel):
-    model_config = _ORM
+class VentaResponse(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("cliente", "usuario", "caja_turno")
     id: UUID
     sucursal_id: UUID
     caja_turno_id: UUID
@@ -72,10 +74,14 @@ class VentaResponse(BaseModel):
     created_at: datetime
     lineas: List[LineaVentaResponse]
     pagos: List[PagoResponse]
+    # Embebidas (?include=cliente,usuario,caja_turno)
+    cliente: Optional[ClienteEmbed] = None
+    usuario: Optional[UsuarioEmbed] = None
+    caja_turno: Optional[CajaTurnoEmbed] = None
 
 
-class VentaListItem(BaseModel):
-    model_config = _ORM
+class VentaListItem(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("cliente", "usuario", "caja_turno")
     id: UUID
     sucursal_id: UUID
     caja_turno_id: UUID
@@ -85,6 +91,9 @@ class VentaListItem(BaseModel):
     total: Decimal
     saldo_pendiente: Decimal
     created_at: datetime
+    cliente: Optional[ClienteEmbed] = None
+    usuario: Optional[UsuarioEmbed] = None
+    caja_turno: Optional[CajaTurnoEmbed] = None
 
 
 # --------------------------------------------------------------------------- #

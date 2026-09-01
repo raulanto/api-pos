@@ -1,11 +1,13 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import ClassVar, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.inventario.domain.value_objects import TipoMovimiento
+from app.shared.responses import EmbeddableModel
+from app.shared.schemas.embeds import ProductoEmbed, UsuarioEmbed
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -42,8 +44,8 @@ class TransferenciaRequest(BaseModel):
 """
     Response para un movimiento.
 """
-class MovimientoResponse(BaseModel):
-    model_config = _ORM
+class MovimientoResponse(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("producto", "usuario")
     id: UUID
     producto_id: UUID
     sucursal_id: UUID
@@ -55,4 +57,7 @@ class MovimientoResponse(BaseModel):
     usuario_id: UUID
     motivo: Optional[str]
     created_at: datetime
+    # Embebidas (?include=producto,usuario)
+    producto: Optional[ProductoEmbed] = None
+    usuario: Optional[UsuarioEmbed] = None
 

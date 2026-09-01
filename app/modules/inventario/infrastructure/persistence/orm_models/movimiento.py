@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, ForeignKey, Numeric
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import relationship
 from app.shared.infrastructure.orm_base import Base, TimestampMixin
 
 """
@@ -37,3 +38,7 @@ class MovimientoInventarioORM(Base, TimestampMixin):
     referencia_id = Column(PGUUID(as_uuid=True), nullable=True)
     usuario_id = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=False)
     motivo = Column(String(255), nullable=True)
+
+    # Solo lectura, para `?include=producto,usuario`.
+    producto = relationship("ProductoORM", viewonly=True, lazy="raise")
+    usuario = relationship("UsuarioORM", viewonly=True, lazy="raise")

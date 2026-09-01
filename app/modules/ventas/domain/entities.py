@@ -57,6 +57,11 @@ class Venta:
 
     idempotency_key: str | None = None
 
+    # Relaciones embebidas opcionales (`?include=`); las puebla el mapper.
+    cliente: object | None = field(default=None, compare=False, repr=False)
+    usuario: object | None = field(default=None, compare=False, repr=False)
+    caja_turno: object | None = field(default=None, compare=False, repr=False)
+
     @staticmethod
     def crear(sucursal_id: UUID, caja_turno_id: UUID, usuario_id: UUID,
               cliente_id: UUID | None, lineas: list[DetalleVenta], pagos: list[Pago],

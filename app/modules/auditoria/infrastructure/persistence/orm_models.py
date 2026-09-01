@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.shared.infrastructure.orm_base import Base
 
@@ -32,3 +33,6 @@ class LogAuditoriaORM(Base):
     detalle = Column(JSONB, nullable=True)
     ip_address = Column(String(45), nullable=True)
     fecha = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    # Solo lectura, para `?include=usuario`.
+    usuario = relationship("UsuarioORM", viewonly=True, lazy="raise")

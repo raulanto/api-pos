@@ -26,8 +26,8 @@ def to_domain_sucursal(orm: SucursalORM) -> Sucursal:
         created_at=orm.created_at
     )
 
-def to_domain_usuario(orm: UsuarioORM) -> Usuario:
-    return Usuario(
+def to_domain_usuario(orm: UsuarioORM, includes: frozenset[str] = frozenset()) -> Usuario:
+    usuario = Usuario(
         id=orm.id,
         sucursal_id=orm.sucursal_id,
         rol_id=orm.rol_id,
@@ -38,6 +38,11 @@ def to_domain_usuario(orm: UsuarioORM) -> Usuario:
         last_login_at=orm.last_login_at,
         created_at=orm.created_at
     )
+    if "rol" in includes:
+        usuario.rol = to_domain_rol(orm.rol) if orm.rol is not None else None
+    if "sucursal" in includes:
+        usuario.sucursal = orm.sucursal
+    return usuario
 
 def to_orm_usuario(entidad: Usuario) -> UsuarioORM:
     return UsuarioORM(

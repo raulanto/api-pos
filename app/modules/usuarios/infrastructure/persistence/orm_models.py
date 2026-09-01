@@ -43,8 +43,10 @@ class UsuarioORM(Base, TimestampMixin, SoftDeleteMixin):
     password_hash = Column(String(255), nullable=False)
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
-    sucursal = relationship("SucursalORM")
-    rol = relationship("RolORM")
+    # `lazy="raise"`: nunca lazy-load implícito (rompería en async); se cargan
+    # explícitamente con selectinload sólo cuando se piden vía ?include=.
+    sucursal = relationship("SucursalORM", lazy="raise")
+    rol = relationship("RolORM", lazy="raise")
 
 class RefreshTokenORM(Base):
     __tablename__ = "refresh_token"

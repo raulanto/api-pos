@@ -42,6 +42,9 @@ class Cliente:
     activo: bool
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+    # Relación embebida opcional (`?include=sucursal`); la puebla el mapper.
+    sucursal: object | None = field(default=None, compare=False, repr=False)
+
     """
         Método para crear un nuevo cliente.
         Parámetros:

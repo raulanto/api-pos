@@ -1,9 +1,12 @@
 from datetime import datetime
+from typing import ClassVar, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.modules.usuarios.domain.password_policy import LONGITUD_MINIMA
+from app.shared.responses import EmbeddableModel
+from app.shared.schemas.embeds import SucursalEmbed
 
 
 # --------------------------------------------------------------------------- #
@@ -42,7 +45,28 @@ class CambiarPasswordRequest(BaseModel):
     password_nueva: str = Field(min_length=LONGITUD_MINIMA, max_length=128)
 
 
-class UsuarioResponse(BaseModel):
+class PermisoResponse(BaseModel):
+    id: UUID
+    codigo: str
+    descripcion: str
+
+    class Config:
+        from_attributes = True
+
+
+class RolResponse(BaseModel):
+    id: UUID
+    codigo: str | None
+    nombre: str
+    descripcion: str
+    permisos: list[PermisoResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class UsuarioResponse(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("rol", "sucursal")
     id: UUID
     sucursal_id: UUID | None
     rol_id: UUID
@@ -50,9 +74,9 @@ class UsuarioResponse(BaseModel):
     email: str
     activo: bool
     last_login_at: datetime | None = None
-
-    class Config:
-        from_attributes = True
+    # Embebidas (?include=rol,sucursal)
+    rol: Optional[RolResponse] = None
+    sucursal: Optional[SucursalEmbed] = None
 
 
 class LoginRequest(BaseModel):
@@ -77,26 +101,6 @@ class LogoutRequest(BaseModel):
 # --------------------------------------------------------------------------- #
 # Roles / permisos
 # --------------------------------------------------------------------------- #
-class PermisoResponse(BaseModel):
-    id: UUID
-    codigo: str
-    descripcion: str
-
-    class Config:
-        from_attributes = True
-
-
-class RolResponse(BaseModel):
-    id: UUID
-    codigo: str | None
-    nombre: str
-    descripcion: str
-    permisos: list[PermisoResponse] = []
-
-    class Config:
-        from_attributes = True
-
-
 class CrearRolRequest(BaseModel):
     codigo: str = Field(min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=50)

@@ -30,6 +30,11 @@ class VentaORM(Base, TimestampMixin):
     lineas = relationship("DetalleVentaORM", backref="venta", cascade="all, delete-orphan")
     pagos = relationship("PagoORM", backref="venta", cascade="all, delete-orphan")
 
+    # Relaciones de solo lectura para `?include=` (no participan en escrituras).
+    cliente = relationship("ClienteORM", viewonly=True, lazy="raise")
+    usuario = relationship("UsuarioORM", viewonly=True, lazy="raise")
+    caja_turno = relationship("CajaTurnoORM", viewonly=True, lazy="raise")
+
 class DetalleVentaORM(Base):
     __tablename__ = "detalle_venta"
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

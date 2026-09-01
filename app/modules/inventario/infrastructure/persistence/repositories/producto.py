@@ -1,12 +1,22 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func, or_
+from sqlalchemy.orm import selectinload
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
 from app.modules.inventario.application.dtos import FiltroProductos
 from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.domain.entities import Producto
 from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_producto, to_orm_producto
+
+
+def _opts_producto(includes: frozenset[str]):
+    opts = []
+    if "categoria" in includes:
+        opts.append(selectinload(ProductoORM.categoria))
+    if "existencias" in includes:
+        opts.append(selectinload(ProductoORM.existencias))
+    return opts
 
 """
 Repositorio para la gestión de productos.
@@ -71,11 +81,13 @@ class SqlAlchemyProductoRepository(ProductoRepository):
         @returns:
         - Producto | None
     """
-    async def obtener_por_id(self, producto_id: UUID) -> Producto | None:
+    async def obtener_por_id(
+        self, producto_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Producto | None:
         orm = (await self._db.execute(
-            select(ProductoORM).where(ProductoORM.id == producto_id)
+            select(ProductoORM).options(*_opts_producto(includes)).where(ProductoORM.id == producto_id)
         )).scalar_one_or_none()
-        return to_domain_producto(orm) if orm else None
+        return to_domain_producto(orm, includes) if orm else None
     
     """
         Funcion: Busca un producto por SKU.
@@ -128,7 +140,11 @@ class SqlAlchemyProductoRepository(ProductoRepository):
     }
 
     async def listar(
-        self, filtro: FiltroProductos, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroProductos,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
         if filtro.categoria_id is not None:
@@ -151,9 +167,12 @@ class SqlAlchemyProductoRepository(ProductoRepository):
         )
         filas = (await self._db.execute(
             select(ProductoORM)
+            .options(*_opts_producto(includes))
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Page(items=[to_domain_producto(o) for o in filas], total=int(total or 0))
+        return Page(
+            items=[to_domain_producto(o, includes) for o in filas], total=int(total or 0)
+        )

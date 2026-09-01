@@ -9,9 +9,15 @@ class MovimientoRepository(ABC):
     async def guardar(self, movimiento: MovimientoInventario) -> None: ...
 
     @abstractmethod
-    async def obtener_por_id(self, movimiento_id: UUID) -> MovimientoInventario | None: ...
+    async def obtener_por_id(
+        self, movimiento_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> MovimientoInventario | None: ...
 
     @abstractmethod
     async def listar(
-        self, filtro: FiltroMovimientos, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroMovimientos,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page: ...

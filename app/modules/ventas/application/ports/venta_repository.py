@@ -10,7 +10,9 @@ class VentaRepository(ABC):
     async def guardar(self, venta: Venta) -> None: ...
 
     @abstractmethod
-    async def obtener_por_id(self, venta_id: UUID) -> Venta | None: ...
+    async def obtener_por_id(
+        self, venta_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Venta | None: ...
 
     @abstractmethod
     async def obtener_por_idempotency_key(self, key: str) -> Venta | None: ...
@@ -20,5 +22,9 @@ class VentaRepository(ABC):
 
     @abstractmethod
     async def listar(
-        self, filtro: FiltroVentas, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroVentas,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page: ...

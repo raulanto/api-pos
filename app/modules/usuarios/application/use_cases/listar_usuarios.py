@@ -16,11 +16,16 @@ class ListarUsuariosUseCase:
         self._usuario_repo = usuario_repo
 
     async def ejecutar(
-        self, data: ListarUsuariosInput, paginacion: PageParams, orden: Sort
+        self,
+        data: ListarUsuariosInput,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
         return await self._usuario_repo.listar(
             paginacion=paginacion,
             orden=orden,
             sucursal_id=data.sucursal_id,
             incluir_inactivos=data.incluir_inactivos,
+            includes=includes,
         )

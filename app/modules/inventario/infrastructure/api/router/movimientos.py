@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado, verificar_alcance_sucursal
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
-    page_params, make_sort_dependency, ok, page_response,
+    page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
 from app.modules.inventario.application.dtos import FiltroMovimientos
@@ -31,6 +31,7 @@ from .common import mov_repo, prod_repo, exist_repo, sucursal_efectiva, traducir
 router = APIRouter(route_class=EnvelopeRoute)
 
 _ORDEN_MOV = make_sort_dependency({"created_at", "cantidad"}, "created_at:desc")
+_INC_MOV = make_include_dependency({"producto", "usuario"})
 
 """
     Endpoint para aplicar movimientos.
@@ -138,12 +139,13 @@ async def listar_movimientos(
     hasta: datetime | None = Query(default=None),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_MOV),
+    include: frozenset[str] = Depends(_INC_MOV),
 ):
     efectivo = sucursal_efectiva(actual, sucursal_id)
     filtro = FiltroMovimientos(
         producto_id=producto_id, sucursal_id=efectivo, tipo=tipo, desde=desde, hasta=hasta,
     )
-    pagina = await ListarMovimientosUseCase(mov_repo(db)).ejecutar(filtro, paginacion, orden)
+    pagina = await ListarMovimientosUseCase(mov_repo(db)).ejecutar(filtro, paginacion, orden, include)
     return page_response(
         request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
     )
@@ -161,9 +163,10 @@ async def obtener_movimiento(
     movimiento_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
+    include: frozenset[str] = Depends(_INC_MOV),
 ):
     try:
-        movimiento = await ObtenerMovimientoUseCase(mov_repo(db)).ejecutar(movimiento_id)
+        movimiento = await ObtenerMovimientoUseCase(mov_repo(db)).ejecutar(movimiento_id, include)
     except Exception as e:
         raise traducir(e)
     verificar_alcance_sucursal(actual, movimiento.sucursal_id)

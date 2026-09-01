@@ -12,17 +12,23 @@ class ListarVentasUseCase:
         self._repo = venta_repo
 
     async def ejecutar(
-        self, filtro: FiltroVentas, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroVentas,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
-        return await self._repo.listar(filtro, paginacion, orden)
+        return await self._repo.listar(filtro, paginacion, orden, includes)
 
 
 class ObtenerVentaUseCase:
     def __init__(self, venta_repo: VentaRepository):
         self._repo = venta_repo
 
-    async def ejecutar(self, venta_id: UUID) -> Venta:
-        venta = await self._repo.obtener_por_id(venta_id)
+    async def ejecutar(
+        self, venta_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Venta:
+        venta = await self._repo.obtener_por_id(venta_id, includes)
         if venta is None:
             raise VentaNoEncontrada(f"No existe la venta {venta_id}")
         return venta

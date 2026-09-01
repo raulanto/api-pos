@@ -10,7 +10,7 @@ from app.core.dependencies import (
 )
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
-    page_params, make_sort_dependency, ok, page_response,
+    page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
 from app.modules.ventas.application.dtos import FiltroVentas
@@ -49,6 +49,7 @@ router = APIRouter(route_class=EnvelopeRoute)
 caja_router = APIRouter(route_class=EnvelopeRoute)
 
 _ORDEN_VENTAS = make_sort_dependency({"created_at"}, "created_at:desc")
+_INC_VENTAS = make_include_dependency({"cliente", "usuario", "caja_turno"})
 
 
 # --------------------------------------------------------------------------- #
@@ -162,6 +163,7 @@ async def listar_ventas(
     hasta: datetime | None = Query(default=None),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_VENTAS),
+    include: frozenset[str] = Depends(_INC_VENTAS),
 ):
     efectiva = _sucursal_efectiva(actual, sucursal_id)
     filtro = FiltroVentas(
@@ -169,7 +171,7 @@ async def listar_ventas(
         estado=estado, desde=desde, hasta=hasta,
     )
     pagina = await ListarVentasUseCase(SqlAlchemyVentaRepository(db)).ejecutar(
-        filtro, paginacion, orden,
+        filtro, paginacion, orden, include,
     )
     pagina.items = [VentaListItem.model_validate(v) for v in pagina.items]
     return page_response(
@@ -182,9 +184,10 @@ async def obtener_venta(
     venta_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("ventas.leer")),
+    include: frozenset[str] = Depends(_INC_VENTAS),
 ):
     try:
-        venta = await ObtenerVentaUseCase(SqlAlchemyVentaRepository(db)).ejecutar(venta_id)
+        venta = await ObtenerVentaUseCase(SqlAlchemyVentaRepository(db)).ejecutar(venta_id, include)
     except Exception as e:
         raise _traducir(e)
     verificar_alcance_sucursal(actual, venta.sucursal_id)

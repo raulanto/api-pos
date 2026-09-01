@@ -1,6 +1,7 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
 from app.modules.usuarios.application.ports.usuario_repository import UsuarioRepository
 from app.modules.usuarios.domain.entities import Usuario, ROL_ADMIN
@@ -20,16 +21,30 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
     def __init__(self, db: AsyncSession):
         self._db = db
 
+    def _opts(self, includes: frozenset[str]):
+        opts = []
+        if "rol" in includes:
+            opts.append(selectinload(UsuarioORM.rol).selectinload(RolORM.permisos))
+        if "sucursal" in includes:
+            opts.append(selectinload(UsuarioORM.sucursal))
+        return opts
+
     async def guardar(self, usuario: Usuario) -> None:
         orm = to_orm_usuario(usuario)
         await self._db.merge(orm)
         await self._db.flush()
 
-    async def obtener_por_id(self, usuario_id: UUID) -> Usuario | None:
-        stmt = select(UsuarioORM).where(UsuarioORM.id == usuario_id)
+    async def obtener_por_id(
+        self, usuario_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Usuario | None:
+        stmt = (
+            select(UsuarioORM)
+            .options(*self._opts(includes))
+            .where(UsuarioORM.id == usuario_id)
+        )
         result = await self._db.execute(stmt)
         orm = result.scalar_one_or_none()
-        return to_domain_usuario(orm) if orm else None
+        return to_domain_usuario(orm, includes) if orm else None
 
     async def obtener_por_email(self, email: str) -> Usuario | None:
         stmt = select(UsuarioORM).where(UsuarioORM.email == email)
@@ -43,6 +58,7 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         orden: Sort,
         sucursal_id: UUID | None = None,
         incluir_inactivos: bool = True,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
         if sucursal_id is not None:
@@ -58,12 +74,15 @@ class SqlAlchemyUsuarioRepository(UsuarioRepository):
         )
         filas = (await self._db.execute(
             select(UsuarioORM)
+            .options(*self._opts(includes))
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Page(items=[to_domain_usuario(o) for o in filas], total=int(total or 0))
+        return Page(
+            items=[to_domain_usuario(o, includes) for o in filas], total=int(total or 0)
+        )
 
     async def contar_admins_activos(self, excluir_usuario_id: UUID | None = None) -> int:
         stmt = (

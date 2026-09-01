@@ -9,7 +9,9 @@ class UsuarioRepository(ABC):
     async def guardar(self, usuario: Usuario) -> None: ...
 
     @abstractmethod
-    async def obtener_por_id(self, usuario_id: UUID) -> Usuario | None: ...
+    async def obtener_por_id(
+        self, usuario_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Usuario | None: ...
 
     @abstractmethod
     async def obtener_por_email(self, email: str) -> Usuario | None: ...
@@ -21,6 +23,7 @@ class UsuarioRepository(ABC):
         orden: Sort,
         sucursal_id: UUID | None = None,
         incluir_inactivos: bool = True,
+        includes: frozenset[str] = frozenset(),
     ) -> Page: ...
 
     @abstractmethod

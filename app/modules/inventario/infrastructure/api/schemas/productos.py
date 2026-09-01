@@ -1,8 +1,11 @@
 from decimal import Decimal
-from typing import Optional
+from typing import ClassVar, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.shared.responses import EmbeddableModel
+from app.shared.schemas.embeds import CategoriaEmbed, ExistenciaEmbed
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -41,8 +44,8 @@ class ActualizarProductoRequest(BaseModel):
 """
     Response para un producto.
 """
-class ProductoResponse(BaseModel):
-    model_config = _ORM
+class ProductoResponse(EmbeddableModel):
+    _embed_fields: ClassVar[tuple[str, ...]] = ("categoria", "existencias")
     id: UUID
     sku: str
     codigo_barras: Optional[str]
@@ -55,4 +58,7 @@ class ProductoResponse(BaseModel):
     impuesto_tasa: Decimal
     permite_stock_negativo: bool
     activo: bool
+    # Embebidas (?include=categoria,existencias)
+    categoria: Optional[CategoriaEmbed] = None
+    existencias: Optional[list[ExistenciaEmbed]] = None
 

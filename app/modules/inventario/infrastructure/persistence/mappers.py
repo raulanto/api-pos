@@ -51,8 +51,8 @@ def to_orm_categoria(entidad: Categoria) -> CategoriaORM:
     @returns:
     - Producto
 """
-def to_domain_producto(orm: ProductoORM) -> Producto:
-    return Producto(
+def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset()) -> Producto:
+    producto = Producto(
         id=orm.id,
         sku=orm.sku,
         codigo_barras=orm.codigo_barras,
@@ -68,6 +68,11 @@ def to_domain_producto(orm: ProductoORM) -> Producto:
         activo=orm.activo,
         created_at=orm.created_at
     )
+    if "categoria" in includes:
+        producto.categoria = orm.categoria
+    if "existencias" in includes:
+        producto.existencias = list(orm.existencias)
+    return producto
 
 """
     Transforma un producto de dominio a ORM.
@@ -135,8 +140,10 @@ def to_orm_existencia(entidad: Existencia) -> ExistenciaORM:
     @returns:
     - MovimientoInventario
 """
-def to_domain_movimiento(orm: MovimientoInventarioORM) -> MovimientoInventario:
-    return MovimientoInventario(
+def to_domain_movimiento(
+    orm: MovimientoInventarioORM, includes: frozenset[str] = frozenset()
+) -> MovimientoInventario:
+    mov = MovimientoInventario(
         id=orm.id,
         producto_id=orm.producto_id,
         sucursal_id=orm.sucursal_id,
@@ -149,6 +156,11 @@ def to_domain_movimiento(orm: MovimientoInventarioORM) -> MovimientoInventario:
         motivo=orm.motivo,
         created_at=orm.created_at,
     )
+    if "producto" in includes:
+        mov.producto = orm.producto
+    if "usuario" in includes:
+        mov.usuario = orm.usuario
+    return mov
 
 """
     Transforma un movimiento de dominio a ORM.

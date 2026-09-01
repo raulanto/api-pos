@@ -11,7 +11,7 @@ from app.core.dependencies import (
 from app.core.rate_limit import login_rate_limiter
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
-    page_params, make_sort_dependency, ok, page_response,
+    page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.modules.usuarios.infrastructure.api.schemas import (
     CrearUsuarioRequest, EditarUsuarioRequest, CambiarRolRequest, CambiarPasswordRequest,
@@ -48,6 +48,7 @@ _BAD_REQUEST = (
 _ORDEN_USUARIOS = make_sort_dependency(
     {"nombre", "email", "created_at", "last_login_at"}, "nombre:asc"
 )
+_INC_USUARIOS = make_include_dependency({"rol", "sucursal"})
 
 
 def _cliente_info(request: Request) -> tuple[str | None, str | None]:
@@ -90,7 +91,11 @@ def get_cerrar_sesion_use_case(db: AsyncSession = Depends(get_db)) -> CerrarSesi
 # --------------------------------------------------------------------------- #
 # Autenticación
 # --------------------------------------------------------------------------- #
-@router.post("/login", response_model=ApiResponse[TokenResponse])
+# Los endpoints de token NO usan el sobre ApiResponse: siguen el contrato
+# estándar OAuth2 ({access_token, token_type, ...}) porque Swagger UI, los
+# clientes OAuth y el front esperan esas claves en la raíz. Envolverlos rompe
+# el "Authorize" y hace que todo request autenticado devuelva 401.
+@router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
     request: Request,
@@ -99,15 +104,14 @@ async def login(
     ua, ip = _cliente_info(request)
     login_rate_limiter.check(clave=f"{ip}:{body.email}")
     try:
-        token = await use_case.ejecutar(AutenticarUsuarioInput(
+        return await use_case.ejecutar(AutenticarUsuarioInput(
             email=body.email, password_plano=body.password, user_agent=ua, ip=ip,
         ))
     except CredencialesInvalidas as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-    return ok(token)
 
 
-@router.post("/refresh", response_model=ApiResponse[TokenResponse])
+@router.post("/refresh", response_model=TokenResponse)
 async def refrescar(
     body: RefreshRequest,
     request: Request,
@@ -115,12 +119,11 @@ async def refrescar(
 ):
     ua, ip = _cliente_info(request)
     try:
-        token = await use_case.ejecutar(RefrescarTokenInput(
+        return await use_case.ejecutar(RefrescarTokenInput(
             refresh_token=body.refresh_token, user_agent=ua, ip=ip,
         ))
     except RefreshTokenInvalido as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-    return ok(token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -147,10 +150,11 @@ async def listar_usuarios(
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.leer")),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_USUARIOS),
+    include: frozenset[str] = Depends(_INC_USUARIOS),
 ):
     entrada = ListarUsuariosInput(sucursal_id=sucursal_scope(actual))
     pagina = await ListarUsuariosUseCase(SqlAlchemyUsuarioRepository(db)).ejecutar(
-        entrada, paginacion, orden,
+        entrada, paginacion, orden, include,
     )
     return page_response(request, pagina, paginacion, sort=orden)
 
@@ -160,10 +164,11 @@ async def obtener_usuario(
     usuario_id: UUID,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.leer")),
+    include: frozenset[str] = Depends(_INC_USUARIOS),
 ):
     use_case = ObtenerUsuarioUseCase(SqlAlchemyUsuarioRepository(db))
     try:
-        usuario = await use_case.ejecutar(usuario_id)
+        usuario = await use_case.ejecutar(usuario_id, include)
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     verificar_alcance_sucursal(actual, usuario.sucursal_id)

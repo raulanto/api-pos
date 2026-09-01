@@ -8,9 +8,15 @@ from app.shared.responses import Page, PageParams, Sort
 
 class AuditoriaRepository(ABC):
     @abstractmethod
-    async def obtener_por_id(self, log_id: UUID) -> LogAuditoria | None: ...
+    async def obtener_por_id(
+        self, log_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> LogAuditoria | None: ...
 
     @abstractmethod
     async def listar(
-        self, filtro: FiltroAuditoria, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroAuditoria,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page: ...

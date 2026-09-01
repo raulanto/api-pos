@@ -41,6 +41,10 @@ class Producto:
     activo: bool
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+    # Relaciones embebidas opcionales (`?include=categoria,existencias`).
+    categoria: object | None = field(default=None, compare=False, repr=False)
+    existencias: object | None = field(default=None, compare=False, repr=False)
+
 
     """
     Método estático para crear un producto.

@@ -28,8 +28,10 @@ class ObtenerClienteUseCase:
         Retorna:
         - Cliente: Cliente obtenido.
     """
-    async def ejecutar(self, cliente_id: UUID) -> Cliente:
-        cliente = await self._cliente_repo.obtener_por_id(cliente_id)
+    async def ejecutar(
+        self, cliente_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> Cliente:
+        cliente = await self._cliente_repo.obtener_por_id(cliente_id, includes)
         if not cliente:
             raise ClienteNoEncontrado(f"No existe el cliente con id {cliente_id}")
         return cliente

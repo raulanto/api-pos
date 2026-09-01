@@ -35,6 +35,10 @@ class MovimientoInventario:
     motivo: str | None
     created_at: datetime = field(default_factory=datetime.utcnow)
 
+    # Relaciones embebidas opcionales (`?include=producto,usuario`).
+    producto: object | None = field(default=None, compare=False, repr=False)
+    usuario: object | None = field(default=None, compare=False, repr=False)
+
 
     """
     Método estático para crear un movimiento de inventario.

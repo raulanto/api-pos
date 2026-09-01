@@ -10,6 +10,10 @@ class ListarClientesUseCase:
         self._repo = cliente_repo
 
     async def ejecutar(
-        self, filtro: FiltroClientes, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroClientes,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
-        return await self._repo.listar(filtro, paginacion, orden)
+        return await self._repo.listar(filtro, paginacion, orden, includes)

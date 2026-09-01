@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.orm import relationship
 from app.shared.infrastructure.orm_base import Base, TimestampMixin, SoftDeleteMixin
 
 
@@ -60,3 +61,12 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     impuesto_tasa = Column(Numeric(5, 2), nullable=False)
     tipo = Column(String(20), nullable=False)
     permite_stock_negativo = Column(Boolean, default=False, nullable=False)
+
+    # Solo lectura, para `?include=categoria,existencias`.
+    categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")
+    existencias = relationship(
+        "ExistenciaORM",
+        primaryjoin="ProductoORM.id == foreign(ExistenciaORM.producto_id)",
+        viewonly=True,
+        lazy="raise",
+    )

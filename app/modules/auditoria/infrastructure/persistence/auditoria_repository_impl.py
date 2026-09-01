@@ -2,6 +2,7 @@ from uuid import UUID
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.modules.auditoria.domain.entities import LogAuditoria
 from app.modules.auditoria.application.dtos import FiltroAuditoria
@@ -10,8 +11,8 @@ from app.modules.auditoria.infrastructure.persistence.orm_models import LogAudit
 from app.shared.responses import Page, PageParams, Sort
 
 
-def _to_domain(orm: LogAuditoriaORM) -> LogAuditoria:
-    return LogAuditoria(
+def _to_domain(orm: LogAuditoriaORM, includes: frozenset[str] = frozenset()) -> LogAuditoria:
+    log = LogAuditoria(
         id=orm.id,
         usuario_id=orm.usuario_id,
         modulo=orm.modulo,
@@ -22,6 +23,9 @@ def _to_domain(orm: LogAuditoriaORM) -> LogAuditoria:
         ip_address=orm.ip_address,
         fecha=orm.fecha,
     )
+    if "usuario" in includes:
+        log.usuario = orm.usuario
+    return log
 
 
 class SqlAlchemyAuditoriaRepository(AuditoriaRepository):
@@ -34,14 +38,23 @@ class SqlAlchemyAuditoriaRepository(AuditoriaRepository):
     def __init__(self, db: AsyncSession):
         self._db = db
 
-    async def obtener_por_id(self, log_id: UUID) -> LogAuditoria | None:
+    def _opts(self, includes: frozenset[str]):
+        return [selectinload(LogAuditoriaORM.usuario)] if "usuario" in includes else []
+
+    async def obtener_por_id(
+        self, log_id: UUID, includes: frozenset[str] = frozenset()
+    ) -> LogAuditoria | None:
         orm = (await self._db.execute(
-            select(LogAuditoriaORM).where(LogAuditoriaORM.id == log_id)
+            select(LogAuditoriaORM).options(*self._opts(includes)).where(LogAuditoriaORM.id == log_id)
         )).scalar_one_or_none()
-        return _to_domain(orm) if orm else None
+        return _to_domain(orm, includes) if orm else None
 
     async def listar(
-        self, filtro: FiltroAuditoria, paginacion: PageParams, orden: Sort
+        self,
+        filtro: FiltroAuditoria,
+        paginacion: PageParams,
+        orden: Sort,
+        includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
         if filtro.usuario_id is not None:
@@ -67,9 +80,10 @@ class SqlAlchemyAuditoriaRepository(AuditoriaRepository):
         )
         filas = (await self._db.execute(
             select(LogAuditoriaORM)
+            .options(*self._opts(includes))
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)
             .offset(paginacion.offset)
         )).scalars().all()
-        return Page(items=[_to_domain(o) for o in filas], total=int(total or 0))
+        return Page(items=[_to_domain(o, includes) for o in filas], total=int(total or 0))
