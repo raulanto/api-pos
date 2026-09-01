@@ -78,7 +78,7 @@ async def listar_productos(
     request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
-    categoria_id: UUID | None = Query(default=None),
+    categoria_id: list[UUID] | None = Query(default=None),
     activo: bool | None = Query(default=None),
     q: str | None = Query(default=None, description="Busca en nombre, sku y código de barras"),
     paginacion: PageParams = Depends(page_params),

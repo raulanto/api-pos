@@ -12,7 +12,7 @@ __all__ = [
 
 @dataclass
 class FiltroProductos:
-    categoria_id: UUID | None = None
+    categoria_id: list[UUID] | None = None
     activo: bool | None = None
     busqueda: str | None = None  # coincide contra nombre / sku / codigo_barras
 

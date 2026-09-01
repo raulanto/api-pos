@@ -147,8 +147,8 @@ class SqlAlchemyProductoRepository(ProductoRepository):
         includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
-        if filtro.categoria_id is not None:
-            condiciones.append(ProductoORM.categoria_id == filtro.categoria_id)
+        if filtro.categoria_id:
+            condiciones.append(ProductoORM.categoria_id.in_(filtro.categoria_id))
         if filtro.activo is not None:
             condiciones.append(ProductoORM.activo == filtro.activo)
         if filtro.busqueda:
