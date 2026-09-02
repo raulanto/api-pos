@@ -116,3 +116,31 @@ class EditarRolRequest(BaseModel):
 
 class AsignarPermisosRequest(BaseModel):
     permiso_ids: list[UUID] = Field(min_length=1)
+
+
+# --------------------------------------------------------------------------- #
+# Sucursales
+# --------------------------------------------------------------------------- #
+class CrearSucursalRequest(BaseModel):
+    nombre: str = Field(min_length=1, max_length=100)
+    direccion: str = Field(min_length=1, max_length=255)
+    telefono: str = Field(min_length=1, max_length=20)
+
+
+class ActualizarSucursalRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+    nombre: str | None = Field(default=None, min_length=1, max_length=100)
+    direccion: str | None = Field(default=None, min_length=1, max_length=255)
+    telefono: str | None = Field(default=None, min_length=1, max_length=20)
+
+
+class SucursalResponse(BaseModel):
+    id: UUID
+    nombre: str
+    direccion: str
+    telefono: str
+    activo: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

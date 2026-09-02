@@ -34,6 +34,36 @@ class Sucursal:
     activo: bool
     created_at: datetime
 
+    @staticmethod
+    def crear(nombre: str, direccion: str, telefono: str) -> "Sucursal":
+        return Sucursal(
+            id=uuid4(),
+            nombre=nombre,
+            direccion=direccion,
+            telefono=telefono,
+            activo=True,
+            created_at=datetime.now(timezone.utc),
+        )
+
+    def actualizar(
+        self,
+        nombre: str | None = None,
+        direccion: str | None = None,
+        telefono: str | None = None,
+    ) -> None:
+        if nombre is not None:
+            self.nombre = nombre
+        if direccion is not None:
+            self.direccion = direccion
+        if telefono is not None:
+            self.telefono = telefono
+
+    def desactivar(self) -> None:
+        self.activo = False
+
+    def activar(self) -> None:
+        self.activo = True
+
 
 @dataclass
 class Usuario:

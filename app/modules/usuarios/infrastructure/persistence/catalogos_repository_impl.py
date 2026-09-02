@@ -1,14 +1,15 @@
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, insert, delete
+from sqlalchemy import select, func, insert, delete, update, or_
 from sqlalchemy.orm import selectinload
 
 from app.modules.usuarios.application.ports.catalogos_repository import (
     RolRepository, SucursalRepository, PermisoRepository,
 )
+from app.modules.usuarios.application.dto import FiltroSucursales
 from app.modules.usuarios.domain.entities import Rol, Sucursal, Permiso
 from app.modules.usuarios.infrastructure.persistence.orm_models import (
-    RolORM, SucursalORM, PermisoORM, rol_permiso_table,
+    RolORM, SucursalORM, PermisoORM, UsuarioORM, rol_permiso_table,
 )
 from app.modules.usuarios.infrastructure.persistence.mappers import (
     to_domain_rol, to_domain_sucursal, to_domain_permiso,
@@ -123,6 +124,8 @@ class SqlAlchemyPermisoRepository(PermisoRepository):
 
 
 class SqlAlchemySucursalRepository(SucursalRepository):
+    _ORDEN = {"nombre": SucursalORM.nombre, "created_at": SucursalORM.created_at}
+
     def __init__(self, db: AsyncSession):
         self._db = db
 
@@ -130,3 +133,72 @@ class SqlAlchemySucursalRepository(SucursalRepository):
         stmt = select(SucursalORM).where(SucursalORM.id == sucursal_id)
         orm = (await self._db.execute(stmt)).scalar_one_or_none()
         return to_domain_sucursal(orm) if orm else None
+
+    async def obtener_por_nombre(self, nombre: str) -> Sucursal | None:
+        stmt = select(SucursalORM).where(
+            func.lower(SucursalORM.nombre) == nombre.strip().lower()
+        )
+        orm = (await self._db.execute(stmt)).scalars().first()
+        return to_domain_sucursal(orm) if orm else None
+
+    async def listar(
+        self, filtro: FiltroSucursales, paginacion: PageParams, orden: Sort
+    ) -> Page:
+        condiciones = []
+        if filtro.activo is not None:
+            condiciones.append(SucursalORM.activo == filtro.activo)
+        if filtro.busqueda:
+            patron = f"%{filtro.busqueda.strip()}%"
+            condiciones.append(or_(
+                SucursalORM.nombre.ilike(patron),
+                SucursalORM.direccion.ilike(patron),
+                SucursalORM.telefono.ilike(patron),
+            ))
+
+        col = self._ORDEN.get(orden.field, SucursalORM.nombre)
+        orden_expr = col.desc() if orden.descending else col.asc()
+
+        total = await self._db.scalar(
+            select(func.count()).select_from(SucursalORM).where(*condiciones)
+        )
+        filas = (await self._db.execute(
+            select(SucursalORM)
+            .where(*condiciones)
+            .order_by(orden_expr)
+            .limit(paginacion.limit)
+            .offset(paginacion.offset)
+        )).scalars().all()
+        return Page(items=[to_domain_sucursal(o) for o in filas], total=int(total or 0))
+
+    async def crear(self, sucursal: Sucursal) -> Sucursal:
+        self._db.add(SucursalORM(
+            id=sucursal.id,
+            nombre=sucursal.nombre,
+            direccion=sucursal.direccion,
+            telefono=sucursal.telefono,
+            activo=sucursal.activo,
+        ))
+        await self._db.flush()
+        return sucursal
+
+    async def actualizar(self, sucursal: Sucursal) -> None:
+        await self._db.execute(
+            update(SucursalORM)
+            .where(SucursalORM.id == sucursal.id)
+            .values(
+                nombre=sucursal.nombre,
+                direccion=sucursal.direccion,
+                telefono=sucursal.telefono,
+                activo=sucursal.activo,
+            )
+        )
+        await self._db.flush()
+
+    async def tiene_usuarios_activos(self, sucursal_id: UUID) -> bool:
+        total = await self._db.scalar(
+            select(func.count(UsuarioORM.id)).where(
+                UsuarioORM.sucursal_id == sucursal_id,
+                UsuarioORM.activo.is_(True),
+            )
+        )
+        return bool(total)

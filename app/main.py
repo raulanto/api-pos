@@ -26,6 +26,7 @@ from app.modules.auditoria.infrastructure import listeners as _auditoria_listene
 
 from app.modules.usuarios.infrastructure.api.router import router as usuarios_router
 from app.modules.usuarios.infrastructure.api.roles_router import router as roles_router, permisos_router
+from app.modules.usuarios.infrastructure.api.sucursales_router import router as sucursales_router
 from app.modules.inventario.infrastructure.api.router import router as inventario_router
 from app.modules.clientes.infrastructure.api.router import router as clientes_router
 from app.modules.ventas.infrastructure.api.router import router as ventas_router, caja_router
@@ -35,6 +36,7 @@ from app.modules.auditoria.infrastructure.api.router import router as auditoria_
 app.include_router(usuarios_router, prefix="/api/v1/usuarios", tags=["usuarios"])
 app.include_router(roles_router, prefix="/api/v1/roles", tags=["roles"])
 app.include_router(permisos_router, prefix="/api/v1/permisos", tags=["permisos"])
+app.include_router(sucursales_router, prefix="/api/v1/sucursales", tags=["sucursales"])
 app.include_router(inventario_router, prefix="/api/v1/inventario", tags=["inventario"])
 app.include_router(clientes_router, prefix="/api/v1/clientes", tags=["clientes"])
 app.include_router(ventas_router, prefix="/api/v1/ventas", tags=["ventas"])
