@@ -15,6 +15,9 @@ class FiltroProductos:
     categoria_id: list[UUID] | None = None
     activo: bool | None = None
     busqueda: str | None = None  # coincide contra nombre / sku / codigo_barras
+    # Sólo productos con existencia registrada en alguna de estas sucursales.
+    # Si se pide `?include=existencias`, además acota el embed a esas sucursales.
+    sucursal_id: list[UUID] | None = None
 
 
 @dataclass

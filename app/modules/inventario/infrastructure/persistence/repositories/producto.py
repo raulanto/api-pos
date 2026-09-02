@@ -6,16 +6,20 @@ from app.modules.inventario.application.ports.producto_repository import Product
 from app.modules.inventario.application.dtos import FiltroProductos
 from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.domain.entities import Producto
-from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM
+from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM, ExistenciaORM
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_producto, to_orm_producto
 
 
-def _opts_producto(includes: frozenset[str]):
+def _opts_producto(includes: frozenset[str], sucursal_ids: list[UUID] | None = None):
     opts = []
     if "categoria" in includes:
         opts.append(selectinload(ProductoORM.categoria))
     if "existencias" in includes:
-        opts.append(selectinload(ProductoORM.existencias))
+        rel = ProductoORM.existencias
+        if sucursal_ids:
+            # Coherencia con el filtro `?sucursal_id=`: el embed trae sólo esas.
+            rel = rel.and_(ExistenciaORM.sucursal_id.in_(sucursal_ids))
+        opts.append(selectinload(rel))
     return opts
 
 """
@@ -158,6 +162,16 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 ProductoORM.sku.ilike(patron),
                 ProductoORM.codigo_barras.ilike(patron),
             ))
+        if filtro.sucursal_id:
+            # Producto con existencia en alguna de las sucursales pedidas.
+            condiciones.append(
+                select(ExistenciaORM.id)
+                .where(
+                    ExistenciaORM.producto_id == ProductoORM.id,
+                    ExistenciaORM.sucursal_id.in_(filtro.sucursal_id),
+                )
+                .exists()
+            )
 
         col = self._ORDEN.get(orden.field, ProductoORM.nombre)
         orden_expr = col.desc() if orden.descending else col.asc()
@@ -167,7 +181,7 @@ class SqlAlchemyProductoRepository(ProductoRepository):
         )
         filas = (await self._db.execute(
             select(ProductoORM)
-            .options(*_opts_producto(includes))
+            .options(*_opts_producto(includes, filtro.sucursal_id))
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)

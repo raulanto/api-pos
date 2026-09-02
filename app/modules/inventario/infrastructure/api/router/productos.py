@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import require_permission, UsuarioAutenticado
+from app.core.dependencies import (
+    require_permission, UsuarioAutenticado, verificar_alcance_sucursal,
+)
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
@@ -81,11 +83,18 @@ async def listar_productos(
     categoria_id: list[UUID] | None = Query(default=None),
     activo: bool | None = Query(default=None),
     q: str | None = Query(default=None, description="Busca en nombre, sku y código de barras"),
+    sucursal_id: list[UUID] | None = Query(
+        default=None, description="Sólo productos con existencia en esa(s) sucursal(es)"
+    ),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_PRODUCTOS),
     include: frozenset[str] = Depends(_INC_PRODUCTOS),
 ):
-    filtro = FiltroProductos(categoria_id=categoria_id, activo=activo, busqueda=q)
+    for s in sucursal_id or ():
+        verificar_alcance_sucursal(actual, s)  # rol de sucursal no consulta otras
+    filtro = FiltroProductos(
+        categoria_id=categoria_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
+    )
     pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(filtro, paginacion, orden, include)
     return page_response(
         request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
