@@ -17,7 +17,9 @@ from app.modules.usuarios.infrastructure.persistence.usuario_repository_impl imp
     SqlAlchemyUsuarioRepository,
 )
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/usuarios/login")
+# `tokenUrl` apunta al endpoint OAuth2 por formulario (no al `/login` JSON), que
+# es lo que consume el botón "Authorize" de Swagger UI (flujo password).
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/usuarios/token")
 
 # Roles que ven datos de todas las sucursales (sección 11 del plan).
 ROLES_GLOBALES = {ROL_ADMIN, "gerente"}

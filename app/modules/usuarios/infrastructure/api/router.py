@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -106,6 +107,32 @@ async def login(
     try:
         return await use_case.ejecutar(AutenticarUsuarioInput(
             email=body.email, password_plano=body.password, user_agent=ua, ip=ip,
+        ))
+    except CredencialesInvalidas as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+@router.post(
+    "/token",
+    response_model=TokenResponse,
+    summary="Login OAuth2 (formulario) — lo usa el botón Authorize de Swagger",
+)
+async def login_oauth2(
+    request: Request,
+    form: OAuth2PasswordRequestForm = Depends(),
+    use_case: AutenticarUsuarioUseCase = Depends(get_autenticar_usuario_use_case),
+):
+    """Equivalente a `POST /login` pero con cuerpo
+    `application/x-www-form-urlencoded` (`username` = email, `password`).
+
+    Existe para que el flujo *password* de Swagger UI funcione; el front-end
+    sigue usando `POST /login` (JSON).
+    """
+    ua, ip = _cliente_info(request)
+    login_rate_limiter.check(clave=f"{ip}:{form.username}")
+    try:
+        return await use_case.ejecutar(AutenticarUsuarioInput(
+            email=form.username, password_plano=form.password, user_agent=ua, ip=ip,
         ))
     except CredencialesInvalidas as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
