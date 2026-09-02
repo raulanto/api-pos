@@ -64,8 +64,8 @@ class SqlAlchemyExistenciaRepository(ExistenciaRepository):
         condiciones = []
         if filtro.producto_id is not None:
             condiciones.append(ExistenciaORM.producto_id == filtro.producto_id)
-        if filtro.sucursal_id is not None:
-            condiciones.append(ExistenciaORM.sucursal_id == filtro.sucursal_id)
+        if filtro.sucursal_id:
+            condiciones.append(ExistenciaORM.sucursal_id.in_(filtro.sucursal_id))
 
         base = select(ExistenciaORM).where(*condiciones)
         count_base = select(func.count()).select_from(ExistenciaORM).where(*condiciones)

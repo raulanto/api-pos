@@ -136,3 +136,28 @@ def sucursal_efectiva(actual: UsuarioAutenticado, pedida: UUID | None) -> UUID |
     if pedida is not None and pedida != alcance:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Fuera del alcance de su sucursal")
     return alcance
+
+
+"""
+    Versión multi-valor de `sucursal_efectiva` para el filtro `?sucursal_id=` que
+    admite varias sucursales.
+
+    @param actual: Usuario autenticado.
+    @param pedidas: Lista de IDs de sucursal pedidos (o None => sin filtro).
+    @return: Lista de sucursales a aplicar, o None para "todas".
+"""
+def sucursales_efectivas(
+    actual: UsuarioAutenticado, pedidas: list[UUID] | None
+) -> list[UUID] | None:
+    """Mismo criterio que `sucursal_efectiva`:
+
+    - rol global (admin/gerente): respeta las sucursales pedidas, o None => todas.
+    - rol de sucursal: siempre acotado a la suya; si pide alguna distinta => 403.
+    """
+    alcance = sucursal_scope(actual)  # None => global
+    pedidas = pedidas or None
+    if alcance is None:
+        return pedidas
+    if pedidas is not None and any(s != alcance for s in pedidas):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Fuera del alcance de su sucursal")
+    return [alcance]

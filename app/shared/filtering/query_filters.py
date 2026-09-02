@@ -19,6 +19,8 @@ def _jsonable(value: Any) -> Any:
         return str(value)
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_jsonable(v) for v in value]
     return value
 
 
@@ -36,6 +38,8 @@ def active_filters(filtro: Any) -> dict[str, Any]:
         if v is None:
             continue
         if isinstance(v, bool) and v is False:
+            continue
+        if isinstance(v, (list, tuple, set, frozenset)) and not v:
             continue
         out[f.name] = _jsonable(v)
     return out

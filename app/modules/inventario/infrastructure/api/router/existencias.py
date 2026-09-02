@@ -17,7 +17,7 @@ from app.modules.inventario.application.use_cases.consultar_existencias import (
 from app.modules.inventario.infrastructure.api.schemas import (
     ExistenciaResponse, ConfigurarUmbralesRequest,
 )
-from .common import exist_repo, prod_repo, sucursal_efectiva, traducir
+from .common import exist_repo, prod_repo, sucursales_efectivas, traducir
 
 router = APIRouter(route_class=EnvelopeRoute)
 
@@ -28,9 +28,9 @@ _INC_EXIST = make_include_dependency({"producto"})
 
 
 async def _listar(request, db, actual, producto_id, sucursal_id, paginacion, orden, include, solo_bajo_stock):
-    efectivo = sucursal_efectiva(actual, sucursal_id)
+    efectivas = sucursales_efectivas(actual, sucursal_id)
     filtro = FiltroExistencias(
-        producto_id=producto_id, sucursal_id=efectivo, solo_bajo_stock=solo_bajo_stock,
+        producto_id=producto_id, sucursal_id=efectivas, solo_bajo_stock=solo_bajo_stock,
     )
     pagina = await ConsultarExistenciasUseCase(exist_repo(db)).ejecutar(
         filtro, paginacion, orden, include,
@@ -46,7 +46,7 @@ async def listar_existencias(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     producto_id: UUID | None = Query(default=None),
-    sucursal_id: UUID | None = Query(default=None),
+    sucursal_id: list[UUID] | None = Query(default=None),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_EXIST),
     include: frozenset[str] = Depends(_INC_EXIST),
@@ -62,7 +62,7 @@ async def listar_bajo_stock(
     request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
-    sucursal_id: UUID | None = Query(default=None),
+    sucursal_id: list[UUID] | None = Query(default=None),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_EXIST),
     include: frozenset[str] = Depends(_INC_EXIST),

@@ -27,7 +27,7 @@ class FiltroCategorias:
 @dataclass
 class FiltroExistencias:
     producto_id: UUID | None = None
-    sucursal_id: UUID | None = None
+    sucursal_id: list[UUID] | None = None  # varias sucursales => OR (IN)
     solo_bajo_stock: bool = False
 
 
