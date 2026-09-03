@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import EmbeddableModel
-from app.shared.schemas.embeds import CategoriaEmbed, ExistenciaEmbed
+from app.shared.schemas.embeds import CategoriaEmbed, ComponenteEmbed, ExistenciaEmbed, ProductoEmbed
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -77,7 +77,7 @@ class ProductoKpisResponse(BaseModel):
     Response para un producto.
 """
 class ProductoResponse(EmbeddableModel):
-    _embed_fields: ClassVar[tuple[str, ...]] = ("categoria", "existencias")
+    _embed_fields: ClassVar[tuple[str, ...]] = ("categoria", "existencias", "componentes")
     id: UUID
     sku: str
     codigo_barras: Optional[str]
@@ -91,7 +91,41 @@ class ProductoResponse(EmbeddableModel):
     tipo: TipoProducto
     permite_stock_negativo: bool
     activo: bool
-    # Embebidas (?include=categoria,existencias)
+    # Embebidas (?include=categoria,existencias,componentes)
     categoria: Optional[CategoriaEmbed] = None
     existencias: Optional[list[ExistenciaEmbed]] = None
+    componentes: Optional[list[ComponenteEmbed]] = None
+
+
+# --------------------------------------------------------------------------- #
+# Receta de kit (producto_componente)
+# --------------------------------------------------------------------------- #
+class AgregarComponenteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    producto_componente_id: UUID
+    cantidad: Decimal = Field(gt=0)
+
+
+class ActualizarComponenteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cantidad: Decimal = Field(gt=0)
+
+
+class _LineaRecetaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    producto_componente_id: UUID
+    cantidad: Decimal = Field(gt=0)
+
+
+class ReemplazarRecetaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    componentes: list[_LineaRecetaRequest]
+
+
+class ComponenteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    producto_kit_id: UUID
+    producto_componente_id: UUID
+    cantidad: Decimal
+    producto: Optional[ProductoEmbed] = None
 

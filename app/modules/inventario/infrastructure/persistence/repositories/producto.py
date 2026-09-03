@@ -71,6 +71,8 @@ def _opts_producto(includes: frozenset[str], sucursal_ids: list[UUID] | None = N
             # Coherencia con el filtro `?sucursal_id=`: el embed trae sólo esas.
             rel = rel.and_(ExistenciaORM.sucursal_id.in_(sucursal_ids))
         opts.append(selectinload(rel))
+    if "componentes" in includes:
+        opts.append(selectinload(ProductoORM.componentes))
     return opts
 
 """

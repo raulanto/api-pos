@@ -62,11 +62,18 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     tipo = Column(String(20), nullable=False)
     permite_stock_negativo = Column(Boolean, default=False, nullable=False)
 
-    # Solo lectura, para `?include=categoria,existencias`.
+    # Solo lectura, para `?include=categoria,existencias,componentes`.
     categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")
     existencias = relationship(
         "ExistenciaORM",
         primaryjoin="ProductoORM.id == foreign(ExistenciaORM.producto_id)",
+        viewonly=True,
+        lazy="raise",
+    )
+    # Líneas de receta cuando este producto es un kit (`?include=componentes`).
+    componentes = relationship(
+        "ProductoComponenteORM",
+        primaryjoin="ProductoORM.id == foreign(ProductoComponenteORM.producto_kit_id)",
         viewonly=True,
         lazy="raise",
     )

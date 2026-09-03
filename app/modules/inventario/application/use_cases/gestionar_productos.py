@@ -7,12 +7,15 @@ from sqlalchemy.exc import IntegrityError
 from app.modules.inventario.domain.entities import Producto
 from app.modules.inventario.domain.exceptions import (
     ProductoNoEncontrado, CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado,
-    ProductoConStockActivo,
+    ProductoConStockActivo, KitInvalido, ProductoEsComponenteDeKit,
 )
 from app.modules.inventario.application.dtos import FiltroProductos, ProductoKpis
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
 from app.modules.inventario.application.ports.categoria_repository import CategoriaRepository
 from app.modules.inventario.application.ports.existencia_repository import ExistenciaRepository
+from app.modules.inventario.application.ports.componente_repository import (
+    ProductoComponenteRepository,
+)
 from app.modules.inventario.application.use_cases.crear_producto import _traducir_integridad
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import Page, PageParams, Sort
@@ -87,9 +90,15 @@ class ActualizarProductoInput:
 
 
 class ActualizarProductoUseCase:
-    def __init__(self, producto_repo: ProductoRepository, categoria_repo: CategoriaRepository):
+    def __init__(
+        self,
+        producto_repo: ProductoRepository,
+        categoria_repo: CategoriaRepository,
+        componente_repo: ProductoComponenteRepository,
+    ):
         self._repo = producto_repo
         self._categoria_repo = categoria_repo
+        self._componente_repo = componente_repo
 
     async def ejecutar(self, data: ActualizarProductoInput) -> Producto:
         producto = await self._repo.obtener_por_id(data.producto_id)
@@ -100,6 +109,16 @@ class ActualizarProductoUseCase:
             categoria = await self._categoria_repo.obtener_por_id(data.categoria_id)
             if not categoria:
                 raise CategoriaNoEncontrada(f"No existe la categoría con id {data.categoria_id}")
+
+        if (
+            data.tipo is not None
+            and data.tipo != TipoProducto.KIT
+            and producto.tipo == TipoProducto.KIT
+            and await self._componente_repo.contar_por_kit(producto.id) > 0
+        ):
+            raise KitInvalido(
+                "El kit tiene componentes; quitalos antes de cambiar el `tipo` a 'simple'."
+            )
 
         if data.sku is not None and data.sku != producto.sku:
             existente = await self._repo.buscar_por_sku(data.sku)
@@ -138,14 +157,26 @@ class ActualizarProductoUseCase:
 
 
 class DesactivarProductoUseCase:
-    def __init__(self, producto_repo: ProductoRepository, existencia_repo: ExistenciaRepository):
+    def __init__(
+        self,
+        producto_repo: ProductoRepository,
+        existencia_repo: ExistenciaRepository,
+        componente_repo: ProductoComponenteRepository,
+    ):
         self._repo = producto_repo
         self._existencia_repo = existencia_repo
+        self._componente_repo = componente_repo
 
     async def ejecutar(self, producto_id: UUID, confirmar_con_stock: bool = False) -> Producto:
         producto = await self._repo.obtener_por_id(producto_id)
         if not producto:
             raise ProductoNoEncontrado(f"No existe el producto {producto_id}")
+
+        if await self._componente_repo.es_componente_de_kit_activo(producto_id):
+            raise ProductoEsComponenteDeKit(
+                "Este producto es componente de un kit activo; quitalo de esas recetas "
+                "antes de desactivarlo."
+            )
 
         if not confirmar_con_stock:
             existencias = await self._existencia_repo.listar(producto_id=producto_id)

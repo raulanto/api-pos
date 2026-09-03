@@ -1,6 +1,10 @@
-from app.modules.inventario.domain.entities import Categoria, Producto, Existencia, MovimientoInventario
+from app.modules.inventario.domain.entities import (
+    Categoria, Producto, ProductoComponente, Existencia, MovimientoInventario,
+)
 from app.modules.inventario.domain.value_objects import TipoProducto, TipoMovimiento
-from app.modules.inventario.infrastructure.persistence.orm_models import CategoriaORM, ProductoORM, ExistenciaORM, MovimientoInventarioORM
+from app.modules.inventario.infrastructure.persistence.orm_models import (
+    CategoriaORM, ProductoORM, ProductoComponenteORM, ExistenciaORM, MovimientoInventarioORM,
+)
 
 """
     Mappers para transformar entidades de dominio a ORM y viceversa.
@@ -75,7 +79,32 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         producto.categoria = orm.categoria
     if "existencias" in includes:
         producto.existencias = list(orm.existencias)
+    if "componentes" in includes:
+        # Sólo las líneas de la receta; el producto de cada componente se
+        # consulta con GET /productos/{kit}/componentes?include=producto.
+        producto.componentes = [to_domain_componente(c) for c in orm.componentes]
     return producto
+
+
+"""
+    Transforma una línea kit/componente ORM a entidad de dominio.
+    @params:
+    - orm: Modelo ORM.
+    - includes: {"producto"} para embeber el producto componente.
+    @returns:
+    - ProductoComponente
+"""
+def to_domain_componente(
+    orm: ProductoComponenteORM, includes: frozenset[str] = frozenset()
+) -> ProductoComponente:
+    comp = ProductoComponente(
+        producto_kit_id=orm.producto_kit_id,
+        producto_componente_id=orm.producto_componente_id,
+        cantidad=orm.cantidad,
+    )
+    if "producto" in includes:
+        comp.producto = orm.producto
+    return comp
 
 """
     Transforma un producto de dominio a ORM.

@@ -26,14 +26,14 @@ from app.modules.inventario.application.use_cases.gestionar_productos import (
 from app.modules.inventario.infrastructure.api.schemas import (
     CrearProductoRequest, ActualizarProductoRequest, ProductoResponse, ProductoKpisResponse,
 )
-from .common import prod_repo, cat_repo, exist_repo, traducir, traducir_create
+from .common import prod_repo, cat_repo, exist_repo, comp_repo, traducir, traducir_create
 
 router = APIRouter(route_class=EnvelopeRoute)
 
 _ORDEN_PRODUCTOS = make_sort_dependency(
     {"nombre", "sku", "precio_venta", "created_at"}, "nombre:asc"
 )
-_INC_PRODUCTOS = make_include_dependency({"categoria", "existencias"})
+_INC_PRODUCTOS = make_include_dependency({"categoria", "existencias", "componentes"})
 
 """
     Endpoint para crear un producto.
@@ -210,7 +210,9 @@ async def actualizar_producto(
     actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
 ):
     try:
-        producto = await ActualizarProductoUseCase(prod_repo(db), cat_repo(db)).ejecutar(
+        producto = await ActualizarProductoUseCase(
+            prod_repo(db), cat_repo(db), comp_repo(db),
+        ).ejecutar(
             ActualizarProductoInput(
                 producto_id=producto_id,
                 sku=body.sku,
@@ -246,9 +248,9 @@ async def desactivar_producto(
     confirmar_con_stock: bool = Query(default=False),
 ):
     try:
-        producto = await DesactivarProductoUseCase(prod_repo(db), exist_repo(db)).ejecutar(
-            producto_id, confirmar_con_stock=confirmar_con_stock
-        )
+        producto = await DesactivarProductoUseCase(
+            prod_repo(db), exist_repo(db), comp_repo(db),
+        ).ejecutar(producto_id, confirmar_con_stock=confirmar_con_stock)
     except Exception as e:
         raise traducir(e)
     return ok(producto)

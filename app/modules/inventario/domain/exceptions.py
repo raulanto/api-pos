@@ -41,3 +41,23 @@ class JerarquiaCategoriaInvalida(Exception):
 class ProductoConStockActivo(Exception):
     """No se puede desactivar un producto con existencia > 0 sin confirmación explícita."""
     pass
+
+class KitInvalido(Exception):
+    """El producto no es de tipo `kit`, o se intenta dejarlo `simple` con componentes."""
+    pass
+
+class ComponenteInvalido(Exception):
+    """El componente no existe, está inactivo, es el propio kit, o es a su vez un kit."""
+    pass
+
+class ComponenteDuplicado(Exception):
+    """Ese producto ya es componente del kit."""
+    pass
+
+class ComponenteNoEncontrado(Exception):
+    """La línea kit/componente pedida no existe."""
+    pass
+
+class ProductoEsComponenteDeKit(Exception):
+    """No se puede desactivar un producto que es componente de un kit activo."""
+    pass

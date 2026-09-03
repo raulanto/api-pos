@@ -7,6 +7,7 @@ from app.modules.inventario.domain import exceptions as exc
 from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyCategoriaRepository,
     SqlAlchemyProductoRepository,
+    SqlAlchemyProductoComponenteRepository,
     SqlAlchemyExistenciaRepository,
     SqlAlchemyMovimientoRepository,
 )
@@ -20,7 +21,7 @@ from app.modules.inventario.infrastructure.persistence.repositories import (
 """
 _NOT_FOUND = (
     exc.ProductoNoEncontrado, exc.CategoriaNoEncontrada, exc.ExistenciaNoEncontrada,
-    exc.MovimientoNoEncontrado,
+    exc.MovimientoNoEncontrado, exc.ComponenteNoEncontrado,
 )
 
 
@@ -30,7 +31,10 @@ _NOT_FOUND = (
     @param error: Excepción a traducir.
     @return: Instancia de la clase HTTPException.
 """
-_CONFLICT = (exc.CategoriaConProductosActivos, exc.ProductoConStockActivo)
+_CONFLICT = (
+    exc.CategoriaConProductosActivos, exc.ProductoConStockActivo,
+    exc.ComponenteDuplicado, exc.ProductoEsComponenteDeKit,
+)
 
 
 """
@@ -42,7 +46,7 @@ _CONFLICT = (exc.CategoriaConProductosActivos, exc.ProductoConStockActivo)
 _BAD_REQUEST = (
     exc.SkuDuplicado, exc.CodigoBarrasDuplicado, exc.StockInsuficiente,
     exc.AjusteSinCantidadFinal, exc.TransferenciaInvalida, exc.JerarquiaCategoriaInvalida,
-    exc.ProductoInactivo, ValueError,
+    exc.ProductoInactivo, exc.KitInvalido, exc.ComponenteInvalido, ValueError,
 )
 
 
@@ -95,6 +99,16 @@ def cat_repo(db):
 """
 def prod_repo(db):
     return SqlAlchemyProductoRepository(db)
+
+
+"""
+    Fábrica de repositorio de componentes de kit.
+
+    @param db: Sesión de la base de datos.
+    @return: Instancia de la clase SqlAlchemyProductoComponenteRepository.
+"""
+def comp_repo(db):
+    return SqlAlchemyProductoComponenteRepository(db)
 
 
 """

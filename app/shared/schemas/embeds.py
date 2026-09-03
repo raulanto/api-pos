@@ -82,3 +82,12 @@ class ExistenciaEmbed(BaseModel):
     cantidad: Decimal
     stock_minimo: Decimal
     stock_maximo: Optional[Decimal] = None
+
+
+class ComponenteEmbed(BaseModel):
+    """Línea de receta de un kit (`?include=componentes`)."""
+    model_config = _ORM
+    producto_kit_id: UUID
+    producto_componente_id: UUID
+    cantidad: Decimal
+    producto: Optional[ProductoEmbed] = None
