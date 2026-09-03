@@ -112,10 +112,17 @@ class Producto:
         permite_stock_negativo: bool | None = None,
         codigo_barras: str | None = None,
         cambiar_codigo_barras: bool = False,
+        sku: str | None = None,
+        tipo: TipoProducto | None = None,
+        cambiar_descripcion: bool = False,
     ) -> None:
+        if sku is not None:
+            self.sku = sku
         if nombre is not None:
             self.nombre = nombre
-        if descripcion is not None:
+        if cambiar_descripcion:
+            self.descripcion = descripcion          # permite volver a NULL
+        elif descripcion is not None:
             self.descripcion = descripcion
         if categoria_id is not None:
             self.categoria_id = categoria_id
@@ -127,6 +134,8 @@ class Producto:
             self.costo = costo
         if impuesto_tasa is not None:
             self.impuesto_tasa = impuesto_tasa
+        if tipo is not None:
+            self.tipo = tipo
         if permite_stock_negativo is not None:
             self.permite_stock_negativo = permite_stock_negativo
         if cambiar_codigo_barras:
@@ -140,3 +149,12 @@ class Producto:
     """
     def desactivar(self) -> None:
         self.activo = False
+
+    """
+    Método para reactivar un producto dado de baja.
+
+    @param self: Instancia de la clase Producto.
+    @return: None
+    """
+    def activar(self) -> None:
+        self.activo = True

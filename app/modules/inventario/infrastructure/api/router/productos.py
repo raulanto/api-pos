@@ -1,3 +1,4 @@
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -13,15 +14,17 @@ from app.shared.responses import (
 )
 from app.shared.filtering import active_filters
 from app.modules.inventario.application.dtos import FiltroProductos
+from app.modules.inventario.domain.value_objects import TipoProducto
 from app.modules.inventario.application.use_cases.crear_producto import (
     CrearProductoUseCase, CrearProductoInput,
 )
 from app.modules.inventario.application.use_cases.gestionar_productos import (
     ListarProductosUseCase, ObtenerProductoUseCase, BuscarProductoPorCodigoBarrasUseCase,
     ActualizarProductoUseCase, ActualizarProductoInput, DesactivarProductoUseCase,
+    ReactivarProductoUseCase, ProductoKpisUseCase,
 )
 from app.modules.inventario.infrastructure.api.schemas import (
-    CrearProductoRequest, ActualizarProductoRequest, ProductoResponse,
+    CrearProductoRequest, ActualizarProductoRequest, ProductoResponse, ProductoKpisResponse,
 )
 from .common import prod_repo, cat_repo, exist_repo, traducir, traducir_create
 
@@ -126,6 +129,49 @@ async def buscar_producto_por_codigo_barras(
 
 
 """
+    Endpoint de KPIs del catálogo + valuación de stock.
+
+    Acepta los mismos filtros que GET /productos (categoria_id, activo, q,
+    sucursal_id) más: tipo, permite_stock_negativo, con_codigo_barras,
+    precio_min/max, costo_min/max, solo_bajo_stock. Los KPIs de stock/valor se
+    calculan sobre las existencias de las `sucursal_id` indicadas (todas si no
+    se pasa ninguna).
+"""
+@router.get("/productos/kpis", response_model=ApiResponse[ProductoKpisResponse])
+async def kpis_productos(
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
+    categoria_id: list[UUID] | None = Query(default=None),
+    activo: bool | None = Query(default=None),
+    q: str | None = Query(default=None, description="Busca en nombre, sku y código de barras"),
+    sucursal_id: list[UUID] | None = Query(
+        default=None, description="Acota stock/valor a esa(s) sucursal(es)"
+    ),
+    tipo: TipoProducto | None = Query(default=None),
+    permite_stock_negativo: bool | None = Query(default=None),
+    con_codigo_barras: bool | None = Query(
+        default=None, description="true=solo con código de barras, false=solo sin"
+    ),
+    precio_min: Decimal | None = Query(default=None, ge=0),
+    precio_max: Decimal | None = Query(default=None, ge=0),
+    costo_min: Decimal | None = Query(default=None, ge=0),
+    costo_max: Decimal | None = Query(default=None, ge=0),
+    solo_bajo_stock: bool = Query(default=False),
+):
+    for s in sucursal_id or ():
+        verificar_alcance_sucursal(actual, s)  # rol de sucursal no consulta otras
+    filtro = FiltroProductos(
+        categoria_id=categoria_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
+        tipo=tipo, permite_stock_negativo=permite_stock_negativo,
+        con_codigo_barras=con_codigo_barras,
+        precio_min=precio_min, precio_max=precio_max,
+        costo_min=costo_min, costo_max=costo_max, solo_bajo_stock=solo_bajo_stock,
+    )
+    kpis = await ProductoKpisUseCase(prod_repo(db)).ejecutar(filtro)
+    return ok(kpis)
+
+
+"""
     Endpoint para obtener un producto.
 
     @param producto_id: ID del producto.
@@ -167,10 +213,13 @@ async def actualizar_producto(
         producto = await ActualizarProductoUseCase(prod_repo(db), cat_repo(db)).ejecutar(
             ActualizarProductoInput(
                 producto_id=producto_id,
+                sku=body.sku,
                 nombre=body.nombre, descripcion=body.descripcion, categoria_id=body.categoria_id,
                 unidad_medida=body.unidad_medida, precio_venta=body.precio_venta, costo=body.costo,
-                impuesto_tasa=body.impuesto_tasa, permite_stock_negativo=body.permite_stock_negativo,
+                impuesto_tasa=body.impuesto_tasa, tipo=body.tipo,
+                permite_stock_negativo=body.permite_stock_negativo,
                 codigo_barras=body.codigo_barras, cambiar_codigo_barras=body.cambiar_codigo_barras,
+                cambiar_descripcion=body.cambiar_descripcion,
             )
         )
     except Exception as e:
@@ -200,6 +249,29 @@ async def desactivar_producto(
         producto = await DesactivarProductoUseCase(prod_repo(db), exist_repo(db)).ejecutar(
             producto_id, confirmar_con_stock=confirmar_con_stock
         )
+    except Exception as e:
+        raise traducir(e)
+    return ok(producto)
+
+
+"""
+    Endpoint para reactivar un producto dado de baja.
+
+    @param producto_id: ID del producto.
+    @param db: Sesión de la base de datos.
+    @param actual: Usuario autenticado.
+    @return: Instancia de la clase ProductoResponse.
+"""
+@router.patch(
+    "/productos/{producto_id}/activar", response_model=ApiResponse[ProductoResponse],
+)
+async def activar_producto(
+    producto_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
+):
+    try:
+        producto = await ReactivarProductoUseCase(prod_repo(db)).ejecutar(producto_id)
     except Exception as e:
         raise traducir(e)
     return ok(producto)

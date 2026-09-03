@@ -17,6 +17,7 @@ _ORM = ConfigDict(from_attributes=True)
 """
 class AplicarMovimientoRequest(BaseModel):
     producto_id: UUID
+    sucursal_id: UUID
     tipo: TipoMovimiento
     cantidad: Optional[Decimal] = Field(default=None, gt=0)
     cantidad_final: Optional[Decimal] = Field(default=None, ge=0)

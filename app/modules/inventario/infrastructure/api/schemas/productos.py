@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import EmbeddableModel
 from app.shared.schemas.embeds import CategoriaEmbed, ExistenciaEmbed
 
@@ -30,6 +31,7 @@ class CrearProductoRequest(BaseModel):
 """
 class ActualizarProductoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    sku: Optional[str] = Field(default=None, min_length=1, max_length=50)
     nombre: Optional[str] = Field(default=None, min_length=1, max_length=150)
     descripcion: Optional[str] = None
     categoria_id: Optional[UUID] = None
@@ -37,9 +39,39 @@ class ActualizarProductoRequest(BaseModel):
     precio_venta: Optional[Decimal] = Field(default=None, ge=0)
     costo: Optional[Decimal] = Field(default=None, ge=0)
     impuesto_tasa: Optional[Decimal] = Field(default=None, ge=0)
+    tipo: Optional[TipoProducto] = None
     permite_stock_negativo: Optional[bool] = None
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     cambiar_codigo_barras: bool = False
+    # Para dejar `descripcion` en NULL hay que mandarlo explícitamente.
+    cambiar_descripcion: bool = False
+
+"""
+    Response de KPIs del catálogo de productos (GET /productos/kpis).
+"""
+class ProductoKpisResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    total: int
+    activos: int
+    inactivos: int
+    por_tipo: dict[str, int]
+    con_codigo_barras: int
+    sin_codigo_barras: int
+    categorias_distintas: int
+    precio_venta_min: Optional[Decimal]
+    precio_venta_max: Optional[Decimal]
+    precio_venta_promedio: Optional[Decimal]
+    costo_min: Optional[Decimal]
+    costo_max: Optional[Decimal]
+    costo_promedio: Optional[Decimal]
+    margen_promedio: Optional[Decimal]
+    unidades_en_stock: Decimal
+    valor_inventario_costo: Decimal
+    valor_inventario_venta: Decimal
+    productos_con_existencia: int
+    productos_sin_existencia: int
+    bajo_stock: int
+
 
 """
     Response para un producto.
@@ -56,6 +88,7 @@ class ProductoResponse(EmbeddableModel):
     precio_venta: Decimal
     costo: Decimal
     impuesto_tasa: Decimal
+    tipo: TipoProducto
     permite_stock_negativo: bool
     activo: bool
     # Embebidas (?include=categoria,existencias)

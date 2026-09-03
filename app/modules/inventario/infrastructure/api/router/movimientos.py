@@ -47,8 +47,9 @@ async def aplicar_movimiento(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.movimiento")),
 ):
-    if not actual.sucursal_id:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="El usuario no tiene una sucursal asignada")
+    # La sucursal viaja en el body: un rol global (admin/gerente) opera sobre
+    # cualquiera; un rol de sucursal sólo sobre la suya (si pide otra => 403).
+    verificar_alcance_sucursal(actual, body.sucursal_id)
     if body.tipo == TipoMovimiento.TRANSFERENCIA:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -61,7 +62,7 @@ async def aplicar_movimiento(
     try:
         await use_case.ejecutar(AplicarMovimientoInput(
             producto_id=body.producto_id,
-            sucursal_id=actual.sucursal_id,
+            sucursal_id=body.sucursal_id,
             tipo=body.tipo,
             referencia_tipo=body.referencia_tipo,
             usuario_id=actual.id,

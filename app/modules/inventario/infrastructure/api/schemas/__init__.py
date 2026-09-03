@@ -7,6 +7,7 @@ from .productos import (
     CrearProductoRequest,
     ActualizarProductoRequest,
     ProductoResponse,
+    ProductoKpisResponse,
 )
 from .existencias import (
     ExistenciaResponse,
@@ -25,6 +26,7 @@ __all__ = [
     "CrearProductoRequest",
     "ActualizarProductoRequest",
     "ProductoResponse",
+    "ProductoKpisResponse",
     "ExistenciaResponse",
     "ConfigurarUmbralesRequest",
     "AplicarMovimientoRequest",

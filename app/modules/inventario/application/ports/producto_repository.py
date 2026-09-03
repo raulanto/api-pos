@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 from app.modules.inventario.domain.entities import Producto
-from app.modules.inventario.application.dtos import FiltroProductos
+from app.modules.inventario.application.dtos import FiltroProductos, ProductoKpis
 from app.shared.responses import Page, PageParams, Sort
 
 class ProductoRepository(ABC):
@@ -32,3 +32,6 @@ class ProductoRepository(ABC):
         orden: Sort,
         includes: frozenset[str] = frozenset(),
     ) -> Page: ...
+
+    @abstractmethod
+    async def kpis(self, filtro: FiltroProductos) -> ProductoKpis: ...
