@@ -77,3 +77,10 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
         viewonly=True,
         lazy="raise",
     )
+    # Presentaciones de venta adicionales (`?include=unidades`).
+    unidades = relationship(
+        "ProductoUnidadORM",
+        primaryjoin="ProductoORM.id == foreign(ProductoUnidadORM.producto_id)",
+        viewonly=True,
+        lazy="raise",
+    )

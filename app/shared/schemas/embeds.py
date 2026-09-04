@@ -91,3 +91,17 @@ class ComponenteEmbed(BaseModel):
     producto_componente_id: UUID
     cantidad: Decimal
     producto: Optional[ProductoEmbed] = None
+
+
+class UnidadEmbed(BaseModel):
+    """Presentación de venta de un producto (`?include=unidades`)."""
+    model_config = _ORM
+    id: UUID
+    producto_id: UUID
+    nombre: str
+    unidad_medida: str
+    factor: Decimal
+    unidades_por_base: Optional[Decimal] = None
+    precio_venta: Decimal
+    codigo_barras: Optional[str] = None
+    activo: bool

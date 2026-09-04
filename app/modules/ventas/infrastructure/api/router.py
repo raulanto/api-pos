@@ -137,7 +137,7 @@ async def crear_venta(
             LineaInput(
                 producto_id=l.producto_id, cantidad=l.cantidad,
                 precio_unitario=l.precio_unitario, descuento_linea=l.descuento_linea,
-                impuesto_tasa=l.impuesto_tasa,
+                impuesto_tasa=l.impuesto_tasa, producto_unidad_id=l.producto_unidad_id,
             ) for l in body.lineas
         ],
         pagos=[PagoInput(monto=p.monto, metodo_pago=p.metodo_pago) for p in body.pagos],

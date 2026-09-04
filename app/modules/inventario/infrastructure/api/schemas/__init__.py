@@ -12,6 +12,10 @@ from .productos import (
     ActualizarComponenteRequest,
     ReemplazarRecetaRequest,
     ComponenteResponse,
+    AgregarUnidadRequest,
+    ActualizarUnidadRequest,
+    UnidadResponse,
+    ResolucionCodigoResponse,
 )
 from .existencias import (
     ExistenciaResponse,
@@ -35,6 +39,10 @@ __all__ = [
     "ActualizarComponenteRequest",
     "ReemplazarRecetaRequest",
     "ComponenteResponse",
+    "AgregarUnidadRequest",
+    "ActualizarUnidadRequest",
+    "UnidadResponse",
+    "ResolucionCodigoResponse",
     "ExistenciaResponse",
     "ConfigurarUmbralesRequest",
     "AplicarMovimientoRequest",

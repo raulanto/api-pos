@@ -8,6 +8,7 @@ from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyCategoriaRepository,
     SqlAlchemyProductoRepository,
     SqlAlchemyProductoComponenteRepository,
+    SqlAlchemyProductoUnidadRepository,
     SqlAlchemyExistenciaRepository,
     SqlAlchemyMovimientoRepository,
 )
@@ -21,7 +22,7 @@ from app.modules.inventario.infrastructure.persistence.repositories import (
 """
 _NOT_FOUND = (
     exc.ProductoNoEncontrado, exc.CategoriaNoEncontrada, exc.ExistenciaNoEncontrada,
-    exc.MovimientoNoEncontrado, exc.ComponenteNoEncontrado,
+    exc.MovimientoNoEncontrado, exc.ComponenteNoEncontrado, exc.UnidadNoEncontrada,
 )
 
 
@@ -34,6 +35,7 @@ _NOT_FOUND = (
 _CONFLICT = (
     exc.CategoriaConProductosActivos, exc.ProductoConStockActivo,
     exc.ComponenteDuplicado, exc.ProductoEsComponenteDeKit,
+    exc.UnidadDuplicada, exc.CodigoBarrasUnidadDuplicado,
 )
 
 
@@ -46,7 +48,8 @@ _CONFLICT = (
 _BAD_REQUEST = (
     exc.SkuDuplicado, exc.CodigoBarrasDuplicado, exc.StockInsuficiente,
     exc.AjusteSinCantidadFinal, exc.TransferenciaInvalida, exc.JerarquiaCategoriaInvalida,
-    exc.ProductoInactivo, exc.KitInvalido, exc.ComponenteInvalido, ValueError,
+    exc.ProductoInactivo, exc.KitInvalido, exc.ComponenteInvalido, exc.UnidadInvalida,
+    ValueError,
 )
 
 
@@ -109,6 +112,16 @@ def prod_repo(db):
 """
 def comp_repo(db):
     return SqlAlchemyProductoComponenteRepository(db)
+
+
+"""
+    Fábrica de repositorio de presentaciones de venta (producto_unidad).
+
+    @param db: Sesión de la base de datos.
+    @return: Instancia de la clase SqlAlchemyProductoUnidadRepository.
+"""
+def unidad_repo(db):
+    return SqlAlchemyProductoUnidadRepository(db)
 
 
 """

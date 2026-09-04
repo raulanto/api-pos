@@ -41,10 +41,12 @@ class Producto:
     activo: bool
     created_at: datetime = field(default_factory=datetime.utcnow)
 
-    # Relaciones embebidas opcionales (`?include=categoria,existencias,componentes`).
+    # Relaciones embebidas opcionales
+    # (`?include=categoria,existencias,componentes,unidades`).
     categoria: object | None = field(default=None, compare=False, repr=False)
     existencias: object | None = field(default=None, compare=False, repr=False)
     componentes: object | None = field(default=None, compare=False, repr=False)
+    unidades: object | None = field(default=None, compare=False, repr=False)
 
 
     """

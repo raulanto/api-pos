@@ -1,9 +1,10 @@
 from app.modules.inventario.domain.entities import (
-    Categoria, Producto, ProductoComponente, Existencia, MovimientoInventario,
+    Categoria, Producto, ProductoComponente, ProductoUnidad, Existencia, MovimientoInventario,
 )
 from app.modules.inventario.domain.value_objects import TipoProducto, TipoMovimiento
 from app.modules.inventario.infrastructure.persistence.orm_models import (
-    CategoriaORM, ProductoORM, ProductoComponenteORM, ExistenciaORM, MovimientoInventarioORM,
+    CategoriaORM, ProductoORM, ProductoComponenteORM, ProductoUnidadORM,
+    ExistenciaORM, MovimientoInventarioORM,
 )
 
 """
@@ -83,7 +84,28 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         # Sólo las líneas de la receta; el producto de cada componente se
         # consulta con GET /productos/{kit}/componentes?include=producto.
         producto.componentes = [to_domain_componente(c) for c in orm.componentes]
+    if "unidades" in includes:
+        producto.unidades = [
+            to_domain_unidad(u) for u in orm.unidades if u.activo
+        ]
     return producto
+
+
+"""
+    Transforma una presentación (producto_unidad) ORM a entidad de dominio.
+"""
+def to_domain_unidad(orm: ProductoUnidadORM) -> ProductoUnidad:
+    return ProductoUnidad(
+        id=orm.id,
+        producto_id=orm.producto_id,
+        nombre=orm.nombre,
+        unidad_medida=orm.unidad_medida,
+        factor=orm.factor,
+        precio_venta=orm.precio_venta,
+        codigo_barras=orm.codigo_barras,
+        activo=orm.activo,
+        created_at=orm.created_at,
+    )
 
 
 """

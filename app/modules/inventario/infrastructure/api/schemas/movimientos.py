@@ -27,6 +27,9 @@ class AplicarMovimientoRequest(BaseModel):
     motivo: Optional[str] = Field(default=None, max_length=255)
     stock_minimo: Optional[Decimal] = Field(default=None, ge=0)
     stock_maximo: Optional[Decimal] = Field(default=None, ge=0)
+    # Precios volátiles (opcional): empujar costo/precio al producto.
+    actualizar_costo: bool = False                       # ENTRADA + costo_unitario
+    nuevo_precio_venta: Optional[Decimal] = Field(default=None, ge=0)
 
 
 """

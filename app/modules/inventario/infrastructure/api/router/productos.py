@@ -26,14 +26,18 @@ from app.modules.inventario.application.use_cases.gestionar_productos import (
 from app.modules.inventario.infrastructure.api.schemas import (
     CrearProductoRequest, ActualizarProductoRequest, ProductoResponse, ProductoKpisResponse,
 )
-from .common import prod_repo, cat_repo, exist_repo, comp_repo, traducir, traducir_create
+from .common import (
+    prod_repo, cat_repo, exist_repo, comp_repo, unidad_repo, traducir, traducir_create,
+)
 
 router = APIRouter(route_class=EnvelopeRoute)
 
 _ORDEN_PRODUCTOS = make_sort_dependency(
     {"nombre", "sku", "precio_venta", "created_at"}, "nombre:asc"
 )
-_INC_PRODUCTOS = make_include_dependency({"categoria", "existencias", "componentes"})
+_INC_PRODUCTOS = make_include_dependency(
+    {"categoria", "existencias", "componentes", "unidades"}
+)
 
 """
     Endpoint para crear un producto.
@@ -211,7 +215,7 @@ async def actualizar_producto(
 ):
     try:
         producto = await ActualizarProductoUseCase(
-            prod_repo(db), cat_repo(db), comp_repo(db),
+            prod_repo(db), cat_repo(db), comp_repo(db), unidad_repo(db),
         ).ejecutar(
             ActualizarProductoInput(
                 producto_id=producto_id,

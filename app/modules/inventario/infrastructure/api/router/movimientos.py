@@ -73,6 +73,8 @@ async def aplicar_movimiento(
             motivo=body.motivo,
             stock_minimo=body.stock_minimo,
             stock_maximo=body.stock_maximo,
+            actualizar_costo=body.actualizar_costo,
+            nuevo_precio_venta=body.nuevo_precio_venta,
         ))
     except Exception as e:
         raise traducir(e)

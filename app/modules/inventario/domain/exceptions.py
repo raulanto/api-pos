@@ -61,3 +61,19 @@ class ComponenteNoEncontrado(Exception):
 class ProductoEsComponenteDeKit(Exception):
     """No se puede desactivar un producto que es componente de un kit activo."""
     pass
+
+class UnidadNoEncontrada(Exception):
+    """La presentación (producto_unidad) pedida no existe para ese producto."""
+    pass
+
+class UnidadInvalida(Exception):
+    """`factor` <= 0, o se intenta ponerle presentaciones a un kit."""
+    pass
+
+class UnidadDuplicada(Exception):
+    """Ya existe una presentación con ese nombre para el producto."""
+    pass
+
+class CodigoBarrasUnidadDuplicado(Exception):
+    """El código de barras ya lo usa otro producto o presentación."""
+    pass

@@ -22,6 +22,7 @@ class LineaInput:
     precio_unitario: Decimal
     descuento_linea: Decimal = Decimal("0")
     impuesto_tasa: Decimal = Decimal("0")
+    producto_unidad_id: UUID | None = None   # None = unidad base
 
 @dataclass
 class PagoInput:
@@ -76,6 +77,7 @@ class CrearVentaUseCase:
                 precio_unitario=l.precio_unitario,
                 descuento_linea=l.descuento_linea,
                 impuesto_tasa=l.impuesto_tasa,
+                producto_unidad_id=l.producto_unidad_id,
             )
             for l in data.lineas
         ]
@@ -119,6 +121,7 @@ class CrearVentaUseCase:
                 cantidad=linea.cantidad,
                 referencia_venta_id=venta.id,
                 usuario_id=data.usuario_id,
+                producto_unidad_id=linea.producto_unidad_id,
             )
 
         await self._event_port.publicar("VentaCreada", {

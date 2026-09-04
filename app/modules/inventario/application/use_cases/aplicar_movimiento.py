@@ -30,6 +30,9 @@ class AplicarMovimientoInput:
     # Sólo se usan al crear la existencia por primera vez.
     stock_minimo: Decimal | None = None
     stock_maximo: Decimal | None = None
+    # Precios volátiles: un movimiento puede "empujar" costo/precio al producto.
+    actualizar_costo: bool = False            # ENTRADA: producto.costo = costo_unitario
+    nuevo_precio_venta: Decimal | None = None  # cualquier tipo: fija producto.precio_venta
 
 
 class AplicarMovimientoUseCase:
@@ -108,7 +111,26 @@ class AplicarMovimientoUseCase:
                 data.producto_id, data.sucursal_id, nuevo_saldo
             )
 
+        await self._quiza_actualizar_precios(producto, data)
         await self._publicar_auditoria(data, movimiento, cantidad_actual, nuevo_saldo)
+
+    async def _quiza_actualizar_precios(self, producto, data: AplicarMovimientoInput) -> None:
+        """Precios volátiles: el movimiento puede empujar costo/precio al producto."""
+        cambio = False
+        if data.actualizar_costo:
+            if data.costo_unitario is None:
+                raise ValueError("`actualizar_costo` requiere `costo_unitario`.")
+            if data.tipo != TipoMovimiento.ENTRADA:
+                raise ValueError("Sólo un movimiento de ENTRADA puede actualizar el costo.")
+            producto.actualizar(costo=data.costo_unitario)
+            cambio = True
+        if data.nuevo_precio_venta is not None:
+            if data.nuevo_precio_venta < 0:
+                raise ValueError("`nuevo_precio_venta` no puede ser negativo.")
+            producto.actualizar(precio_venta=data.nuevo_precio_venta)
+            cambio = True
+        if cambio:
+            await self._producto_repo.actualizar(producto)
 
     async def _publicar_auditoria(
         self,
@@ -135,6 +157,12 @@ class AplicarMovimientoUseCase:
                 "referencia_tipo": data.referencia_tipo,
                 "referencia_id": str(data.referencia_id) if data.referencia_id else None,
                 "motivo": data.motivo,
+                "costo_actualizado": (
+                    str(data.costo_unitario) if data.actualizar_costo else None
+                ),
+                "precio_venta_actualizado": (
+                    str(data.nuevo_precio_venta) if data.nuevo_precio_venta is not None else None
+                ),
             },
         })
 

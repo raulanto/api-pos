@@ -44,6 +44,9 @@ class DetalleVentaORM(Base):
     precio_unitario = Column(Numeric(12, 2), nullable=False)
     descuento_linea = Column(Numeric(12, 2), nullable=False, default=0)
     impuesto_tasa = Column(Numeric(5, 2), nullable=False, default=0)
+    producto_unidad_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("producto_unidad.id"), nullable=True
+    )
 
 class PagoORM(Base, TimestampMixin):
     __tablename__ = "pago"

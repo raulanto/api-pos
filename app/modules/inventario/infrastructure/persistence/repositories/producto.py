@@ -73,6 +73,8 @@ def _opts_producto(includes: frozenset[str], sucursal_ids: list[UUID] | None = N
         opts.append(selectinload(rel))
     if "componentes" in includes:
         opts.append(selectinload(ProductoORM.componentes))
+    if "unidades" in includes:
+        opts.append(selectinload(ProductoORM.unidades))
     return opts
 
 """

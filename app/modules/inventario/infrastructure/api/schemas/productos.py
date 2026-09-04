@@ -6,7 +6,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import EmbeddableModel
-from app.shared.schemas.embeds import CategoriaEmbed, ComponenteEmbed, ExistenciaEmbed, ProductoEmbed
+from app.shared.schemas.embeds import (
+    CategoriaEmbed, ComponenteEmbed, ExistenciaEmbed, ProductoEmbed, UnidadEmbed,
+)
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -77,7 +79,9 @@ class ProductoKpisResponse(BaseModel):
     Response para un producto.
 """
 class ProductoResponse(EmbeddableModel):
-    _embed_fields: ClassVar[tuple[str, ...]] = ("categoria", "existencias", "componentes")
+    _embed_fields: ClassVar[tuple[str, ...]] = (
+        "categoria", "existencias", "componentes", "unidades",
+    )
     id: UUID
     sku: str
     codigo_barras: Optional[str]
@@ -91,10 +95,11 @@ class ProductoResponse(EmbeddableModel):
     tipo: TipoProducto
     permite_stock_negativo: bool
     activo: bool
-    # Embebidas (?include=categoria,existencias,componentes)
+    # Embebidas (?include=categoria,existencias,componentes,unidades)
     categoria: Optional[CategoriaEmbed] = None
     existencias: Optional[list[ExistenciaEmbed]] = None
     componentes: Optional[list[ComponenteEmbed]] = None
+    unidades: Optional[list[UnidadEmbed]] = None
 
 
 # --------------------------------------------------------------------------- #
@@ -128,4 +133,53 @@ class ComponenteResponse(BaseModel):
     producto_componente_id: UUID
     cantidad: Decimal
     producto: Optional[ProductoEmbed] = None
+
+
+# --------------------------------------------------------------------------- #
+# Presentaciones de venta (producto_unidad)
+# --------------------------------------------------------------------------- #
+class AgregarUnidadRequest(BaseModel):
+    """`factor` = unidades base por 1 presentación (Reja x24 => 24).
+    `unidades_por_base` = su recíproco (6 latas por reja => 6). Indicá uno."""
+    model_config = ConfigDict(extra="forbid")
+    nombre: str = Field(min_length=1, max_length=50)
+    unidad_medida: str = Field(min_length=1, max_length=20)
+    precio_venta: Decimal = Field(ge=0)
+    factor: Optional[Decimal] = Field(default=None, gt=0)
+    unidades_por_base: Optional[Decimal] = Field(default=None, gt=0)
+    codigo_barras: Optional[str] = Field(default=None, max_length=50)
+
+
+class ActualizarUnidadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nombre: Optional[str] = Field(default=None, min_length=1, max_length=50)
+    unidad_medida: Optional[str] = Field(default=None, min_length=1, max_length=20)
+    factor: Optional[Decimal] = Field(default=None, gt=0)
+    unidades_por_base: Optional[Decimal] = Field(default=None, gt=0)
+    precio_venta: Optional[Decimal] = Field(default=None, ge=0)
+    codigo_barras: Optional[str] = Field(default=None, max_length=50)
+    cambiar_codigo_barras: bool = False
+
+
+class UnidadResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    producto_id: UUID
+    nombre: str
+    unidad_medida: str
+    factor: Decimal
+    unidades_por_base: Optional[Decimal] = None
+    precio_venta: Decimal
+    codigo_barras: Optional[str]
+    activo: bool
+
+
+class ResolucionCodigoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    producto_id: UUID
+    unidad_id: Optional[UUID]
+    nombre_unidad: str
+    unidad_medida: str
+    factor: Decimal
+    precio_venta: Decimal
 

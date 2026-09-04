@@ -69,6 +69,7 @@ class AnularVentaUseCase:
                 cantidad=linea.cantidad,
                 referencia_venta_id=venta.id,
                 usuario_id=data.usuario_id,
+                producto_unidad_id=linea.producto_unidad_id,
             )
 
         # 2) Revertir crédito consumido, si la venta dejó saldo a crédito.

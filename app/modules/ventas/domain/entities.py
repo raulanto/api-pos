@@ -16,14 +16,18 @@ class DetalleVenta:
     precio_unitario: Decimal
     descuento_linea: Decimal = Decimal("0")
     impuesto_tasa: Decimal = Decimal("0")
+    # Presentación vendida (producto_unidad). None = unidad base (factor 1).
+    producto_unidad_id: UUID | None = None
 
     @staticmethod
     def crear(producto_id: UUID, cantidad: Decimal, precio_unitario: Decimal,
-              descuento_linea: Decimal = Decimal("0"), impuesto_tasa: Decimal = Decimal("0")) -> "DetalleVenta":
+              descuento_linea: Decimal = Decimal("0"), impuesto_tasa: Decimal = Decimal("0"),
+              producto_unidad_id: UUID | None = None) -> "DetalleVenta":
         return DetalleVenta(
             id=uuid4(), venta_id=uuid4(), # venta_id is a placeholder until attached to Venta
             producto_id=producto_id, cantidad=cantidad, precio_unitario=precio_unitario,
-            descuento_linea=descuento_linea, impuesto_tasa=impuesto_tasa
+            descuento_linea=descuento_linea, impuesto_tasa=impuesto_tasa,
+            producto_unidad_id=producto_unidad_id,
         )
 
     @property

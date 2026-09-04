@@ -21,6 +21,8 @@ class LineaVentaRequest(BaseModel):
     precio_unitario: Decimal = Field(ge=0)
     descuento_linea: Decimal = Field(default=Decimal("0"), ge=0)
     impuesto_tasa: Decimal = Field(default=Decimal("0"), ge=0)
+    # Presentación vendida (producto_unidad). Omitir = unidad base.
+    producto_unidad_id: Optional[UUID] = None
 
 
 class PagoRequest(BaseModel):
@@ -45,6 +47,7 @@ class LineaVentaResponse(BaseModel):
     model_config = _ORM
     id: UUID
     producto_id: UUID
+    producto_unidad_id: Optional[UUID] = None
     cantidad: Decimal
     precio_unitario: Decimal
     descuento_linea: Decimal

@@ -16,6 +16,9 @@ from app.modules.inventario.application.ports.existencia_repository import Exist
 from app.modules.inventario.application.ports.componente_repository import (
     ProductoComponenteRepository,
 )
+from app.modules.inventario.application.ports.unidad_repository import (
+    ProductoUnidadRepository,
+)
 from app.modules.inventario.application.use_cases.crear_producto import _traducir_integridad
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import Page, PageParams, Sort
@@ -95,10 +98,12 @@ class ActualizarProductoUseCase:
         producto_repo: ProductoRepository,
         categoria_repo: CategoriaRepository,
         componente_repo: ProductoComponenteRepository,
+        unidad_repo: ProductoUnidadRepository,
     ):
         self._repo = producto_repo
         self._categoria_repo = categoria_repo
         self._componente_repo = componente_repo
+        self._unidad_repo = unidad_repo
 
     async def ejecutar(self, data: ActualizarProductoInput) -> Producto:
         producto = await self._repo.obtener_por_id(data.producto_id)
@@ -118,6 +123,15 @@ class ActualizarProductoUseCase:
         ):
             raise KitInvalido(
                 "El kit tiene componentes; quitalos antes de cambiar el `tipo` a 'simple'."
+            )
+        if (
+            data.tipo == TipoProducto.KIT
+            and producto.tipo != TipoProducto.KIT
+            and await self._unidad_repo.listar_por_producto(producto.id)
+        ):
+            raise KitInvalido(
+                "El producto tiene presentaciones de venta; eliminalas antes de "
+                "convertirlo en kit."
             )
 
         if data.sku is not None and data.sku != producto.sku:
