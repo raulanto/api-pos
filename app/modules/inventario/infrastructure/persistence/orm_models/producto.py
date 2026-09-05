@@ -56,14 +56,30 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     descripcion = Column(String, nullable=True)
     categoria_id = Column(PGUUID(as_uuid=True), ForeignKey("categoria.id"), nullable=False)
     unidad_medida = Column(String(20), nullable=False)
+    # FK al catálogo normalizado (nullable mientras dure el backfill por texto).
+    unidad_medida_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("unidad_medida.id"), nullable=True
+    )
     precio_venta = Column(Numeric(12, 2), nullable=False)
     costo = Column(Numeric(12, 2), nullable=False)
     impuesto_tasa = Column(Numeric(5, 2), nullable=False)
     tipo = Column(String(20), nullable=False)
     permite_stock_negativo = Column(Boolean, default=False, nullable=False)
+    # Venta fraccionada: si admite cantidades no enteras de la unidad base y, si
+    # se define, el múltiplo obligatorio de toda cantidad vendida.
+    permite_venta_fraccionada = Column(Boolean, default=False, nullable=False)
+    incremento_minimo_venta = Column(Numeric(14, 4), nullable=True)
+    # Control por lote (código + caducidad + costo por lote, FEFO en salidas).
+    requiere_lote = Column(Boolean, default=False, nullable=False)
 
     # Solo lectura, para `?include=categoria,existencias,componentes`.
     categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")
+    unidad = relationship(
+        "UnidadMedidaORM",
+        primaryjoin="foreign(ProductoORM.unidad_medida_id) == UnidadMedidaORM.id",
+        viewonly=True,
+        lazy="raise",
+    )
     existencias = relationship(
         "ExistenciaORM",
         primaryjoin="ProductoORM.id == foreign(ExistenciaORM.producto_id)",
@@ -82,5 +98,24 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
         "ProductoUnidadORM",
         primaryjoin="ProductoORM.id == foreign(ProductoUnidadORM.producto_id)",
         viewonly=True,
+        lazy="raise",
+    )
+    # Galería de imágenes propias del producto (`?include=imagenes`).
+    imagenes = relationship(
+        "ProductoImagenORM",
+        primaryjoin="ProductoORM.id == foreign(ProductoImagenORM.producto_id)",
+        viewonly=True,
+        lazy="raise",
+    )
+    # La imagen marcada como portada (`es_principal`). Siempre se carga (no
+    # depende de `?include=`): es un campo estándar de ProductoResponse.
+    imagen_principal = relationship(
+        "ProductoImagenORM",
+        primaryjoin=(
+            "and_(ProductoORM.id == foreign(ProductoImagenORM.producto_id), "
+            "ProductoImagenORM.es_principal.is_(True))"
+        ),
+        viewonly=True,
+        uselist=False,
         lazy="raise",
     )

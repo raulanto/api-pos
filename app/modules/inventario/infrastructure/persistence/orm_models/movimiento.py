@@ -32,12 +32,20 @@ class MovimientoInventarioORM(Base, TimestampMixin):
     producto_id = Column(PGUUID(as_uuid=True), ForeignKey("producto.id"), nullable=False)
     sucursal_id = Column(PGUUID(as_uuid=True), ForeignKey("sucursal.id"), nullable=False)
     tipo = Column(String(20), nullable=False)
-    cantidad = Column(Numeric(12, 2), nullable=False)
+    cantidad = Column(Numeric(14, 4), nullable=False)
     costo_unitario = Column(Numeric(12, 2), nullable=True)
     referencia_tipo = Column(String(20), nullable=False)
     referencia_id = Column(PGUUID(as_uuid=True), nullable=True)
     usuario_id = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=False)
     motivo = Column(String(255), nullable=True)
+    # Trazabilidad: presentación y cantidad tal como se capturaron, antes de
+    # convertir a la unidad base (`cantidad`). NULL => se capturó en unidad base.
+    unidad_capturada_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("producto_unidad.id"), nullable=True
+    )
+    cantidad_capturada = Column(Numeric(14, 4), nullable=True)
+    # Lote afectado (productos con control por lote). NULL = sin control por lote.
+    lote_id = Column(PGUUID(as_uuid=True), ForeignKey("lote.id"), nullable=True)
 
     # Solo lectura, para `?include=producto,usuario`.
     producto = relationship("ProductoORM", viewonly=True, lazy="raise")

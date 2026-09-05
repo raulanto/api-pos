@@ -5,6 +5,7 @@ from sqlalchemy import select, update, func, or_
 from sqlalchemy.orm import selectinload
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
 from app.modules.inventario.application.dtos import FiltroProductos, ProductoKpis
+from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.domain.entities import Producto
 from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM, ExistenciaORM
@@ -62,7 +63,9 @@ def _condiciones_producto(filtro: FiltroProductos) -> list:
 
 
 def _opts_producto(includes: frozenset[str], sucursal_ids: list[UUID] | None = None):
-    opts = []
+    # `imagen_principal` es un campo estándar de la respuesta: se carga
+    # siempre, sin depender de `?include=`.
+    opts = [selectinload(ProductoORM.imagen_principal)]
     if "categoria" in includes:
         opts.append(selectinload(ProductoORM.categoria))
     if "existencias" in includes:
@@ -75,6 +78,8 @@ def _opts_producto(includes: frozenset[str], sucursal_ids: list[UUID] | None = N
         opts.append(selectinload(ProductoORM.componentes))
     if "unidades" in includes:
         opts.append(selectinload(ProductoORM.unidades))
+    if "imagenes" in includes:
+        opts.append(selectinload(ProductoORM.imagenes))
     return opts
 
 """
@@ -123,11 +128,14 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 descripcion=producto.descripcion,
                 categoria_id=producto.categoria_id,
                 unidad_medida=producto.unidad_medida,
+                unidad_medida_id=producto.unidad_medida_id,
                 precio_venta=producto.precio_venta,
                 costo=producto.costo,
                 impuesto_tasa=producto.impuesto_tasa,
                 tipo=producto.tipo.value,
                 permite_stock_negativo=producto.permite_stock_negativo,
+                permite_venta_fraccionada=producto.permite_venta_fraccionada,
+                incremento_minimo_venta=producto.incremento_minimo_venta,
                 codigo_barras=producto.codigo_barras,
                 activo=producto.activo,
             )
@@ -160,7 +168,9 @@ class SqlAlchemyProductoRepository(ProductoRepository):
         - Producto | None
     """
     async def buscar_por_sku(self, sku: str, solo_activos: bool = True) -> Producto | None:
-        stmt = select(ProductoORM).where(ProductoORM.sku == sku)
+        stmt = select(ProductoORM).options(*_opts_producto(frozenset())).where(
+            ProductoORM.sku == sku
+        )
         if solo_activos:
             stmt = stmt.where(ProductoORM.activo.is_(True))
         orm = (await self._db.execute(stmt)).scalars().first()
@@ -178,7 +188,9 @@ class SqlAlchemyProductoRepository(ProductoRepository):
     async def buscar_por_codigo_barras(
         self, codigo_barras: str, solo_activos: bool = True
     ) -> Producto | None:
-        stmt = select(ProductoORM).where(ProductoORM.codigo_barras == codigo_barras)
+        stmt = select(ProductoORM).options(*_opts_producto(frozenset())).where(
+            ProductoORM.codigo_barras == codigo_barras
+        )
         if solo_activos:
             stmt = stmt.where(ProductoORM.activo.is_(True))
         orm = (await self._db.execute(stmt)).scalars().first()
@@ -236,8 +248,6 @@ class SqlAlchemyProductoRepository(ProductoRepository):
             select(
                 func.count(),
                 func.count().filter(P.activo.is_(True)),
-                func.count().filter(P.tipo == "simple"),
-                func.count().filter(P.tipo == "kit"),
                 func.count().filter(P.codigo_barras.isnot(None)),
                 func.count(func.distinct(P.categoria_id)),
                 func.min(P.precio_venta), func.max(P.precio_venta), func.avg(P.precio_venta),
@@ -248,7 +258,15 @@ class SqlAlchemyProductoRepository(ProductoRepository):
 
         total = int(c[0] or 0)
         activos = int(c[1] or 0)
-        con_cb = int(c[4] or 0)
+        con_cb = int(c[2] or 0)
+
+        # Conteo por tipo (robusto ante cualquier valor del enum TipoProducto).
+        filas_tipo = (await self._db.execute(
+            select(P.tipo, func.count()).select_from(P).where(*cond).group_by(P.tipo)
+        )).all()
+        por_tipo = {t.value: 0 for t in TipoProducto}
+        for tipo_val, n in filas_tipo:
+            por_tipo[tipo_val] = int(n or 0)
 
         # --- Valuación de stock (tabla existencia), acotada a esos productos y sucursales ---
         ids_sub = select(P.id).where(*cond).scalar_subquery()
@@ -279,17 +297,17 @@ class SqlAlchemyProductoRepository(ProductoRepository):
             total=total,
             activos=activos,
             inactivos=total - activos,
-            por_tipo={"simple": int(c[2] or 0), "kit": int(c[3] or 0)},
+            por_tipo=por_tipo,
             con_codigo_barras=con_cb,
             sin_codigo_barras=total - con_cb,
-            categorias_distintas=int(c[5] or 0),
-            precio_venta_min=d2(c[6]),
-            precio_venta_max=d2(c[7]),
-            precio_venta_promedio=d2(c[8]),
-            costo_min=d2(c[9]),
-            costo_max=d2(c[10]),
-            costo_promedio=d2(c[11]),
-            margen_promedio=d2(c[12]),
+            categorias_distintas=int(c[3] or 0),
+            precio_venta_min=d2(c[4]),
+            precio_venta_max=d2(c[5]),
+            precio_venta_promedio=d2(c[6]),
+            costo_min=d2(c[7]),
+            costo_max=d2(c[8]),
+            costo_promedio=d2(c[9]),
+            margen_promedio=d2(c[10]),
             unidades_en_stock=d2(e[0]) or Decimal("0.00"),
             valor_inventario_costo=d2(e[1]) or Decimal("0.00"),
             valor_inventario_venta=d2(e[2]) or Decimal("0.00"),

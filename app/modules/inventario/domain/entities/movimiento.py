@@ -34,6 +34,13 @@ class MovimientoInventario:
     usuario_id: UUID
     motivo: str | None
     created_at: datetime = field(default_factory=datetime.utcnow)
+    # Trazabilidad de la unidad tal como se capturó (escáner / línea de venta),
+    # antes de convertir a la unidad base con la que se lleva el stock.
+    unidad_capturada_id: UUID | None = None
+    cantidad_capturada: Decimal | None = None
+    # Lote afectado (sólo productos con control por lote). Una salida FEFO que
+    # toca varios lotes genera un movimiento por lote.
+    lote_id: UUID | None = None
 
     # Relaciones embebidas opcionales (`?include=producto,usuario`).
     producto: object | None = field(default=None, compare=False, repr=False)
@@ -59,11 +66,14 @@ class MovimientoInventario:
     def crear(
         producto_id: UUID, sucursal_id: UUID, tipo: TipoMovimiento, cantidad: Decimal,
         referencia_tipo: str, usuario_id: UUID, referencia_id: UUID | None = None,
-        costo_unitario: Decimal | None = None, motivo: str | None = None
+        costo_unitario: Decimal | None = None, motivo: str | None = None,
+        unidad_capturada_id: UUID | None = None,
+        cantidad_capturada: Decimal | None = None,
+        lote_id: UUID | None = None,
     ) -> "MovimientoInventario":
         if cantidad < 0:
             raise ValueError("La cantidad del movimiento debe ser siempre positiva.")
-        
+
         return MovimientoInventario(
             id=uuid4(),
             producto_id=producto_id,
@@ -74,5 +84,8 @@ class MovimientoInventario:
             referencia_tipo=referencia_tipo,
             referencia_id=referencia_id,
             usuario_id=usuario_id,
-            motivo=motivo
+            motivo=motivo,
+            unidad_capturada_id=unidad_capturada_id,
+            cantidad_capturada=cantidad_capturada,
+            lote_id=lote_id,
         )

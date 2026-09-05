@@ -49,6 +49,7 @@ class LineaVentaResponse(BaseModel):
     producto_id: UUID
     producto_unidad_id: Optional[UUID] = None
     cantidad: Decimal
+    cantidad_en_unidad_base: Optional[Decimal] = None
     precio_unitario: Decimal
     descuento_linea: Decimal
     impuesto_tasa: Decimal

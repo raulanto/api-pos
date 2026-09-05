@@ -67,6 +67,21 @@ class SqlAlchemyMovimientoRepository(MovimientoRepository):
         )).scalar_one_or_none()
         return to_domain_movimiento(orm, includes) if orm else None
 
+    async def listar_por_referencia(
+        self, referencia_id: UUID, tipo=None, referencia_tipo: str | None = None,
+    ) -> list[MovimientoInventario]:
+        stmt = select(MovimientoInventarioORM).where(
+            MovimientoInventarioORM.referencia_id == referencia_id
+        )
+        if tipo is not None:
+            stmt = stmt.where(MovimientoInventarioORM.tipo == tipo.value)
+        if referencia_tipo is not None:
+            stmt = stmt.where(MovimientoInventarioORM.referencia_tipo == referencia_tipo)
+        filas = (await self._db.execute(
+            stmt.order_by(MovimientoInventarioORM.created_at.asc())
+        )).scalars().all()
+        return [to_domain_movimiento(f) for f in filas]
+
     """
         Lista los movimientos.
         @params:

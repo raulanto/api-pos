@@ -6,9 +6,12 @@ from app.core.dependencies import UsuarioAutenticado, sucursal_scope
 from app.modules.inventario.domain import exceptions as exc
 from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyCategoriaRepository,
+    SqlAlchemyUnidadMedidaRepository,
     SqlAlchemyProductoRepository,
     SqlAlchemyProductoComponenteRepository,
     SqlAlchemyProductoUnidadRepository,
+    SqlAlchemyImagenRepository,
+    SqlAlchemyLoteRepository,
     SqlAlchemyExistenciaRepository,
     SqlAlchemyMovimientoRepository,
 )
@@ -23,6 +26,7 @@ from app.modules.inventario.infrastructure.persistence.repositories import (
 _NOT_FOUND = (
     exc.ProductoNoEncontrado, exc.CategoriaNoEncontrada, exc.ExistenciaNoEncontrada,
     exc.MovimientoNoEncontrado, exc.ComponenteNoEncontrado, exc.UnidadNoEncontrada,
+    exc.UnidadMedidaNoEncontrada, exc.ImagenNoEncontrada, exc.LoteNoEncontrado,
 )
 
 
@@ -36,6 +40,8 @@ _CONFLICT = (
     exc.CategoriaConProductosActivos, exc.ProductoConStockActivo,
     exc.ComponenteDuplicado, exc.ProductoEsComponenteDeKit,
     exc.UnidadDuplicada, exc.CodigoBarrasUnidadDuplicado,
+    exc.UnidadMedidaDuplicada, exc.UnidadMedidaEnUso,
+    exc.LoteDuplicado,
 )
 
 
@@ -49,6 +55,7 @@ _BAD_REQUEST = (
     exc.SkuDuplicado, exc.CodigoBarrasDuplicado, exc.StockInsuficiente,
     exc.AjusteSinCantidadFinal, exc.TransferenciaInvalida, exc.JerarquiaCategoriaInvalida,
     exc.ProductoInactivo, exc.KitInvalido, exc.ComponenteInvalido, exc.UnidadInvalida,
+    exc.CantidadNoVendible, exc.ImagenInvalida, exc.LoteRequerido, exc.LoteInvalido,
     ValueError,
 )
 
@@ -95,6 +102,16 @@ def cat_repo(db):
 
 
 """
+    Fábrica de repositorio del catálogo de unidades de medida.
+
+    @param db: Sesión de la base de datos.
+    @return: Instancia de la clase SqlAlchemyUnidadMedidaRepository.
+"""
+def um_repo(db):
+    return SqlAlchemyUnidadMedidaRepository(db)
+
+
+"""
     Fábrica de repositorio de productos.
 
     @param db: Sesión de la base de datos.
@@ -122,6 +139,26 @@ def comp_repo(db):
 """
 def unidad_repo(db):
     return SqlAlchemyProductoUnidadRepository(db)
+
+
+"""
+    Fábrica de repositorio de la galería de imágenes.
+
+    @param db: Sesión de la base de datos.
+    @return: Instancia de la clase SqlAlchemyImagenRepository.
+"""
+def imagen_repo(db):
+    return SqlAlchemyImagenRepository(db)
+
+
+"""
+    Fábrica de repositorio de lotes (catálogo `lote` + saldo `existencia_lote`).
+
+    @param db: Sesión de la base de datos.
+    @return: Instancia de la clase SqlAlchemyLoteRepository.
+"""
+def lote_repo(db):
+    return SqlAlchemyLoteRepository(db)
 
 
 """

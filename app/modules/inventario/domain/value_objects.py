@@ -19,10 +19,38 @@ class TipoMovimiento(str, Enum):
 
 """
     Enum para los tipos de producto.
-    @param SIMPLE: Producto simple.
-    @param KIT: Kit de productos.
+    @param SIMPLE: Producto unitario común (se vende de a piezas enteras).
+    @param FRACCIONABLE: Se vende en fracciones de la unidad base (litros, kg,
+        metros) y/o en presentaciones (`producto_unidad`).
+    @param KIT: Se arma con otros productos (BOM); no lleva stock propio.
+    @param SERVICIO: No mueve inventario (mano de obra, envíos, cargos).
     @return: Instancia de la clase TipoProducto.
 """
 class TipoProducto(str, Enum):
     SIMPLE = "simple"
+    FRACCIONABLE = "fraccionable"
     KIT = "kit"
+    SERVICIO = "servicio"
+
+    @property
+    def mueve_stock(self) -> bool:
+        """SERVICIO no descuenta ni repone existencia."""
+        return self is not TipoProducto.SERVICIO
+
+
+"""
+    Enum para la magnitud física que mide una unidad del catálogo.
+    Sirve para agrupar unidades convertibles entre sí y para reportes.
+    @param CONTEO: Piezas, cajas, rejas... (adimensional).
+    @param MASA: Gramos, kilos...
+    @param VOLUMEN: Mililitros, litros...
+    @param LONGITUD: Centímetros, metros...
+    @param TIEMPO: Horas, días (servicios).
+    @return: Instancia de la clase TipoMagnitud.
+"""
+class TipoMagnitud(str, Enum):
+    CONTEO = "conteo"
+    MASA = "masa"
+    VOLUMEN = "volumen"
+    LONGITUD = "longitud"
+    TIEMPO = "tiempo"

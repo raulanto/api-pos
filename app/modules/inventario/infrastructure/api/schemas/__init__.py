@@ -3,6 +3,23 @@ from .categorias import (
     ActualizarCategoriaRequest,
     CategoriaResponse,
 )
+from .unidades_medida import (
+    CrearUnidadMedidaRequest,
+    ActualizarUnidadMedidaRequest,
+    UnidadMedidaResponse,
+)
+from .imagenes import (
+    AgregarImagenRequest,
+    ActualizarImagenRequest,
+    ImagenResponse,
+)
+from .lotes import (
+    CrearLoteRequest,
+    ActualizarLoteRequest,
+    LoteResponse,
+    LoteNuevoEnMovimiento,
+    LotePorVencerResponse,
+)
 from .productos import (
     CrearProductoRequest,
     ActualizarProductoRequest,
@@ -31,6 +48,17 @@ __all__ = [
     "CrearCategoriaRequest",
     "ActualizarCategoriaRequest",
     "CategoriaResponse",
+    "CrearUnidadMedidaRequest",
+    "ActualizarUnidadMedidaRequest",
+    "UnidadMedidaResponse",
+    "AgregarImagenRequest",
+    "ActualizarImagenRequest",
+    "ImagenResponse",
+    "CrearLoteRequest",
+    "ActualizarLoteRequest",
+    "LoteResponse",
+    "LoteNuevoEnMovimiento",
+    "LotePorVencerResponse",
     "CrearProductoRequest",
     "ActualizarProductoRequest",
     "ProductoResponse",

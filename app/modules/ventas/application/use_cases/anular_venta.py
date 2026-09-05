@@ -61,16 +61,10 @@ class AnularVentaUseCase:
         # Valida que no esté ya cancelada (lanza VentaYaCancelada).
         venta.cancelar()
 
-        # 1) Revertir stock por línea (movimiento de ENTRADA).
-        for linea in venta.lineas:
-            await self._inventario.reingresar_stock(
-                producto_id=linea.producto_id,
-                sucursal_id=venta.sucursal_id,
-                cantidad=linea.cantidad,
-                referencia_venta_id=venta.id,
-                usuario_id=data.usuario_id,
-                producto_unidad_id=linea.producto_unidad_id,
-            )
+        # 1) Revertir el efecto en inventario: por cada SALIDA que generó la
+        # venta, una ENTRADA inversa al mismo lote y sucursal. Exacto para kits,
+        # presentaciones y salidas FEFO repartidas entre varios lotes.
+        await self._inventario.revertir_venta(venta.id, data.usuario_id)
 
         # 2) Revertir crédito consumido, si la venta dejó saldo a crédito.
         credito_revertido = Decimal("0")

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.inventario.domain.value_objects import TipoMovimiento
 from app.shared.responses import EmbeddableModel
 from app.shared.schemas.embeds import ProductoEmbed, UsuarioEmbed
+from .lotes import LoteNuevoEnMovimiento
 
 _ORM = ConfigDict(from_attributes=True)
 
@@ -30,6 +31,16 @@ class AplicarMovimientoRequest(BaseModel):
     # Precios volátiles (opcional): empujar costo/precio al producto.
     actualizar_costo: bool = False                       # ENTRADA + costo_unitario
     nuevo_precio_venta: Optional[Decimal] = Field(default=None, ge=0)
+    # Trazabilidad (opcional): unidad/cantidad capturadas antes de convertir a
+    # unidad base. `cantidad` ya debe venir expresada en unidad base.
+    unidad_capturada_id: Optional[UUID] = None
+    cantidad_capturada: Optional[Decimal] = Field(default=None, gt=0)
+    # Control por lote (sólo productos con `requiere_lote`):
+    #   ENTRADA: `lote_id` (existente) o `lote_nuevo` (se crea al vuelo).
+    #   SALIDA/MERMA: `lote_id` fuerza un lote; si se omite, FEFO automático.
+    #   AJUSTE: `lote_id` obligatorio.
+    lote_id: Optional[UUID] = None
+    lote_nuevo: Optional[LoteNuevoEnMovimiento] = None
 
 
 """
@@ -60,6 +71,9 @@ class MovimientoResponse(EmbeddableModel):
     referencia_id: Optional[UUID]
     usuario_id: UUID
     motivo: Optional[str]
+    unidad_capturada_id: Optional[UUID] = None
+    cantidad_capturada: Optional[Decimal] = None
+    lote_id: Optional[UUID] = None
     created_at: datetime
     # Embebidas (?include=producto,usuario)
     producto: Optional[ProductoEmbed] = None

@@ -46,6 +46,10 @@ class ProductoUnidadORM(Base, TimestampMixin, SoftDeleteMixin):
     producto_id = Column(PGUUID(as_uuid=True), ForeignKey("producto.id"), nullable=False)
     nombre = Column(String(50), nullable=False)
     unidad_medida = Column(String(20), nullable=False)
+    # FK al catálogo normalizado (nullable mientras dure el backfill por texto).
+    unidad_medida_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("unidad_medida.id"), nullable=True
+    )
     # Unidades base (del producto padre) que equivalen a 1 de esta presentación.
     #   Reja x24 sobre base "lata"  -> factor 24
     #   Lata individual sobre base "reja" (6 latas) -> factor 0.166667
@@ -54,3 +58,10 @@ class ProductoUnidadORM(Base, TimestampMixin, SoftDeleteMixin):
     codigo_barras = Column(String(50), nullable=True)
 
     producto = relationship("ProductoORM", viewonly=True, lazy="raise")
+    # Galería de imágenes propias de esta presentación (`?include=imagenes`).
+    imagenes = relationship(
+        "ProductoImagenORM",
+        primaryjoin="ProductoUnidadORM.id == foreign(ProductoImagenORM.producto_unidad_id)",
+        viewonly=True,
+        lazy="raise",
+    )

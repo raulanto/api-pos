@@ -18,16 +18,21 @@ class DetalleVenta:
     impuesto_tasa: Decimal = Decimal("0")
     # Presentación vendida (producto_unidad). None = unidad base (factor 1).
     producto_unidad_id: UUID | None = None
+    # `cantidad` convertida a la unidad base del producto (cantidad * factor).
+    # La fija el caso de uso vía InventarioPort.convertir_a_base antes de guardar.
+    cantidad_en_unidad_base: Decimal | None = None
 
     @staticmethod
     def crear(producto_id: UUID, cantidad: Decimal, precio_unitario: Decimal,
               descuento_linea: Decimal = Decimal("0"), impuesto_tasa: Decimal = Decimal("0"),
-              producto_unidad_id: UUID | None = None) -> "DetalleVenta":
+              producto_unidad_id: UUID | None = None,
+              cantidad_en_unidad_base: Decimal | None = None) -> "DetalleVenta":
         return DetalleVenta(
             id=uuid4(), venta_id=uuid4(), # venta_id is a placeholder until attached to Venta
             producto_id=producto_id, cantidad=cantidad, precio_unitario=precio_unitario,
             descuento_linea=descuento_linea, impuesto_tasa=impuesto_tasa,
             producto_unidad_id=producto_unidad_id,
+            cantidad_en_unidad_base=cantidad_en_unidad_base,
         )
 
     @property

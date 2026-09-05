@@ -5,10 +5,14 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.inventario.domain.entities import Producto
+from app.modules.inventario.domain.value_objects import TipoProducto
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
 from app.modules.inventario.application.ports.categoria_repository import CategoriaRepository
+from app.modules.inventario.application.ports.unidad_medida_repository import (
+    UnidadMedidaRepository,
+)
 from app.modules.inventario.domain.exceptions import (
-    CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado,
+    CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado, UnidadMedidaNoEncontrada,
 )
 
 @dataclass
@@ -23,11 +27,22 @@ class CrearProductoInput:
     permite_stock_negativo: bool = False
     codigo_barras: str | None = None
     descripcion: str | None = None
+    tipo: TipoProducto = TipoProducto.SIMPLE
+    unidad_medida_id: UUID | None = None
+    permite_venta_fraccionada: bool = False
+    incremento_minimo_venta: Decimal | None = None
+    requiere_lote: bool = False
 
 class CrearProductoUseCase:
-    def __init__(self, producto_repo: ProductoRepository, categoria_repo: CategoriaRepository):
+    def __init__(
+        self,
+        producto_repo: ProductoRepository,
+        categoria_repo: CategoriaRepository,
+        unidad_medida_repo: UnidadMedidaRepository | None = None,
+    ):
         self._producto_repo = producto_repo
         self._categoria_repo = categoria_repo
+        self._unidad_medida_repo = unidad_medida_repo
 
     async def ejecutar(self, data: CrearProductoInput) -> Producto:
         categoria = await self._categoria_repo.obtener_por_id(data.categoria_id)
@@ -35,6 +50,13 @@ class CrearProductoUseCase:
             raise CategoriaNoEncontrada(f"No existe la categoría con id {data.categoria_id}")
         if not categoria.activo:
             raise CategoriaNoEncontrada(f"La categoría {data.categoria_id} está inactiva")
+
+        if data.unidad_medida_id is not None and self._unidad_medida_repo is not None:
+            unidad = await self._unidad_medida_repo.obtener(data.unidad_medida_id)
+            if unidad is None or not unidad.activo:
+                raise UnidadMedidaNoEncontrada(
+                    f"No existe una unidad de medida activa con id {data.unidad_medida_id}"
+                )
 
         # Chequeo amigable antes de tocar la BD (unicidad entre productos activos).
         if await self._producto_repo.buscar_por_sku(data.sku):
@@ -54,7 +76,12 @@ class CrearProductoUseCase:
             impuesto_tasa=data.impuesto_tasa,
             permite_stock_negativo=data.permite_stock_negativo,
             codigo_barras=data.codigo_barras,
-            descripcion=data.descripcion
+            descripcion=data.descripcion,
+            tipo=data.tipo,
+            unidad_medida_id=data.unidad_medida_id,
+            permite_venta_fraccionada=data.permite_venta_fraccionada,
+            incremento_minimo_venta=data.incremento_minimo_venta,
+            requiere_lote=data.requiere_lote,
         )
         try:
             await self._producto_repo.guardar(producto)

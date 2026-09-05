@@ -1,11 +1,84 @@
 from app.modules.inventario.domain.entities import (
-    Categoria, Producto, ProductoComponente, ProductoUnidad, Existencia, MovimientoInventario,
+    Categoria, UnidadMedida, Producto, ProductoComponente, ProductoUnidad, ProductoImagen,
+    Lote, ExistenciaLote, Existencia, MovimientoInventario,
 )
-from app.modules.inventario.domain.value_objects import TipoProducto, TipoMovimiento
+from app.modules.inventario.domain.value_objects import (
+    TipoProducto, TipoMovimiento, TipoMagnitud,
+)
 from app.modules.inventario.infrastructure.persistence.orm_models import (
-    CategoriaORM, ProductoORM, ProductoComponenteORM, ProductoUnidadORM,
-    ExistenciaORM, MovimientoInventarioORM,
+    CategoriaORM, UnidadMedidaORM, ProductoORM, ProductoComponenteORM, ProductoUnidadORM,
+    ProductoImagenORM, LoteORM, ExistenciaLoteORM, ExistenciaORM, MovimientoInventarioORM,
 )
+
+
+"""
+    Transforma un lote ORM <-> entidad de dominio.
+"""
+def to_domain_lote(orm: LoteORM) -> Lote:
+    return Lote(
+        id=orm.id,
+        producto_id=orm.producto_id,
+        codigo_lote=orm.codigo_lote,
+        fecha_caducidad=orm.fecha_caducidad,
+        costo=orm.costo,
+        proveedor=orm.proveedor,
+        activo=orm.activo,
+        created_at=orm.created_at,
+    )
+
+
+def to_orm_lote(entidad: Lote) -> LoteORM:
+    return LoteORM(
+        id=entidad.id,
+        producto_id=entidad.producto_id,
+        codigo_lote=entidad.codigo_lote,
+        fecha_caducidad=entidad.fecha_caducidad,
+        costo=entidad.costo,
+        proveedor=entidad.proveedor,
+        activo=entidad.activo,
+    )
+
+
+def to_domain_existencia_lote(
+    orm: ExistenciaLoteORM, includes: frozenset[str] = frozenset()
+) -> ExistenciaLote:
+    el = ExistenciaLote(
+        id=orm.id,
+        producto_id=orm.producto_id,
+        sucursal_id=orm.sucursal_id,
+        lote_id=orm.lote_id,
+        cantidad=orm.cantidad,
+        updated_at=orm.updated_at,
+    )
+    if "lote" in includes:
+        el.lote = to_domain_lote(orm.lote)
+    return el
+
+
+"""
+    Transforma una unidad de medida (catálogo) ORM <-> entidad de dominio.
+"""
+def to_domain_unidad_medida(orm: UnidadMedidaORM) -> UnidadMedida:
+    return UnidadMedida(
+        id=orm.id,
+        codigo=orm.codigo,
+        nombre=orm.nombre,
+        tipo_magnitud=TipoMagnitud(orm.tipo_magnitud),
+        decimales=int(orm.decimales),
+        activo=orm.activo,
+        created_at=orm.created_at,
+    )
+
+
+def to_orm_unidad_medida(entidad: UnidadMedida) -> UnidadMedidaORM:
+    return UnidadMedidaORM(
+        id=entidad.id,
+        codigo=entidad.codigo,
+        nombre=entidad.nombre,
+        tipo_magnitud=entidad.tipo_magnitud.value,
+        decimales=entidad.decimales,
+        activo=entidad.activo,
+    )
 
 """
     Mappers para transformar entidades de dominio a ORM y viceversa.
@@ -74,7 +147,14 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         tipo=TipoProducto(orm.tipo),
         permite_stock_negativo=orm.permite_stock_negativo,
         activo=orm.activo,
-        created_at=orm.created_at
+        created_at=orm.created_at,
+        unidad_medida_id=orm.unidad_medida_id,
+        permite_venta_fraccionada=orm.permite_venta_fraccionada,
+        incremento_minimo_venta=orm.incremento_minimo_venta,
+        requiere_lote=orm.requiere_lote,
+        # Siempre presente: no depende de `includes` (ver `_opts_producto`,
+        # que carga `imagen_principal` incondicionalmente).
+        imagen_principal=to_domain_imagen(orm.imagen_principal) if orm.imagen_principal else None,
     )
     if "categoria" in includes:
         producto.categoria = orm.categoria
@@ -88,7 +168,37 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         producto.unidades = [
             to_domain_unidad(u) for u in orm.unidades if u.activo
         ]
+    if "imagenes" in includes:
+        producto.imagenes = [to_domain_imagen(i) for i in orm.imagenes]
     return producto
+
+
+"""
+    Transforma una imagen de catálogo ORM <-> entidad de dominio.
+"""
+def to_domain_imagen(orm: ProductoImagenORM) -> ProductoImagen:
+    return ProductoImagen(
+        id=orm.id,
+        producto_id=orm.producto_id,
+        producto_unidad_id=orm.producto_unidad_id,
+        url=orm.url,
+        alt_texto=orm.alt_texto,
+        orden=orm.orden,
+        es_principal=orm.es_principal,
+        created_at=orm.created_at,
+    )
+
+
+def to_orm_imagen(entidad: ProductoImagen) -> ProductoImagenORM:
+    return ProductoImagenORM(
+        id=entidad.id,
+        producto_id=entidad.producto_id,
+        producto_unidad_id=entidad.producto_unidad_id,
+        url=entidad.url,
+        alt_texto=entidad.alt_texto,
+        orden=entidad.orden,
+        es_principal=entidad.es_principal,
+    )
 
 
 """
@@ -144,11 +254,15 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         descripcion=entidad.descripcion,
         categoria_id=entidad.categoria_id,
         unidad_medida=entidad.unidad_medida,
+        unidad_medida_id=entidad.unidad_medida_id,
         precio_venta=entidad.precio_venta,
         costo=entidad.costo,
         impuesto_tasa=entidad.impuesto_tasa,
         tipo=entidad.tipo.value,
         permite_stock_negativo=entidad.permite_stock_negativo,
+        permite_venta_fraccionada=entidad.permite_venta_fraccionada,
+        incremento_minimo_venta=entidad.incremento_minimo_venta,
+        requiere_lote=entidad.requiere_lote,
         activo=entidad.activo
     )
 
@@ -212,6 +326,9 @@ def to_domain_movimiento(
         usuario_id=orm.usuario_id,
         motivo=orm.motivo,
         created_at=orm.created_at,
+        unidad_capturada_id=orm.unidad_capturada_id,
+        cantidad_capturada=orm.cantidad_capturada,
+        lote_id=orm.lote_id,
     )
     if "producto" in includes:
         mov.producto = orm.producto
@@ -237,5 +354,8 @@ def to_orm_movimiento(entidad: MovimientoInventario) -> MovimientoInventarioORM:
         referencia_tipo=entidad.referencia_tipo,
         referencia_id=entidad.referencia_id,
         usuario_id=entidad.usuario_id,
-        motivo=entidad.motivo
+        motivo=entidad.motivo,
+        unidad_capturada_id=entidad.unidad_capturada_id,
+        cantidad_capturada=entidad.cantidad_capturada,
+        lote_id=entidad.lote_id,
     )

@@ -17,7 +17,7 @@ from app.modules.inventario.application.use_cases.listar_movimientos import (
     ListarMovimientosUseCase, ObtenerMovimientoUseCase,
 )
 from app.modules.inventario.application.use_cases.aplicar_movimiento import (
-    AplicarMovimientoUseCase, AplicarMovimientoInput,
+    AplicarMovimientoUseCase, AplicarMovimientoInput, LoteNuevoData,
 )
 from app.modules.inventario.application.use_cases.transferir_stock import (
     TransferirStockUseCase, TransferirStockInput,
@@ -26,7 +26,9 @@ from app.modules.inventario.infrastructure.adapters.event_port_impl import Event
 from app.modules.inventario.infrastructure.api.schemas import (
     AplicarMovimientoRequest, TransferenciaRequest, MovimientoResponse,
 )
-from .common import mov_repo, prod_repo, exist_repo, sucursal_efectiva, traducir
+from .common import (
+    mov_repo, prod_repo, exist_repo, um_repo, lote_repo, sucursal_efectiva, traducir,
+)
 
 router = APIRouter(route_class=EnvelopeRoute)
 
@@ -57,8 +59,17 @@ async def aplicar_movimiento(
         )
 
     use_case = AplicarMovimientoUseCase(
-        prod_repo(db), exist_repo(db), mov_repo(db), EventPortImpl(db)
+        prod_repo(db), exist_repo(db), mov_repo(db), EventPortImpl(db),
+        um_repo(db), lote_repo(db),
     )
+    lote_nuevo = None
+    if body.lote_nuevo is not None:
+        lote_nuevo = LoteNuevoData(
+            codigo_lote=body.lote_nuevo.codigo_lote,
+            fecha_caducidad=body.lote_nuevo.fecha_caducidad,
+            costo=body.lote_nuevo.costo,
+            proveedor=body.lote_nuevo.proveedor,
+        )
     try:
         await use_case.ejecutar(AplicarMovimientoInput(
             producto_id=body.producto_id,
@@ -75,6 +86,10 @@ async def aplicar_movimiento(
             stock_maximo=body.stock_maximo,
             actualizar_costo=body.actualizar_costo,
             nuevo_precio_venta=body.nuevo_precio_venta,
+            unidad_capturada_id=body.unidad_capturada_id,
+            cantidad_capturada=body.cantidad_capturada,
+            lote_id=body.lote_id,
+            lote_nuevo=lote_nuevo,
         ))
     except Exception as e:
         raise traducir(e)

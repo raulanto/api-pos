@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import EmbeddableModel
 from app.shared.schemas.embeds import (
-    CategoriaEmbed, ComponenteEmbed, ExistenciaEmbed, ProductoEmbed, UnidadEmbed,
+    CategoriaEmbed, ComponenteEmbed, ExistenciaEmbed, ProductoEmbed, UnidadEmbed, ImagenEmbed,
 )
 
 _ORM = ConfigDict(from_attributes=True)
@@ -20,10 +20,15 @@ class CrearProductoRequest(BaseModel):
     nombre: str = Field(min_length=1, max_length=150)
     categoria_id: UUID
     unidad_medida: str = Field(min_length=1, max_length=20)
+    unidad_medida_id: Optional[UUID] = None
     precio_venta: Decimal = Field(ge=0)
     costo: Decimal = Field(ge=0)
     impuesto_tasa: Decimal = Field(ge=0)
+    tipo: TipoProducto = TipoProducto.SIMPLE
     permite_stock_negativo: bool = False
+    permite_venta_fraccionada: bool = False
+    incremento_minimo_venta: Optional[Decimal] = Field(default=None, gt=0)
+    requiere_lote: bool = False
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     descripcion: Optional[str] = None
 
@@ -38,11 +43,18 @@ class ActualizarProductoRequest(BaseModel):
     descripcion: Optional[str] = None
     categoria_id: Optional[UUID] = None
     unidad_medida: Optional[str] = Field(default=None, min_length=1, max_length=20)
+    unidad_medida_id: Optional[UUID] = None
+    cambiar_unidad_medida_id: bool = False
     precio_venta: Optional[Decimal] = Field(default=None, ge=0)
     costo: Optional[Decimal] = Field(default=None, ge=0)
     impuesto_tasa: Optional[Decimal] = Field(default=None, ge=0)
     tipo: Optional[TipoProducto] = None
     permite_stock_negativo: Optional[bool] = None
+    permite_venta_fraccionada: Optional[bool] = None
+    incremento_minimo_venta: Optional[Decimal] = Field(default=None, gt=0)
+    # Para dejar `incremento_minimo_venta` en NULL hay que mandarlo explícitamente.
+    cambiar_incremento_minimo_venta: bool = False
+    requiere_lote: Optional[bool] = None
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     cambiar_codigo_barras: bool = False
     # Para dejar `descripcion` en NULL hay que mandarlo explícitamente.
@@ -80,7 +92,7 @@ class ProductoKpisResponse(BaseModel):
 """
 class ProductoResponse(EmbeddableModel):
     _embed_fields: ClassVar[tuple[str, ...]] = (
-        "categoria", "existencias", "componentes", "unidades",
+        "categoria", "existencias", "componentes", "unidades", "imagenes",
     )
     id: UUID
     sku: str
@@ -89,17 +101,25 @@ class ProductoResponse(EmbeddableModel):
     descripcion: Optional[str]
     categoria_id: UUID
     unidad_medida: str
+    unidad_medida_id: Optional[UUID] = None
     precio_venta: Decimal
     costo: Decimal
     impuesto_tasa: Decimal
     tipo: TipoProducto
     permite_stock_negativo: bool
+    permite_venta_fraccionada: bool = False
+    incremento_minimo_venta: Optional[Decimal] = None
+    requiere_lote: bool = False
     activo: bool
+    # Siempre presente (no depende de `?include=`): la imagen de portada del
+    # producto, o null si no tiene ninguna marcada como principal.
+    imagen_principal: Optional[ImagenEmbed] = None
     # Embebidas (?include=categoria,existencias,componentes,unidades)
     categoria: Optional[CategoriaEmbed] = None
     existencias: Optional[list[ExistenciaEmbed]] = None
     componentes: Optional[list[ComponenteEmbed]] = None
     unidades: Optional[list[UnidadEmbed]] = None
+    imagenes: Optional[list[ImagenEmbed]] = None
 
 
 # --------------------------------------------------------------------------- #

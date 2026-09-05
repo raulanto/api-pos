@@ -8,6 +8,10 @@ from app.modules.inventario.domain.entities import Producto
 from app.modules.inventario.domain.exceptions import (
     ProductoNoEncontrado, CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado,
     ProductoConStockActivo, KitInvalido, ProductoEsComponenteDeKit,
+    UnidadMedidaNoEncontrada, LoteInvalido,
+)
+from app.modules.inventario.application.ports.unidad_medida_repository import (
+    UnidadMedidaRepository,
 )
 from app.modules.inventario.application.dtos import FiltroProductos, ProductoKpis
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
@@ -82,11 +86,17 @@ class ActualizarProductoInput:
     descripcion: str | None = None
     categoria_id: UUID | None = None
     unidad_medida: str | None = None
+    unidad_medida_id: UUID | None = None
+    cambiar_unidad_medida_id: bool = False
     precio_venta: Decimal | None = None
     costo: Decimal | None = None
     impuesto_tasa: Decimal | None = None
     tipo: TipoProducto | None = None
     permite_stock_negativo: bool | None = None
+    permite_venta_fraccionada: bool | None = None
+    incremento_minimo_venta: Decimal | None = None
+    cambiar_incremento_minimo_venta: bool = False
+    requiere_lote: bool | None = None
     codigo_barras: str | None = None
     cambiar_codigo_barras: bool = False
     cambiar_descripcion: bool = False
@@ -99,11 +109,15 @@ class ActualizarProductoUseCase:
         categoria_repo: CategoriaRepository,
         componente_repo: ProductoComponenteRepository,
         unidad_repo: ProductoUnidadRepository,
+        unidad_medida_repo: UnidadMedidaRepository | None = None,
+        existencia_repo=None,
     ):
         self._repo = producto_repo
         self._categoria_repo = categoria_repo
         self._componente_repo = componente_repo
         self._unidad_repo = unidad_repo
+        self._unidad_medida_repo = unidad_medida_repo
+        self._existencia_repo = existencia_repo
 
     async def ejecutar(self, data: ActualizarProductoInput) -> Producto:
         producto = await self._repo.obtener_por_id(data.producto_id)
@@ -114,6 +128,13 @@ class ActualizarProductoUseCase:
             categoria = await self._categoria_repo.obtener_por_id(data.categoria_id)
             if not categoria:
                 raise CategoriaNoEncontrada(f"No existe la categoría con id {data.categoria_id}")
+
+        if data.unidad_medida_id is not None and self._unidad_medida_repo is not None:
+            unidad = await self._unidad_medida_repo.obtener(data.unidad_medida_id)
+            if unidad is None or not unidad.activo:
+                raise UnidadMedidaNoEncontrada(
+                    f"No existe una unidad de medida activa con id {data.unidad_medida_id}"
+                )
 
         if (
             data.tipo is not None
@@ -148,17 +169,37 @@ class ActualizarProductoUseCase:
                     f"Ya existe un producto activo con el código de barras '{data.codigo_barras}'"
                 )
 
+        # Activar control por lote con stock existente crearía descuadre entre el
+        # agregado `existencia` y el desglose `existencia_lote`.
+        if (
+            data.requiere_lote is True
+            and not producto.requiere_lote
+            and self._existencia_repo is not None
+        ):
+            existencias = await self._existencia_repo.listar(producto_id=producto.id)
+            if any(e.cantidad > 0 for e in existencias):
+                raise LoteInvalido(
+                    "No se puede activar el control por lote con stock cargado. "
+                    "Llevá el stock a 0 (salida/ajuste) y volvé a cargarlo por lote."
+                )
+
         producto.actualizar(
             sku=data.sku,
             nombre=data.nombre,
             descripcion=data.descripcion,
             categoria_id=data.categoria_id,
             unidad_medida=data.unidad_medida,
+            unidad_medida_id=data.unidad_medida_id,
+            cambiar_unidad_medida_id=data.cambiar_unidad_medida_id,
             precio_venta=data.precio_venta,
             costo=data.costo,
             impuesto_tasa=data.impuesto_tasa,
             tipo=data.tipo,
             permite_stock_negativo=data.permite_stock_negativo,
+            permite_venta_fraccionada=data.permite_venta_fraccionada,
+            incremento_minimo_venta=data.incremento_minimo_venta,
+            cambiar_incremento_minimo_venta=data.cambiar_incremento_minimo_venta,
+            requiere_lote=data.requiere_lote,
             codigo_barras=data.codigo_barras,
             cambiar_codigo_barras=data.cambiar_codigo_barras,
             cambiar_descripcion=data.cambiar_descripcion,

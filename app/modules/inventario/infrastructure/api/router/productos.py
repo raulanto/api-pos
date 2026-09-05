@@ -27,7 +27,8 @@ from app.modules.inventario.infrastructure.api.schemas import (
     CrearProductoRequest, ActualizarProductoRequest, ProductoResponse, ProductoKpisResponse,
 )
 from .common import (
-    prod_repo, cat_repo, exist_repo, comp_repo, unidad_repo, traducir, traducir_create,
+    prod_repo, cat_repo, exist_repo, comp_repo, unidad_repo, um_repo,
+    traducir, traducir_create,
 )
 
 router = APIRouter(route_class=EnvelopeRoute)
@@ -36,7 +37,7 @@ _ORDEN_PRODUCTOS = make_sort_dependency(
     {"nombre", "sku", "precio_venta", "created_at"}, "nombre:asc"
 )
 _INC_PRODUCTOS = make_include_dependency(
-    {"categoria", "existencias", "componentes", "unidades"}
+    {"categoria", "existencias", "componentes", "unidades", "imagenes"}
 )
 
 """
@@ -57,12 +58,20 @@ async def crear_producto(
     actual: UsuarioAutenticado = Depends(require_permission("inventario.crear")),
 ):
     try:
-        producto = await CrearProductoUseCase(prod_repo(db), cat_repo(db)).ejecutar(
+        producto = await CrearProductoUseCase(
+            prod_repo(db), cat_repo(db), um_repo(db)
+        ).ejecutar(
             CrearProductoInput(
                 sku=body.sku, nombre=body.nombre, categoria_id=body.categoria_id,
-                unidad_medida=body.unidad_medida, precio_venta=body.precio_venta,
+                unidad_medida=body.unidad_medida,
+                unidad_medida_id=body.unidad_medida_id,
+                precio_venta=body.precio_venta,
                 costo=body.costo, impuesto_tasa=body.impuesto_tasa,
+                tipo=body.tipo,
                 permite_stock_negativo=body.permite_stock_negativo,
+                permite_venta_fraccionada=body.permite_venta_fraccionada,
+                incremento_minimo_venta=body.incremento_minimo_venta,
+                requiere_lote=body.requiere_lote,
                 codigo_barras=body.codigo_barras, descripcion=body.descripcion,
             )
         )
@@ -215,15 +224,23 @@ async def actualizar_producto(
 ):
     try:
         producto = await ActualizarProductoUseCase(
-            prod_repo(db), cat_repo(db), comp_repo(db), unidad_repo(db),
+            prod_repo(db), cat_repo(db), comp_repo(db), unidad_repo(db), um_repo(db),
+            exist_repo(db),
         ).ejecutar(
             ActualizarProductoInput(
                 producto_id=producto_id,
                 sku=body.sku,
                 nombre=body.nombre, descripcion=body.descripcion, categoria_id=body.categoria_id,
-                unidad_medida=body.unidad_medida, precio_venta=body.precio_venta, costo=body.costo,
+                unidad_medida=body.unidad_medida,
+                unidad_medida_id=body.unidad_medida_id,
+                cambiar_unidad_medida_id=body.cambiar_unidad_medida_id,
+                precio_venta=body.precio_venta, costo=body.costo,
                 impuesto_tasa=body.impuesto_tasa, tipo=body.tipo,
                 permite_stock_negativo=body.permite_stock_negativo,
+                permite_venta_fraccionada=body.permite_venta_fraccionada,
+                incremento_minimo_venta=body.incremento_minimo_venta,
+                cambiar_incremento_minimo_venta=body.cambiar_incremento_minimo_venta,
+                requiere_lote=body.requiere_lote,
                 codigo_barras=body.codigo_barras, cambiar_codigo_barras=body.cambiar_codigo_barras,
                 cambiar_descripcion=body.cambiar_descripcion,
             )

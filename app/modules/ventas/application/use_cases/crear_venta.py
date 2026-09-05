@@ -94,6 +94,15 @@ class CrearVentaUseCase:
             idempotency_key=data.idempotency_key,
         )
 
+        # Cantidad de cada línea convertida a la unidad base del producto; se
+        # persiste para no recalcularla en anulaciones ni en reportes.
+        for linea in venta.lineas:
+            linea.cantidad_en_unidad_base = await self._inventario.convertir_a_base(
+                producto_id=linea.producto_id,
+                cantidad=linea.cantidad,
+                producto_unidad_id=linea.producto_unidad_id,
+            )
+
         if venta.saldo_pendiente > Decimal("0"):
             if venta.cliente_id is None:
                 raise VentaCreditoSinCliente(

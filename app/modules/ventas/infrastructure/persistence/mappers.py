@@ -51,6 +51,7 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
             descuento_linea=l.descuento_linea,
             impuesto_tasa=l.impuesto_tasa,
             producto_unidad_id=l.producto_unidad_id,
+            cantidad_en_unidad_base=l.cantidad_en_unidad_base,
         ) for l in entidad.lineas
     ]
     orm.pagos = [
@@ -85,6 +86,7 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
                 descuento_linea=l.descuento_linea,
                 impuesto_tasa=l.impuesto_tasa,
                 producto_unidad_id=l.producto_unidad_id,
+                cantidad_en_unidad_base=l.cantidad_en_unidad_base,
             ) for l in orm.lineas
         ],
         pagos=[

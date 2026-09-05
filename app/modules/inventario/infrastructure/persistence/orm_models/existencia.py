@@ -42,9 +42,9 @@ class ExistenciaORM(Base):
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     producto_id = Column(PGUUID(as_uuid=True), ForeignKey("producto.id"), nullable=False)
     sucursal_id = Column(PGUUID(as_uuid=True), ForeignKey("sucursal.id"), nullable=False)
-    cantidad = Column(Numeric(12, 2), default=0, nullable=False)
-    stock_minimo = Column(Numeric(12, 2), default=0, nullable=False)
-    stock_maximo = Column(Numeric(12, 2), nullable=True)
+    cantidad = Column(Numeric(14, 4), default=0, nullable=False)
+    stock_minimo = Column(Numeric(14, 4), default=0, nullable=False)
+    stock_maximo = Column(Numeric(14, 4), nullable=True)
     updated_at = Column(TimestampMixin.updated_at.type, default=TimestampMixin.updated_at.default, onupdate=TimestampMixin.updated_at.onupdate, nullable=False)
 
     # Solo lectura, para `?include=producto`.

@@ -40,13 +40,16 @@ class DetalleVentaORM(Base):
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     venta_id = Column(PGUUID(as_uuid=True), ForeignKey("venta.id"), nullable=False)
     producto_id = Column(PGUUID(as_uuid=True), ForeignKey("producto.id"), nullable=False)
-    cantidad = Column(Numeric(12, 2), nullable=False)
+    cantidad = Column(Numeric(14, 4), nullable=False)
     precio_unitario = Column(Numeric(12, 2), nullable=False)
     descuento_linea = Column(Numeric(12, 2), nullable=False, default=0)
     impuesto_tasa = Column(Numeric(5, 2), nullable=False, default=0)
     producto_unidad_id = Column(
         PGUUID(as_uuid=True), ForeignKey("producto_unidad.id"), nullable=True
     )
+    # Cantidad equivalente en la unidad base del producto (cantidad * factor de
+    # la presentación). Se persiste para no recalcularla en anulaciones/reportes.
+    cantidad_en_unidad_base = Column(Numeric(14, 4), nullable=True)
 
 class PagoORM(Base, TimestampMixin):
     __tablename__ = "pago"

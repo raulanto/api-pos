@@ -54,6 +54,15 @@ class TransferirStockUseCase:
         producto = await self._producto_repo.obtener_por_id(data.producto_id)
         if not producto:
             raise ProductoNoEncontrado(f"No existe el producto {data.producto_id}")
+        if producto.requiere_lote:
+            # Transferencia con control por lote todavía no soportada: hay que
+            # decidir de qué lote sale y a qué lote entra en destino. Por ahora
+            # se hace con SALIDA (FEFO) en origen + ENTRADA (lote) en destino.
+            raise TransferenciaInvalida(
+                f"{producto.nombre} lleva control por lote: la transferencia entre "
+                "sucursales todavía no está soportada para estos productos. Usá una "
+                "SALIDA en origen y una ENTRADA (indicando el lote) en destino."
+            )
 
         origen = await self._existencia_repo.obtener(data.producto_id, data.sucursal_origen_id)
         saldo_origen = origen.cantidad if origen else Decimal("0")

@@ -105,3 +105,15 @@ class UnidadEmbed(BaseModel):
     precio_venta: Decimal
     codigo_barras: Optional[str] = None
     activo: bool
+
+
+class ImagenEmbed(BaseModel):
+    """Imagen de la galería de un producto o presentación (`?include=imagenes`)."""
+    model_config = _ORM
+    id: UUID
+    producto_id: Optional[UUID] = None
+    producto_unidad_id: Optional[UUID] = None
+    url: str
+    alt_texto: Optional[str] = None
+    orden: int
+    es_principal: bool
