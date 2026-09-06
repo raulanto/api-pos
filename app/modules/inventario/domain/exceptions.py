@@ -137,3 +137,35 @@ class LoteInvalido(Exception):
     """No se puede activar el control por lote (hay stock sin lotear), o el lote
     indicado no aplica al movimiento (producto/sucursal distintos, inactivo...)."""
     pass
+
+
+# --- Instancia física abierta (envase destapado vendido en fracciones) ---
+
+class InstanciaAbiertaNoEncontrada(Exception):
+    """La instancia abierta pedida no existe."""
+    pass
+
+
+class InstanciaNoAbierta(Exception):
+    """La instancia ya está agotada o descartada; no admite más operaciones."""
+    pass
+
+
+class SaldoInstanciaInsuficiente(Exception):
+    """Se intentó consumir/mermar más de lo que le queda a la instancia."""
+    pass
+
+
+class ProductoNoRastreaInstancias(Exception):
+    """El producto no tiene `rastrea_instancia_abierta` activo."""
+    pass
+
+
+class InstanciaConfigInvalida(Exception):
+    """Falta `instancia_capacidad_default` en un producto que rastrea instancias."""
+    pass
+
+
+class CapacidadInstanciaInvalida(Exception):
+    """Capacidad <= 0, o una medición de ajuste que supera el saldo registrado."""
+    pass

@@ -6,6 +6,7 @@ from .productos import router as productos_router
 from .componentes import router as componentes_router
 from .unidades import router as unidades_router
 from .imagenes import router as imagenes_router
+from .instancias import router as instancias_router
 from .lotes import router as lotes_router
 from .existencias import router as existencias_router
 from .movimientos import router as movimientos_router
@@ -20,6 +21,7 @@ router.include_router(unidades_router)
 router.include_router(productos_router)
 router.include_router(componentes_router)
 router.include_router(imagenes_router)
+router.include_router(instancias_router)
 router.include_router(lotes_router)
 router.include_router(existencias_router)
 router.include_router(movimientos_router)

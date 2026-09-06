@@ -5,7 +5,9 @@ from app.modules.ventas.application.ports.inventario_port import InventarioPort
 from app.modules.inventario.application.use_cases.aplicar_movimiento import (
     AplicarMovimientoUseCase, AplicarMovimientoInput, DECIMALES_STOCK_DEFAULT,
 )
-from app.modules.inventario.domain.entities import MovimientoInventario, Existencia
+from app.modules.inventario.domain.entities import (
+    MovimientoInventario, Existencia, InstanciaAbierta,
+)
 from app.modules.inventario.domain.value_objects import TipoMovimiento, TipoProducto
 from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyProductoRepository,
@@ -15,6 +17,7 @@ from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyLoteRepository,
     SqlAlchemyExistenciaRepository,
     SqlAlchemyMovimientoRepository,
+    SqlAlchemyInstanciaAbiertaRepository,
 )
 
 
@@ -32,6 +35,7 @@ class InventarioPortImpl(InventarioPort):
         self._lote_repo = SqlAlchemyLoteRepository(db)
         self._existencia_repo = SqlAlchemyExistenciaRepository(db)
         self._movimiento_repo = SqlAlchemyMovimientoRepository(db)
+        self._instancia_repo = SqlAlchemyInstanciaAbiertaRepository(db)
         # Reutiliza el caso de uso del módulo inventario con la MISMA sesión, de
         # modo que todo cae en la transacción única del request (get_db).
         self._use_case = AplicarMovimientoUseCase(
@@ -99,21 +103,107 @@ class InventarioPortImpl(InventarioPort):
         # Reglas de fraccionamiento del producto padre sobre la cantidad base.
         producto.validar_cantidad_vendible(cantidad_base)
 
+        # Venta a granel = sin presentación (se vendió en unidad base). Sólo en
+        # ese caso un producto que rastrea instancias consume de envases abiertos;
+        # vender una presentación sellada sigue la ruta normal.
+        es_granel = producto_unidad_id is None
+
         for pid, qty in await self._expandir(producto, cantidad_base):
-            # Los productos con control por lote descuentan por FEFO dentro del
-            # caso de uso (no se pasa `lote_id`).
-            await self._use_case.ejecutar(AplicarMovimientoInput(
-                producto_id=pid,
-                sucursal_id=sucursal_id,
-                tipo=TipoMovimiento.SALIDA,
-                cantidad=qty,
-                referencia_tipo="venta",
-                referencia_id=referencia_venta_id,
-                usuario_id=usuario_id,
-                motivo=f"Venta {referencia_venta_id}",
-                unidad_capturada_id=producto_unidad_id,
-                cantidad_capturada=cantidad if producto_unidad_id is not None else None,
-            ))
+            # En un kit, cada componente se consume siempre en unidad base
+            # (granel) aunque el kit se vendió como presentación.
+            comp_granel = es_granel or pid != producto_id
+            await self._descontar_una(
+                pid, sucursal_id, qty, referencia_venta_id, usuario_id,
+                producto_unidad_id=producto_unidad_id if pid == producto_id else None,
+                cantidad_capturada=(
+                    cantidad if pid == producto_id and producto_unidad_id else None
+                ),
+                es_granel=comp_granel,
+            )
+
+    async def _descontar_una(
+        self, pid: UUID, sucursal_id: UUID, qty: Decimal,
+        venta_id: UUID, usuario_id: UUID,
+        producto_unidad_id: UUID | None, cantidad_capturada: Decimal | None,
+        es_granel: bool,
+    ) -> None:
+        producto = await self._cargar_producto(pid)
+        if es_granel and producto.rastrea_instancia_abierta:
+            await self._consumir_de_instancias(producto, sucursal_id, qty, venta_id, usuario_id)
+            return
+        # Ruta normal: productos con control por lote descuentan por FEFO dentro
+        # del caso de uso (no se pasa `lote_id`).
+        await self._use_case.ejecutar(AplicarMovimientoInput(
+            producto_id=pid,
+            sucursal_id=sucursal_id,
+            tipo=TipoMovimiento.SALIDA,
+            cantidad=qty,
+            referencia_tipo="venta",
+            referencia_id=venta_id,
+            usuario_id=usuario_id,
+            motivo=f"Venta {venta_id}",
+            unidad_capturada_id=producto_unidad_id,
+            cantidad_capturada=cantidad_capturada,
+        ))
+
+    async def _consumir_de_instancias(
+        self, producto, sucursal_id: UUID, qty: Decimal, venta_id: UUID, usuario_id: UUID,
+    ) -> None:
+        """FIFO sobre las instancias abiertas; auto-abre `instancia_capacidad_default`
+        cuando falta saldo. Cada tramo es un SALIDA con su `instancia_abierta_id`."""
+        restante = qty
+        for inst in await self._instancia_repo.listar_abiertas(producto.id, sucursal_id):
+            if restante <= 0:
+                break
+            toma = inst.saldo if inst.saldo < restante else restante
+            await self._mover_instancia(inst, toma, venta_id, usuario_id)
+            restante -= toma
+
+        while restante > 0:
+            cap = producto.instancia_capacidad_default
+            if cap is None or cap <= 0:
+                raise ValueError(
+                    f"{producto.nombre} rastrea instancias pero no tiene "
+                    "`instancia_capacidad_default` para auto-abrir un envase."
+                )
+            lote_id = await self._lote_fefo_para(producto, sucursal_id, cap)
+            inst = InstanciaAbierta.abrir(
+                producto_id=producto.id, sucursal_id=sucursal_id,
+                capacidad=cap, abierta_por=usuario_id, lote_id=lote_id,
+            )
+            await self._instancia_repo.crear(inst)
+            toma = cap if cap < restante else restante
+            await self._mover_instancia(inst, toma, venta_id, usuario_id)
+            restante -= toma
+
+    async def _mover_instancia(
+        self, inst, toma: Decimal, venta_id: UUID, usuario_id: UUID,
+    ) -> None:
+        inst.consumir(toma, motivo=f"Venta {venta_id}")
+        await self._use_case.ejecutar(AplicarMovimientoInput(
+            producto_id=inst.producto_id,
+            sucursal_id=inst.sucursal_id,
+            tipo=TipoMovimiento.SALIDA,
+            cantidad=toma,
+            referencia_tipo="venta",
+            referencia_id=venta_id,
+            usuario_id=usuario_id,
+            motivo=f"Venta {venta_id}",
+            lote_id=inst.lote_id,
+            instancia_abierta_id=inst.id,
+        ))
+        await self._instancia_repo.actualizar(inst)
+
+    async def _lote_fefo_para(
+        self, producto, sucursal_id: UUID, capacidad: Decimal,
+    ) -> UUID | None:
+        if not producto.requiere_lote:
+            return None
+        fefo = await self._lote_repo.lotes_fefo(producto.id, sucursal_id)
+        for lid, disp in fefo:
+            if disp >= capacidad:
+                return lid
+        return fefo[0][0] if fefo else None
 
     async def revertir_venta(self, venta_id: UUID, usuario_id: UUID) -> None:
         """ENTRADA inversa por cada SALIDA que generó la venta, al mismo lote."""
@@ -156,3 +246,11 @@ class InventarioPortImpl(InventarioPort):
                 await self._lote_repo.ajustar_saldo(
                     m.producto_id, m.sucursal_id, m.lote_id, m.cantidad
                 )
+
+            # Si la salida vino de un envase abierto, devolvé el contenido a esa
+            # instancia (la reabre si había quedado agotada).
+            if m.instancia_abierta_id is not None:
+                inst = await self._instancia_repo.obtener(m.instancia_abierta_id)
+                if inst is not None:
+                    inst.reponer(m.cantidad)
+                    await self._instancia_repo.actualizar(inst)

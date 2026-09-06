@@ -8,7 +8,7 @@ from app.modules.inventario.domain.entities import Producto
 from app.modules.inventario.domain.exceptions import (
     ProductoNoEncontrado, CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado,
     ProductoConStockActivo, ProductoConHistorial, KitInvalido, ProductoEsComponenteDeKit,
-    UnidadMedidaNoEncontrada, LoteInvalido,
+    UnidadMedidaNoEncontrada, LoteInvalido, InstanciaConfigInvalida,
 )
 from app.modules.inventario.application.ports.unidad_medida_repository import (
     UnidadMedidaRepository,
@@ -99,6 +99,9 @@ class ActualizarProductoInput:
     incremento_minimo_venta: Decimal | None = None
     cambiar_incremento_minimo_venta: bool = False
     requiere_lote: bool | None = None
+    rastrea_instancia_abierta: bool | None = None
+    instancia_capacidad_default: Decimal | None = None
+    cambiar_instancia_capacidad_default: bool = False
     codigo_barras: str | None = None
     cambiar_codigo_barras: bool = False
     cambiar_descripcion: bool = False
@@ -202,10 +205,22 @@ class ActualizarProductoUseCase:
             incremento_minimo_venta=data.incremento_minimo_venta,
             cambiar_incremento_minimo_venta=data.cambiar_incremento_minimo_venta,
             requiere_lote=data.requiere_lote,
+            rastrea_instancia_abierta=data.rastrea_instancia_abierta,
+            instancia_capacidad_default=data.instancia_capacidad_default,
+            cambiar_instancia_capacidad_default=data.cambiar_instancia_capacidad_default,
             codigo_barras=data.codigo_barras,
             cambiar_codigo_barras=data.cambiar_codigo_barras,
             cambiar_descripcion=data.cambiar_descripcion,
         )
+        # Coherencia: si el producto queda rastreando instancias, necesita una
+        # capacidad default > 0 para poder auto-abrir al vender a granel.
+        if producto.rastrea_instancia_abierta and not (
+            producto.instancia_capacidad_default
+            and producto.instancia_capacidad_default > 0
+        ):
+            raise InstanciaConfigInvalida(
+                "`rastrea_instancia_abierta` requiere `instancia_capacidad_default` > 0."
+            )
         try:
             await self._repo.actualizar(producto)
         except IntegrityError as e:

@@ -67,6 +67,10 @@ class AplicarMovimientoInput:
     #   AJUSTE   -> `lote_id` obligatorio (el objetivo es el saldo de ese lote).
     lote_id: UUID | None = None
     lote_nuevo: LoteNuevoData | None = None
+    # Envase abierto del que sale/entra la fracción (productos que rastrean
+    # instancia abierta). Sólo trazabilidad en el movimiento; el saldo de la
+    # instancia lo ajusta el caso de uso que la maneja.
+    instancia_abierta_id: UUID | None = None
 
 
 class AplicarMovimientoUseCase:
@@ -152,6 +156,7 @@ class AplicarMovimientoUseCase:
             motivo=data.motivo,
             unidad_capturada_id=data.unidad_capturada_id,
             cantidad_capturada=data.cantidad_capturada,
+            instancia_abierta_id=data.instancia_abierta_id,
         )
         await self._movimiento_repo.guardar(movimiento)
         await self._persistir_agregado(data, existencia, nuevo_saldo)
@@ -335,6 +340,7 @@ class AplicarMovimientoUseCase:
             unidad_capturada_id=data.unidad_capturada_id,
             cantidad_capturada=data.cantidad_capturada,
             lote_id=lote_id,
+            instancia_abierta_id=data.instancia_abierta_id,
         )
         await self._movimiento_repo.guardar(movimiento)
         return movimiento.id

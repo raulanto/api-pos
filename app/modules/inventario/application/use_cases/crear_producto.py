@@ -13,6 +13,7 @@ from app.modules.inventario.application.ports.unidad_medida_repository import (
 )
 from app.modules.inventario.domain.exceptions import (
     CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado, UnidadMedidaNoEncontrada,
+    InstanciaConfigInvalida,
 )
 
 @dataclass
@@ -32,6 +33,8 @@ class CrearProductoInput:
     permite_venta_fraccionada: bool = False
     incremento_minimo_venta: Decimal | None = None
     requiere_lote: bool = False
+    rastrea_instancia_abierta: bool = False
+    instancia_capacidad_default: Decimal | None = None
 
 class CrearProductoUseCase:
     def __init__(
@@ -66,6 +69,14 @@ class CrearProductoUseCase:
                 f"Ya existe un producto activo con el código de barras '{data.codigo_barras}'"
             )
 
+        if data.rastrea_instancia_abierta and not (
+            data.instancia_capacidad_default and data.instancia_capacidad_default > 0
+        ):
+            raise InstanciaConfigInvalida(
+                "`rastrea_instancia_abierta` requiere `instancia_capacidad_default` > 0 "
+                "(capacidad para auto-abrir un envase al vender)."
+            )
+
         producto = Producto.crear(
             sku=data.sku,
             nombre=data.nombre,
@@ -82,6 +93,8 @@ class CrearProductoUseCase:
             permite_venta_fraccionada=data.permite_venta_fraccionada,
             incremento_minimo_venta=data.incremento_minimo_venta,
             requiere_lote=data.requiere_lote,
+            rastrea_instancia_abierta=data.rastrea_instancia_abierta,
+            instancia_capacidad_default=data.instancia_capacidad_default,
         )
         try:
             await self._producto_repo.guardar(producto)

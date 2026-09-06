@@ -54,3 +54,17 @@ class TipoMagnitud(str, Enum):
     VOLUMEN = "volumen"
     LONGITUD = "longitud"
     TIEMPO = "tiempo"
+
+
+"""
+    Estado de una instancia física abierta (envase destapado que se vende en
+    fracciones de la unidad base).
+    @param ABIERTA: en uso, con saldo disponible.
+    @param AGOTADA: su saldo llegó a 0 por consumo/venta/merma.
+    @param DESCARTADA: se dio de baja el envase con saldo remanente (derrame,
+        contaminación); el remanente se registró como MERMA.
+"""
+class EstadoInstancia(str, Enum):
+    ABIERTA = "abierta"
+    AGOTADA = "agotada"
+    DESCARTADA = "descartada"

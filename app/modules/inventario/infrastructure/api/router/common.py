@@ -11,6 +11,7 @@ from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyProductoComponenteRepository,
     SqlAlchemyProductoUnidadRepository,
     SqlAlchemyImagenRepository,
+    SqlAlchemyInstanciaAbiertaRepository,
     SqlAlchemyLoteRepository,
     SqlAlchemyExistenciaRepository,
     SqlAlchemyMovimientoRepository,
@@ -27,6 +28,7 @@ _NOT_FOUND = (
     exc.ProductoNoEncontrado, exc.CategoriaNoEncontrada, exc.ExistenciaNoEncontrada,
     exc.MovimientoNoEncontrado, exc.ComponenteNoEncontrado, exc.UnidadNoEncontrada,
     exc.UnidadMedidaNoEncontrada, exc.ImagenNoEncontrada, exc.LoteNoEncontrado,
+    exc.InstanciaAbiertaNoEncontrada,
 )
 
 
@@ -43,6 +45,7 @@ _CONFLICT = (
     exc.UnidadDuplicada, exc.CodigoBarrasUnidadDuplicado,
     exc.UnidadMedidaDuplicada, exc.UnidadMedidaEnUso,
     exc.LoteDuplicado,
+    exc.InstanciaNoAbierta,
 )
 
 
@@ -57,6 +60,8 @@ _BAD_REQUEST = (
     exc.AjusteSinCantidadFinal, exc.TransferenciaInvalida, exc.JerarquiaCategoriaInvalida,
     exc.ProductoInactivo, exc.KitInvalido, exc.ComponenteInvalido, exc.UnidadInvalida,
     exc.CantidadNoVendible, exc.ImagenInvalida, exc.LoteRequerido, exc.LoteInvalido,
+    exc.SaldoInstanciaInsuficiente, exc.ProductoNoRastreaInstancias,
+    exc.InstanciaConfigInvalida, exc.CapacidadInstanciaInvalida,
     ValueError,
 )
 
@@ -150,6 +155,16 @@ def unidad_repo(db):
 """
 def imagen_repo(db):
     return SqlAlchemyImagenRepository(db)
+
+
+"""
+    Fábrica de repositorio de instancias físicas abiertas.
+
+    @param db: Sesión de la base de datos.
+    @return: Instancia de la clase SqlAlchemyInstanciaAbiertaRepository.
+"""
+def inst_repo(db):
+    return SqlAlchemyInstanciaAbiertaRepository(db)
 
 
 """

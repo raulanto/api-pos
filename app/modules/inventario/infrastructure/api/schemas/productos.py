@@ -29,6 +29,10 @@ class CrearProductoRequest(BaseModel):
     permite_venta_fraccionada: bool = False
     incremento_minimo_venta: Optional[Decimal] = Field(default=None, gt=0)
     requiere_lote: bool = False
+    # Rastreo de envase abierto: si es True, `instancia_capacidad_default` (> 0)
+    # es obligatorio (capacidad para auto-abrir un envase al vender a granel).
+    rastrea_instancia_abierta: bool = False
+    instancia_capacidad_default: Optional[Decimal] = Field(default=None, gt=0)
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     descripcion: Optional[str] = None
 
@@ -55,6 +59,10 @@ class ActualizarProductoRequest(BaseModel):
     # Para dejar `incremento_minimo_venta` en NULL hay que mandarlo explícitamente.
     cambiar_incremento_minimo_venta: bool = False
     requiere_lote: Optional[bool] = None
+    rastrea_instancia_abierta: Optional[bool] = None
+    instancia_capacidad_default: Optional[Decimal] = Field(default=None, gt=0)
+    # Para dejar `instancia_capacidad_default` en NULL hay que mandarlo explícito.
+    cambiar_instancia_capacidad_default: bool = False
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     cambiar_codigo_barras: bool = False
     # Para dejar `descripcion` en NULL hay que mandarlo explícitamente.
@@ -110,6 +118,8 @@ class ProductoResponse(EmbeddableModel):
     permite_venta_fraccionada: bool = False
     incremento_minimo_venta: Optional[Decimal] = None
     requiere_lote: bool = False
+    rastrea_instancia_abierta: bool = False
+    instancia_capacidad_default: Optional[Decimal] = None
     activo: bool
     # Siempre presente (no depende de `?include=`): la imagen de portada del
     # producto, o null si no tiene ninguna marcada como principal.

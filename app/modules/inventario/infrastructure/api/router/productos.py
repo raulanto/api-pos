@@ -72,6 +72,8 @@ async def crear_producto(
                 permite_venta_fraccionada=body.permite_venta_fraccionada,
                 incremento_minimo_venta=body.incremento_minimo_venta,
                 requiere_lote=body.requiere_lote,
+                rastrea_instancia_abierta=body.rastrea_instancia_abierta,
+                instancia_capacidad_default=body.instancia_capacidad_default,
                 codigo_barras=body.codigo_barras, descripcion=body.descripcion,
             )
         )
@@ -241,6 +243,9 @@ async def actualizar_producto(
                 incremento_minimo_venta=body.incremento_minimo_venta,
                 cambiar_incremento_minimo_venta=body.cambiar_incremento_minimo_venta,
                 requiere_lote=body.requiere_lote,
+                rastrea_instancia_abierta=body.rastrea_instancia_abierta,
+                instancia_capacidad_default=body.instancia_capacidad_default,
+                cambiar_instancia_capacidad_default=body.cambiar_instancia_capacidad_default,
                 codigo_barras=body.codigo_barras, cambiar_codigo_barras=body.cambiar_codigo_barras,
                 cambiar_descripcion=body.cambiar_descripcion,
             )

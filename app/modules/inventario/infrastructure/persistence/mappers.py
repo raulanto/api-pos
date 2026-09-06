@@ -1,13 +1,14 @@
 from app.modules.inventario.domain.entities import (
     Categoria, UnidadMedida, Producto, ProductoComponente, ProductoUnidad, ProductoImagen,
-    Lote, ExistenciaLote, Existencia, MovimientoInventario,
+    InstanciaAbierta, Lote, ExistenciaLote, Existencia, MovimientoInventario,
 )
 from app.modules.inventario.domain.value_objects import (
-    TipoProducto, TipoMovimiento, TipoMagnitud,
+    TipoProducto, TipoMovimiento, TipoMagnitud, EstadoInstancia,
 )
 from app.modules.inventario.infrastructure.persistence.orm_models import (
     CategoriaORM, UnidadMedidaORM, ProductoORM, ProductoComponenteORM, ProductoUnidadORM,
-    ProductoImagenORM, LoteORM, ExistenciaLoteORM, ExistenciaORM, MovimientoInventarioORM,
+    ProductoImagenORM, InstanciaAbiertaORM, LoteORM, ExistenciaLoteORM, ExistenciaORM,
+    MovimientoInventarioORM,
 )
 
 
@@ -152,6 +153,8 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         permite_venta_fraccionada=orm.permite_venta_fraccionada,
         incremento_minimo_venta=orm.incremento_minimo_venta,
         requiere_lote=orm.requiere_lote,
+        rastrea_instancia_abierta=orm.rastrea_instancia_abierta,
+        instancia_capacidad_default=orm.instancia_capacidad_default,
         # Siempre presente: no depende de `includes` (ver `_opts_producto`,
         # que carga `imagen_principal` incondicionalmente).
         imagen_principal=to_domain_imagen(orm.imagen_principal) if orm.imagen_principal else None,
@@ -279,7 +282,47 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         permite_venta_fraccionada=entidad.permite_venta_fraccionada,
         incremento_minimo_venta=entidad.incremento_minimo_venta,
         requiere_lote=entidad.requiere_lote,
+        rastrea_instancia_abierta=entidad.rastrea_instancia_abierta,
+        instancia_capacidad_default=entidad.instancia_capacidad_default,
         activo=entidad.activo
+    )
+
+
+"""
+    Transforma una instancia abierta ORM <-> entidad de dominio.
+"""
+def to_domain_instancia(orm: InstanciaAbiertaORM) -> InstanciaAbierta:
+    return InstanciaAbierta(
+        id=orm.id,
+        producto_id=orm.producto_id,
+        sucursal_id=orm.sucursal_id,
+        producto_unidad_id=orm.producto_unidad_id,
+        lote_id=orm.lote_id,
+        capacidad_inicial=orm.capacidad_inicial,
+        saldo=orm.saldo,
+        estado=EstadoInstancia(orm.estado),
+        abierta_por=orm.abierta_por,
+        abierta_at=orm.abierta_at,
+        cerrada_at=orm.cerrada_at,
+        motivo_cierre=orm.motivo_cierre,
+        created_at=orm.created_at,
+    )
+
+
+def to_orm_instancia(entidad: InstanciaAbierta) -> InstanciaAbiertaORM:
+    return InstanciaAbiertaORM(
+        id=entidad.id,
+        producto_id=entidad.producto_id,
+        sucursal_id=entidad.sucursal_id,
+        producto_unidad_id=entidad.producto_unidad_id,
+        lote_id=entidad.lote_id,
+        capacidad_inicial=entidad.capacidad_inicial,
+        saldo=entidad.saldo,
+        estado=entidad.estado.value,
+        abierta_por=entidad.abierta_por,
+        abierta_at=entidad.abierta_at,
+        cerrada_at=entidad.cerrada_at,
+        motivo_cierre=entidad.motivo_cierre,
     )
 
 """
@@ -345,6 +388,7 @@ def to_domain_movimiento(
         unidad_capturada_id=orm.unidad_capturada_id,
         cantidad_capturada=orm.cantidad_capturada,
         lote_id=orm.lote_id,
+        instancia_abierta_id=orm.instancia_abierta_id,
     )
     if "producto" in includes:
         mov.producto = orm.producto
@@ -374,4 +418,5 @@ def to_orm_movimiento(entidad: MovimientoInventario) -> MovimientoInventarioORM:
         unidad_capturada_id=entidad.unidad_capturada_id,
         cantidad_capturada=entidad.cantidad_capturada,
         lote_id=entidad.lote_id,
+        instancia_abierta_id=entidad.instancia_abierta_id,
     )

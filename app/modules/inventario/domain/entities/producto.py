@@ -53,6 +53,11 @@ class Producto:
     # Control por lote: si está activo, cada ENTRADA debe indicar un lote y las
     # SALIDAS descuentan por FEFO (primero el que vence antes).
     requiere_lote: bool = False
+    # Instancia física abierta: si está activo, las ventas a granel consumen de
+    # envases abiertos (`instancia_abierta`); `instancia_capacidad_default` es la
+    # capacidad con la que se auto-abre un envase al vender.
+    rastrea_instancia_abierta: bool = False
+    instancia_capacidad_default: Decimal | None = None
 
     # Relaciones embebidas opcionales
     # (`?include=categoria,existencias,componentes,unidades,imagenes`).
@@ -95,6 +100,8 @@ class Producto:
         permite_venta_fraccionada: bool = False,
         incremento_minimo_venta: Decimal | None = None,
         requiere_lote: bool = False,
+        rastrea_instancia_abierta: bool = False,
+        instancia_capacidad_default: Decimal | None = None,
     ) -> "Producto":
         return Producto(
             id=uuid4(),
@@ -116,6 +123,8 @@ class Producto:
             ),
             incremento_minimo_venta=incremento_minimo_venta,
             requiere_lote=requiere_lote,
+            rastrea_instancia_abierta=rastrea_instancia_abierta,
+            instancia_capacidad_default=instancia_capacidad_default,
         )
 
     """
@@ -163,6 +172,9 @@ class Producto:
         incremento_minimo_venta: Decimal | None = None,
         cambiar_incremento_minimo_venta: bool = False,
         requiere_lote: bool | None = None,
+        rastrea_instancia_abierta: bool | None = None,
+        instancia_capacidad_default: Decimal | None = None,
+        cambiar_instancia_capacidad_default: bool = False,
     ) -> None:
         if sku is not None:
             self.sku = sku
@@ -194,6 +206,12 @@ class Producto:
             self.permite_venta_fraccionada = permite_venta_fraccionada
         if requiere_lote is not None:
             self.requiere_lote = requiere_lote
+        if rastrea_instancia_abierta is not None:
+            self.rastrea_instancia_abierta = rastrea_instancia_abierta
+        if cambiar_instancia_capacidad_default:
+            self.instancia_capacidad_default = instancia_capacidad_default
+        elif instancia_capacidad_default is not None:
+            self.instancia_capacidad_default = instancia_capacidad_default
         if cambiar_incremento_minimo_venta:
             self.incremento_minimo_venta = incremento_minimo_venta
         elif incremento_minimo_venta is not None:

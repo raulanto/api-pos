@@ -41,6 +41,9 @@ class MovimientoInventario:
     # Lote afectado (sólo productos con control por lote). Una salida FEFO que
     # toca varios lotes genera un movimiento por lote.
     lote_id: UUID | None = None
+    # Envase abierto del que salió/entró esta fracción (sólo productos que
+    # rastrean instancia abierta). Traza de qué envase físico vino la venta.
+    instancia_abierta_id: UUID | None = None
 
     # Relaciones embebidas opcionales (`?include=producto,usuario`).
     producto: object | None = field(default=None, compare=False, repr=False)
@@ -70,6 +73,7 @@ class MovimientoInventario:
         unidad_capturada_id: UUID | None = None,
         cantidad_capturada: Decimal | None = None,
         lote_id: UUID | None = None,
+        instancia_abierta_id: UUID | None = None,
     ) -> "MovimientoInventario":
         if cantidad < 0:
             raise ValueError("La cantidad del movimiento debe ser siempre positiva.")
@@ -88,4 +92,5 @@ class MovimientoInventario:
             unidad_capturada_id=unidad_capturada_id,
             cantidad_capturada=cantidad_capturada,
             lote_id=lote_id,
+            instancia_abierta_id=instancia_abierta_id,
         )

@@ -13,6 +13,14 @@ from .imagenes import (
     ActualizarImagenRequest,
     ImagenResponse,
 )
+from .instancias import (
+    AbrirInstanciaRequest,
+    ConsumirInstanciaRequest,
+    MermarInstanciaRequest,
+    AjustarInstanciaRequest,
+    DescartarInstanciaRequest,
+    InstanciaResponse,
+)
 from .lotes import (
     CrearLoteRequest,
     ActualizarLoteRequest,
@@ -54,6 +62,12 @@ __all__ = [
     "AgregarImagenRequest",
     "ActualizarImagenRequest",
     "ImagenResponse",
+    "AbrirInstanciaRequest",
+    "ConsumirInstanciaRequest",
+    "MermarInstanciaRequest",
+    "AjustarInstanciaRequest",
+    "DescartarInstanciaRequest",
+    "InstanciaResponse",
     "CrearLoteRequest",
     "ActualizarLoteRequest",
     "LoteResponse",

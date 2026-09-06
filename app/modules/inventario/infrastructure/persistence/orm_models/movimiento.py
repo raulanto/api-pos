@@ -46,6 +46,11 @@ class MovimientoInventarioORM(Base, TimestampMixin):
     cantidad_capturada = Column(Numeric(14, 4), nullable=True)
     # Lote afectado (productos con control por lote). NULL = sin control por lote.
     lote_id = Column(PGUUID(as_uuid=True), ForeignKey("lote.id"), nullable=True)
+    # Envase abierto del que salió/entró la fracción (productos que rastrean
+    # instancia abierta). NULL = no aplica.
+    instancia_abierta_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("instancia_abierta.id"), nullable=True
+    )
 
     # Solo lectura, para `?include=producto,usuario`.
     producto = relationship("ProductoORM", viewonly=True, lazy="raise")

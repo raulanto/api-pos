@@ -139,6 +139,9 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 permite_stock_negativo=producto.permite_stock_negativo,
                 permite_venta_fraccionada=producto.permite_venta_fraccionada,
                 incremento_minimo_venta=producto.incremento_minimo_venta,
+                requiere_lote=producto.requiere_lote,
+                rastrea_instancia_abierta=producto.rastrea_instancia_abierta,
+                instancia_capacidad_default=producto.instancia_capacidad_default,
                 codigo_barras=producto.codigo_barras,
                 activo=producto.activo,
             )

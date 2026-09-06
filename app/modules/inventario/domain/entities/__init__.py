@@ -4,6 +4,7 @@ from .producto import Producto
 from .producto_componente import ProductoComponente
 from .producto_unidad import ProductoUnidad
 from .producto_imagen import ProductoImagen
+from .instancia_abierta import InstanciaAbierta
 from .lote import Lote
 from .existencia_lote import ExistenciaLote
 from .existencia import Existencia
@@ -16,6 +17,7 @@ __all__ = [
     "ProductoComponente",
     "ProductoUnidad",
     "ProductoImagen",
+    "InstanciaAbierta",
     "Lote",
     "ExistenciaLote",
     "Existencia",

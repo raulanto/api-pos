@@ -74,6 +74,7 @@ class MovimientoResponse(EmbeddableModel):
     unidad_capturada_id: Optional[UUID] = None
     cantidad_capturada: Optional[Decimal] = None
     lote_id: Optional[UUID] = None
+    instancia_abierta_id: Optional[UUID] = None
     created_at: datetime
     # Embebidas (?include=producto,usuario)
     producto: Optional[ProductoEmbed] = None

@@ -71,6 +71,10 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     incremento_minimo_venta = Column(Numeric(14, 4), nullable=True)
     # Control por lote (código + caducidad + costo por lote, FEFO en salidas).
     requiere_lote = Column(Boolean, default=False, nullable=False)
+    # Instancia física abierta: ventas a granel consumen de envases abiertos;
+    # `instancia_capacidad_default` = capacidad para auto-abrir uno al vender.
+    rastrea_instancia_abierta = Column(Boolean, default=False, nullable=False)
+    instancia_capacidad_default = Column(Numeric(14, 4), nullable=True)
 
     # Solo lectura, para `?include=categoria,existencias,componentes`.
     categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")

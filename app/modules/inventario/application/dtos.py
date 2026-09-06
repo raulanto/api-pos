@@ -3,12 +3,14 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from app.modules.inventario.domain.value_objects import TipoMovimiento, TipoProducto
+from app.modules.inventario.domain.value_objects import (
+    TipoMovimiento, TipoProducto, EstadoInstancia,
+)
 from app.shared.responses import Page  # re-export por compatibilidad
 
 __all__ = [
     "FiltroProductos", "FiltroMovimientos", "FiltroCategorias", "FiltroExistencias",
-    "ProductoKpis", "Page",
+    "FiltroInstancias", "ProductoKpis", "Page",
 ]
 
 
@@ -77,3 +79,11 @@ class FiltroMovimientos:
     tipo: TipoMovimiento | None = None
     desde: datetime | None = None
     hasta: datetime | None = None
+
+
+@dataclass
+class FiltroInstancias:
+    producto_id: UUID | None = None
+    sucursal_id: list[UUID] | None = None      # varias => OR (IN)
+    estado: EstadoInstancia | None = None
+    lote_id: UUID | None = None
