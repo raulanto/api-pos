@@ -26,7 +26,12 @@ class ImagenResponse(BaseModel):
     id: UUID
     producto_id: Optional[UUID] = None
     producto_unidad_id: Optional[UUID] = None
-    url: str
+    # `url`: la externa tal cual, o una URL GET prefirmada si la imagen vive en S3.
+    url: Optional[str] = None
+    # `thumbnail_url`: prefirmada de la miniatura (sólo imágenes S3). Puede dar
+    # 404 unos segundos hasta que la Lambda termina de generarla.
+    thumbnail_url: Optional[str] = None
+    object_key: Optional[str] = None
     alt_texto: Optional[str] = None
     orden: int
     es_principal: bool

@@ -1,14 +1,17 @@
 from decimal import Decimal
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func, or_
+from sqlalchemy import select, update, delete, func, or_
 from sqlalchemy.orm import selectinload
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
 from app.modules.inventario.application.dtos import FiltroProductos, ProductoKpis
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import Page, PageParams, Sort
 from app.modules.inventario.domain.entities import Producto
-from app.modules.inventario.infrastructure.persistence.orm_models import ProductoORM, ExistenciaORM
+from app.modules.inventario.infrastructure.persistence.orm_models import (
+    ProductoORM, ExistenciaORM, ProductoImagenORM, ProductoUnidadORM,
+    ProductoComponenteORM, LoteORM, ExistenciaLoteORM,
+)
 from app.modules.inventario.infrastructure.persistence.mappers import to_domain_producto, to_orm_producto
 
 
@@ -141,6 +144,48 @@ class SqlAlchemyProductoRepository(ProductoRepository):
             )
         )
         await self._db.flush()
+
+    async def eliminar_fisico(self, producto_id: UUID) -> list[str]:
+        # Subconsulta de las presentaciones del producto: sus imágenes también
+        # se van. Se resuelve ANTES de borrar `producto_unidad`.
+        unidades_sub = (
+            select(ProductoUnidadORM.id)
+            .where(ProductoUnidadORM.producto_id == producto_id)
+            .scalar_subquery()
+        )
+        imagenes_dueno = or_(
+            ProductoImagenORM.producto_id == producto_id,
+            ProductoImagenORM.producto_unidad_id.in_(unidades_sub),
+        )
+
+        object_keys = (await self._db.execute(
+            select(ProductoImagenORM.object_key)
+            .where(ProductoImagenORM.object_key.isnot(None), imagenes_dueno)
+        )).scalars().all()
+
+        # Orden respetando las FK: hijos -> ... -> producto.
+        await self._db.execute(delete(ProductoImagenORM).where(imagenes_dueno))
+        # Solo la receta donde ESTE producto es el kit. Si es componente de otro
+        # kit, el DELETE de `producto` de abajo choca la FK -> IntegrityError.
+        await self._db.execute(
+            delete(ProductoComponenteORM)
+            .where(ProductoComponenteORM.producto_kit_id == producto_id)
+        )
+        await self._db.execute(
+            delete(ExistenciaLoteORM).where(ExistenciaLoteORM.producto_id == producto_id)
+        )
+        await self._db.execute(delete(LoteORM).where(LoteORM.producto_id == producto_id))
+        await self._db.execute(
+            delete(ExistenciaORM).where(ExistenciaORM.producto_id == producto_id)
+        )
+        await self._db.execute(
+            delete(ProductoUnidadORM).where(ProductoUnidadORM.producto_id == producto_id)
+        )
+        await self._db.execute(delete(ProductoORM).where(ProductoORM.id == producto_id))
+        # Fuerza el SQL ahora: un IntegrityError por movimientos/ventas sale acá
+        # (dentro del use case) y no recién en el commit del request.
+        await self._db.flush()
+        return list(object_keys)
 
     """
         Funcion: Obtiene un producto por ID.

@@ -38,6 +38,7 @@ _NOT_FOUND = (
 """
 _CONFLICT = (
     exc.CategoriaConProductosActivos, exc.ProductoConStockActivo,
+    exc.ProductoConHistorial,
     exc.ComponenteDuplicado, exc.ProductoEsComponenteDeKit,
     exc.UnidadDuplicada, exc.CodigoBarrasUnidadDuplicado,
     exc.UnidadMedidaDuplicada, exc.UnidadMedidaEnUso,
@@ -149,6 +150,18 @@ def unidad_repo(db):
 """
 def imagen_repo(db):
     return SqlAlchemyImagenRepository(db)
+
+
+"""
+    Fábrica del almacén de archivos de imagen (S3 / LocalStack).
+
+    @return: Instancia de la clase S3AlmacenImagenes.
+"""
+def almacen_imagenes():
+    from app.modules.inventario.infrastructure.adapters.s3_almacen_imagenes import (
+        S3AlmacenImagenes,
+    )
+    return S3AlmacenImagenes()
 
 
 """

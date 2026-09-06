@@ -19,6 +19,12 @@ alembic/versions/__pycache__
 Dockerfile
 .dockerignore
 docker-compose*.yml
+# Infra de LocalStack: sólo la usa docker-compose, no la imagen de la API.
+docker/localstack
+
+# Tests
+tests
+.pytest_cache
 
 # Datos locales
 data/uploads

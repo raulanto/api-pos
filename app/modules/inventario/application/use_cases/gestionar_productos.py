@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from app.modules.inventario.domain.entities import Producto
 from app.modules.inventario.domain.exceptions import (
     ProductoNoEncontrado, CategoriaNoEncontrada, SkuDuplicado, CodigoBarrasDuplicado,
-    ProductoConStockActivo, KitInvalido, ProductoEsComponenteDeKit,
+    ProductoConStockActivo, ProductoConHistorial, KitInvalido, ProductoEsComponenteDeKit,
     UnidadMedidaNoEncontrada, LoteInvalido,
 )
 from app.modules.inventario.application.ports.unidad_medida_repository import (
@@ -23,6 +23,8 @@ from app.modules.inventario.application.ports.componente_repository import (
 from app.modules.inventario.application.ports.unidad_repository import (
     ProductoUnidadRepository,
 )
+from app.modules.inventario.application.ports.movimiento_repository import MovimientoRepository
+from app.modules.inventario.application.ports.almacen_imagenes import AlmacenImagenes
 from app.modules.inventario.application.use_cases.crear_producto import _traducir_integridad
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import Page, PageParams, Sort
@@ -284,3 +286,57 @@ class ReactivarProductoUseCase:
         except IntegrityError as e:
             raise _traducir_integridad(e, producto.sku, producto.codigo_barras)
         return producto
+
+
+class EliminarProductoUseCase:
+    """Borrado FÍSICO del producto y de su catálogo propio (imágenes + objetos
+    S3, presentaciones, receta como kit, lotes, existencia y existencia_lote).
+
+    Solo si el producto NO tiene historial: sin movimientos de inventario y sin
+    ventas que lo referencien. Si lo tiene -> `ProductoConHistorial` (409) y hay
+    que usar `DesactivarProductoUseCase` (baja lógica).
+    """
+
+    def __init__(
+        self,
+        producto_repo: ProductoRepository,
+        movimiento_repo: MovimientoRepository,
+        componente_repo: ProductoComponenteRepository,
+        almacen: AlmacenImagenes | None = None,
+    ):
+        self._repo = producto_repo
+        self._mov_repo = movimiento_repo
+        self._comp_repo = componente_repo
+        self._almacen = almacen
+
+    async def ejecutar(self, producto_id: UUID) -> None:
+        producto = await self._repo.obtener_por_id(producto_id)
+        if not producto:
+            raise ProductoNoEncontrado(f"No existe el producto {producto_id}")
+
+        if await self._mov_repo.existe_para_producto(producto_id):
+            raise ProductoConHistorial(
+                "El producto tiene movimientos de inventario registrados; no se "
+                "puede borrar. Usá PATCH /productos/{id}/desactivar."
+            )
+        if await self._comp_repo.es_componente_de_kit_activo(producto_id):
+            raise ProductoEsComponenteDeKit(
+                "Este producto es componente de un kit activo; quitalo de esas "
+                "recetas antes de borrarlo."
+            )
+
+        try:
+            object_keys = await self._repo.eliminar_fisico(producto_id)
+        except IntegrityError as e:
+            # Lo referencia una venta (detalle_venta) u otro registro histórico.
+            raise ProductoConHistorial(
+                "El producto está referenciado por ventas u otros registros "
+                "históricos; no se puede borrar. Usá PATCH /productos/{id}/desactivar."
+            ) from e
+
+        # Limpieza de S3 best-effort, ya con el DELETE en BD hecho (mismo
+        # criterio que EliminarImagenUseCase).
+        if self._almacen is not None:
+            for key in object_keys:
+                await self._almacen.eliminar(key)
+                await self._almacen.eliminar(AlmacenImagenes.key_miniatura(key))

@@ -42,6 +42,12 @@ class ProductoConStockActivo(Exception):
     """No se puede desactivar un producto con existencia > 0 sin confirmación explícita."""
     pass
 
+class ProductoConHistorial(Exception):
+    """No se puede BORRAR físicamente el producto: tiene movimientos de
+    inventario o está referenciado por ventas u otros registros históricos.
+    Usar la baja lógica (`/desactivar`) en su lugar."""
+    pass
+
 class KitInvalido(Exception):
     """El producto no es de tipo `kit`, o se intenta dejarlo `simple` con componentes."""
     pass

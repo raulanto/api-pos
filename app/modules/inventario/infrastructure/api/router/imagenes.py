@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,12 +13,19 @@ from app.modules.inventario.application.use_cases.gestionar_imagenes import (
     ActualizarImagenUseCase, ActualizarImagenInput,
     EliminarImagenUseCase,
 )
+from app.modules.inventario.application.use_cases.subir_imagen import (
+    SubirImagenUseCase, SubirImagenInput,
+)
 from app.modules.inventario.infrastructure.api.schemas import (
     AgregarImagenRequest, ActualizarImagenRequest, ImagenResponse,
 )
-from .common import imagen_repo, prod_repo, unidad_repo, traducir
+from .common import almacen_imagenes, imagen_repo, prod_repo, unidad_repo, traducir
 
 router = APIRouter(route_class=EnvelopeRoute)
+
+# Las entidades `ProductoImagen` ya traen `url` / `thumbnail_url` resueltas
+# (el mapper las prefirma al leer una imagen S3), así que se serializan directo
+# con `ImagenResponse.model_config = from_attributes`.
 
 
 async def _unidad_del_producto(db: AsyncSession, producto_id: UUID, unidad_id: UUID) -> None:
@@ -73,6 +80,33 @@ async def agregar_imagen_producto(
     return ok(imagen)
 
 
+@router.post(
+    "/productos/{producto_id}/imagenes/upload", response_model=ApiResponse[ImagenResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def subir_imagen_producto(
+    producto_id: UUID,
+    file: UploadFile = File(...),
+    alt_texto: str | None = Form(default=None),
+    orden: int = Form(default=0, ge=0),
+    es_principal: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
+):
+    contenido = await file.read()
+    try:
+        imagen = await SubirImagenUseCase(
+            imagen_repo(db), prod_repo(db), unidad_repo(db), almacen_imagenes()
+        ).ejecutar(SubirImagenInput(
+            contenido=contenido, content_type=file.content_type or "",
+            producto_id=producto_id,
+            alt_texto=alt_texto, orden=orden, es_principal=es_principal,
+        ))
+    except Exception as e:
+        raise traducir(e)
+    return ok(imagen)
+
+
 @router.patch(
     "/productos/{producto_id}/imagenes/{imagen_id}", response_model=ApiResponse[ImagenResponse],
 )
@@ -105,7 +139,7 @@ async def eliminar_imagen_producto(
     actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
 ):
     try:
-        await EliminarImagenUseCase(imagen_repo(db)).ejecutar(
+        await EliminarImagenUseCase(imagen_repo(db), almacen_imagenes()).ejecutar(
             imagen_id, producto_id=producto_id,
         )
     except Exception as e:
@@ -160,6 +194,35 @@ async def agregar_imagen_unidad(
     return ok(imagen)
 
 
+@router.post(
+    "/productos/{producto_id}/unidades/{unidad_id}/imagenes/upload",
+    response_model=ApiResponse[ImagenResponse], status_code=status.HTTP_201_CREATED,
+)
+async def subir_imagen_unidad(
+    producto_id: UUID,
+    unidad_id: UUID,
+    file: UploadFile = File(...),
+    alt_texto: str | None = Form(default=None),
+    orden: int = Form(default=0, ge=0),
+    es_principal: bool = Form(default=False),
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
+):
+    await _unidad_del_producto(db, producto_id, unidad_id)
+    contenido = await file.read()
+    try:
+        imagen = await SubirImagenUseCase(
+            imagen_repo(db), prod_repo(db), unidad_repo(db), almacen_imagenes()
+        ).ejecutar(SubirImagenInput(
+            contenido=contenido, content_type=file.content_type or "",
+            producto_unidad_id=unidad_id,
+            alt_texto=alt_texto, orden=orden, es_principal=es_principal,
+        ))
+    except Exception as e:
+        raise traducir(e)
+    return ok(imagen)
+
+
 @router.patch(
     "/productos/{producto_id}/unidades/{unidad_id}/imagenes/{imagen_id}",
     response_model=ApiResponse[ImagenResponse],
@@ -198,7 +261,7 @@ async def eliminar_imagen_unidad(
 ):
     try:
         await _unidad_del_producto(db, producto_id, unidad_id)
-        await EliminarImagenUseCase(imagen_repo(db)).ejecutar(
+        await EliminarImagenUseCase(imagen_repo(db), almacen_imagenes()).ejecutar(
             imagen_id, producto_unidad_id=unidad_id,
         )
     except Exception as e:

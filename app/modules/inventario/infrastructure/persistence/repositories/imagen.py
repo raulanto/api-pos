@@ -40,7 +40,12 @@ class SqlAlchemyImagenRepository(ImagenRepository):
             id=imagen.id,
             producto_id=imagen.producto_id,
             producto_unidad_id=imagen.producto_unidad_id,
-            url=imagen.url,
+            # Invariante: imagen S3 => la columna `url` queda NULL (la pública se
+            # deriva prefirmada al leer; `imagen.url` puede traer ese valor
+            # transitorio y no debe persistirse).
+            url=None if imagen.object_key else imagen.url,
+            object_key=imagen.object_key,
+            content_type=imagen.content_type,
             alt_texto=imagen.alt_texto,
             orden=imagen.orden,
             es_principal=imagen.es_principal,
@@ -52,7 +57,9 @@ class SqlAlchemyImagenRepository(ImagenRepository):
             update(_PI)
             .where(_PI.id == imagen.id)
             .values(
-                url=imagen.url,
+                url=None if imagen.object_key else imagen.url,
+                object_key=imagen.object_key,
+                content_type=imagen.content_type,
                 alt_texto=imagen.alt_texto,
                 orden=imagen.orden,
                 es_principal=imagen.es_principal,

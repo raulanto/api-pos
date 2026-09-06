@@ -20,6 +20,7 @@ from app.modules.inventario.application.ports.unidad_repository import (
     ProductoUnidadRepository,
 )
 from app.modules.inventario.application.ports.imagen_repository import ImagenRepository
+from app.modules.inventario.application.ports.almacen_imagenes import AlmacenImagenes
 
 
 async def _validar_dueno(
@@ -145,8 +146,11 @@ class ActualizarImagenUseCase:
 
 # --------------------------------------------------------------------------- #
 class EliminarImagenUseCase:
-    def __init__(self, imagen_repo: ImagenRepository):
+    def __init__(
+        self, imagen_repo: ImagenRepository, almacen: AlmacenImagenes | None = None
+    ):
         self._repo = imagen_repo
+        self._almacen = almacen
 
     async def ejecutar(
         self, imagen_id: UUID,
@@ -158,3 +162,7 @@ class EliminarImagenUseCase:
         ):
             raise ImagenNoEncontrada(f"No existe la imagen {imagen_id} para ese dueño.")
         await self._repo.eliminar(imagen_id)
+        # Imagen propia (S3): borra también el original y su miniatura (best-effort).
+        if self._almacen is not None and imagen.object_key:
+            await self._almacen.eliminar(imagen.object_key)
+            await self._almacen.eliminar(AlmacenImagenes.key_miniatura(imagen.object_key))

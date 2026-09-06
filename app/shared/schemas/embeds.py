@@ -108,12 +108,19 @@ class UnidadEmbed(BaseModel):
 
 
 class ImagenEmbed(BaseModel):
-    """Imagen de la galería de un producto o presentación (`?include=imagenes`)."""
+    """Imagen de la galería de un producto o presentación (`?include=imagenes`).
+
+    `url` (y `thumbnail_url` si aplica) salen PREFIRMADAS cuando la imagen vive
+    en S3 (`object_key` presente); si es una URL externa, `url` va tal cual y
+    `thumbnail_url` es None.
+    """
     model_config = _ORM
     id: UUID
     producto_id: Optional[UUID] = None
     producto_unidad_id: Optional[UUID] = None
-    url: str
+    url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    object_key: Optional[str] = None
     alt_texto: Optional[str] = None
     orden: int
     es_principal: bool

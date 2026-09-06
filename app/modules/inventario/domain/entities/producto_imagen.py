@@ -11,25 +11,39 @@ from uuid import UUID, uuid4
     reja fraccionable). Es una galería: puede haber varias por dueño, con
     `orden` para el carrusel y `es_principal` para la miniatura de catálogo.
 
+    Una imagen es de UNO de dos orígenes:
+    - Externa: `url` apunta a un host de terceros; `object_key` es None.
+    - Propia (S3): `object_key` es la key en el bucket; `url` es None y la URL
+      pública se deriva prefirmada al leer. La miniatura la genera una Lambda y
+      su key se deriva de `object_key` (no se persiste).
+
     @param id: ID de la imagen.
     @param producto_id: Dueño si es una imagen de producto (XOR con el otro).
     @param producto_unidad_id: Dueño si es una imagen de una presentación.
-    @param url: URL de la imagen (servida desde donde el cliente la suba).
+    @param url: URL externa de la imagen (None si vive en S3).
+    @param object_key: Key del objeto en el bucket (None si es una URL externa).
+    @param content_type: MIME del archivo subido a S3.
     @param alt_texto: Texto alternativo / descripción.
     @param orden: Posición en la galería (0 = primera).
     @param es_principal: Miniatura/portada del dueño.
     @param created_at: Fecha de alta.
+    @param thumbnail_url: DERIVADO (no se persiste). URL prefirmada de la
+        miniatura; la rellena el mapper al leer una imagen S3. Para imágenes
+        externas queda None.
 """
 @dataclass
 class ProductoImagen:
     id: UUID
     producto_id: UUID | None
     producto_unidad_id: UUID | None
-    url: str
+    url: str | None
     alt_texto: str | None
     orden: int
     es_principal: bool
+    object_key: str | None = None
+    content_type: str | None = None
     created_at: datetime = None  # type: ignore[assignment]
+    thumbnail_url: str | None = None
 
     @staticmethod
     def crear(
@@ -41,6 +55,25 @@ class ProductoImagen:
             producto_id=producto_id,
             producto_unidad_id=producto_unidad_id,
             url=url,
+            alt_texto=alt_texto,
+            orden=orden,
+            es_principal=es_principal,
+            created_at=datetime.now(timezone.utc),
+        )
+
+    @staticmethod
+    def crear_desde_s3(
+        object_key: str, content_type: str,
+        producto_id: UUID | None = None, producto_unidad_id: UUID | None = None,
+        alt_texto: str | None = None, orden: int = 0, es_principal: bool = False,
+    ) -> "ProductoImagen":
+        return ProductoImagen(
+            id=uuid4(),
+            producto_id=producto_id,
+            producto_unidad_id=producto_unidad_id,
+            url=None,
+            object_key=object_key,
+            content_type=content_type,
             alt_texto=alt_texto,
             orden=orden,
             es_principal=es_principal,

@@ -12,6 +12,15 @@ class ProductoRepository(ABC):
     async def actualizar(self, producto: Producto) -> None: ...
 
     @abstractmethod
+    async def eliminar_fisico(self, producto_id: UUID) -> list[str]:
+        """Borra físicamente el producto y sus datos de catálogo propios
+        (imágenes, presentaciones, receta como kit, lotes, existencia y
+        existencia_lote). NO toca `movimiento_inventario` ni `detalle_venta`:
+        si alguno lo referencia, el DELETE final lanza IntegrityError.
+        Devuelve las `object_key` de S3 de las imágenes borradas."""
+        ...
+
+    @abstractmethod
     async def obtener_por_id(
         self, producto_id: UUID, includes: frozenset[str] = frozenset()
     ) -> Producto | None: ...

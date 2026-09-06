@@ -177,15 +177,29 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
     Transforma una imagen de catálogo ORM <-> entidad de dominio.
 """
 def to_domain_imagen(orm: ProductoImagenORM) -> ProductoImagen:
+    # Imagen propia (S3): `url` y `thumbnail_url` se derivan prefirmadas al leer.
+    # Imagen externa: `url` es el valor guardado; no hay miniatura.
+    url = orm.url
+    thumbnail_url = None
+    if orm.object_key:
+        from app.core.aws import presign_get_url
+        from app.modules.inventario.application.ports.almacen_imagenes import (
+            AlmacenImagenes,
+        )
+        url = presign_get_url(orm.object_key)
+        thumbnail_url = presign_get_url(AlmacenImagenes.key_miniatura(orm.object_key))
     return ProductoImagen(
         id=orm.id,
         producto_id=orm.producto_id,
         producto_unidad_id=orm.producto_unidad_id,
-        url=orm.url,
+        url=url,
+        object_key=orm.object_key,
+        content_type=orm.content_type,
         alt_texto=orm.alt_texto,
         orden=orm.orden,
         es_principal=orm.es_principal,
         created_at=orm.created_at,
+        thumbnail_url=thumbnail_url,
     )
 
 
@@ -195,6 +209,8 @@ def to_orm_imagen(entidad: ProductoImagen) -> ProductoImagenORM:
         producto_id=entidad.producto_id,
         producto_unidad_id=entidad.producto_unidad_id,
         url=entidad.url,
+        object_key=entidad.object_key,
+        content_type=entidad.content_type,
         alt_texto=entidad.alt_texto,
         orden=entidad.orden,
         es_principal=entidad.es_principal,

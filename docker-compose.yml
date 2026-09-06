@@ -10,6 +10,14 @@ services:
       # Dentro de la red de compose el host de la base es "db", no "localhost".
       # Esto pisa el DATABASE_URL de .env (pensado para correr fuera de Docker).
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-pos_db}
+      # S3 para I/O: nombre interno de LocalStack en la red de compose.
+      S3_ENDPOINT_URL: http://localstack:4566
+      # S3 para firmar URLs GET que abre el navegador: host alcanzable desde afuera.
+      S3_PUBLIC_ENDPOINT_URL: http://localhost:4566
+      S3_BUCKET_IMAGENES: ${S3_BUCKET_IMAGENES:-pos-imagenes}
+      S3_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
     env_file:
       - .env
     volumes:
@@ -18,6 +26,8 @@ services:
       - .:/app
     depends_on:
       db:
+        condition: service_healthy
+      localstack:
         condition: service_healthy
     # El ENTRYPOINT corre `alembic upgrade head` y luego ejecuta esto:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -42,5 +52,55 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # One-shot: compila Pillow (wheel Linux) + arma el zip de la Lambda en un
+  # volumen compartido con LocalStack. Corre a amd64/arm64 según el host.
+  lambda_build:
+    image: python:3.12-slim
+    container_name: pos_lambda_build
+    volumes:
+      - ./docker/localstack/lambda:/src:ro
+      - lambda_dist:/dist
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        rm -rf /dist/pkg /dist/function.zip
+        mkdir -p /dist/pkg
+        pip install --no-cache-dir -r /src/requirements.txt -t /dist/pkg
+        cp /src/handler.py /dist/pkg/
+        python -c "import shutil; shutil.make_archive('/dist/function', 'zip', '/dist/pkg')"
+        echo "lambda build OK -> /dist/function.zip"
+
+  localstack:
+    image: localstack/localstack:4
+    container_name: pos_localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,lambda
+      LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: "60"
+      S3_BUCKET_IMAGENES: ${S3_BUCKET_IMAGENES:-pos-imagenes}
+      DEBUG: "1"
+    volumes:
+      # Scripts de bootstrap (ready.d) + zip de la Lambda.
+      - ./docker/localstack/init:/etc/localstack/init:ro
+      - lambda_dist:/opt/code/lambda-dist:ro
+      # La Lambda de LocalStack arranca contenedores: necesita el socket de Docker.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - localstack_data:/var/lib/localstack
+    depends_on:
+      lambda_build:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  localstack_data:
+  lambda_dist:

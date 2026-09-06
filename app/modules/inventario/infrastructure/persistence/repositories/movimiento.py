@@ -67,6 +67,14 @@ class SqlAlchemyMovimientoRepository(MovimientoRepository):
         )).scalar_one_or_none()
         return to_domain_movimiento(orm, includes) if orm else None
 
+    async def existe_para_producto(self, producto_id: UUID) -> bool:
+        fila = await self._db.scalar(
+            select(MovimientoInventarioORM.id)
+            .where(MovimientoInventarioORM.producto_id == producto_id)
+            .limit(1)
+        )
+        return fila is not None
+
     async def listar_por_referencia(
         self, referencia_id: UUID, tipo=None, referencia_tipo: str | None = None,
     ) -> list[MovimientoInventario]:

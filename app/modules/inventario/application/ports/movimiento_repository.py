@@ -15,6 +15,12 @@ class MovimientoRepository(ABC):
     ) -> MovimientoInventario | None: ...
 
     @abstractmethod
+    async def existe_para_producto(self, producto_id: UUID) -> bool:
+        """True si hay al menos un movimiento de inventario de ese producto.
+        Se usa para decidir si un producto puede borrarse físicamente."""
+        ...
+
+    @abstractmethod
     async def listar_por_referencia(
         self, referencia_id: UUID, tipo: TipoMovimiento | None = None,
         referencia_tipo: str | None = None,

@@ -21,14 +21,14 @@ from app.modules.inventario.application.use_cases.crear_producto import (
 from app.modules.inventario.application.use_cases.gestionar_productos import (
     ListarProductosUseCase, ObtenerProductoUseCase, BuscarProductoPorCodigoBarrasUseCase,
     ActualizarProductoUseCase, ActualizarProductoInput, DesactivarProductoUseCase,
-    ReactivarProductoUseCase, ProductoKpisUseCase,
+    ReactivarProductoUseCase, EliminarProductoUseCase, ProductoKpisUseCase,
 )
 from app.modules.inventario.infrastructure.api.schemas import (
     CrearProductoRequest, ActualizarProductoRequest, ProductoResponse, ProductoKpisResponse,
 )
 from .common import (
-    prod_repo, cat_repo, exist_repo, comp_repo, unidad_repo, um_repo,
-    traducir, traducir_create,
+    prod_repo, cat_repo, exist_repo, comp_repo, unidad_repo, um_repo, mov_repo,
+    almacen_imagenes, traducir, traducir_create,
 )
 
 router = APIRouter(route_class=EnvelopeRoute)
@@ -298,3 +298,31 @@ async def activar_producto(
     except Exception as e:
         raise traducir(e)
     return ok(producto)
+
+
+"""
+    Endpoint para BORRAR físicamente un producto y su catálogo propio
+    (imágenes + objetos S3, presentaciones, receta como kit, lotes, existencia).
+
+    Solo procede si el producto no tiene historial: sin movimientos de inventario
+    y sin ventas. Si lo tiene -> 409; usar PATCH /productos/{id}/desactivar.
+    NO toca movimientos, ventas ni auditoría.
+
+    @param producto_id: ID del producto.
+    @param db: Sesión de la base de datos.
+    @param actual: Usuario autenticado (permiso inventario.eliminar).
+"""
+@router.delete(
+    "/productos/{producto_id}", status_code=status.HTTP_204_NO_CONTENT,
+)
+async def eliminar_producto(
+    producto_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.eliminar")),
+):
+    try:
+        await EliminarProductoUseCase(
+            prod_repo(db), mov_repo(db), comp_repo(db), almacen_imagenes(),
+        ).ejecutar(producto_id)
+    except Exception as e:
+        raise traducir(e)
