@@ -27,6 +27,7 @@ from app.modules.usuarios.application.use_cases.obtener_usuario import ObtenerUs
 from app.modules.usuarios.application.use_cases.editar_usuario import EditarUsuarioUseCase, EditarUsuarioInput
 from app.modules.usuarios.application.use_cases.cambiar_rol_usuario import CambiarRolUsuarioUseCase, CambiarRolUsuarioInput
 from app.modules.usuarios.application.use_cases.desactivar_usuario import DesactivarUsuarioUseCase, DesactivarUsuarioInput
+from app.modules.usuarios.application.use_cases.reactivar_usuario import ReactivarUsuarioUseCase
 from app.modules.usuarios.application.use_cases.cambiar_password import CambiarPasswordUseCase, CambiarPasswordInput
 from app.modules.usuarios.infrastructure.persistence.usuario_repository_impl import SqlAlchemyUsuarioRepository
 from app.modules.usuarios.infrastructure.persistence.catalogos_repository_impl import (
@@ -300,6 +301,22 @@ async def desactivar_usuario(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except _BAD_REQUEST as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return ok(usuario)
+
+
+@router.patch("/{usuario_id}/reactivar", response_model=ApiResponse[UsuarioResponse])
+async def reactivar_usuario(
+    usuario_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("usuarios.desactivar")),
+):
+    """Vuelve a activar un usuario dado de baja. Idempotente si ya está activo.
+    Mismo permiso que la baja (`usuarios.desactivar` cubre alta/baja)."""
+    use_case = ReactivarUsuarioUseCase(usuario_repo=SqlAlchemyUsuarioRepository(db))
+    try:
+        usuario = await use_case.ejecutar(usuario_id)
+    except UsuarioNoEncontrado as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     return ok(usuario)
 
 
