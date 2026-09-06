@@ -11,6 +11,7 @@ from app.modules.inventario.application.ports.producto_repository import Product
 from app.modules.inventario.application.ports.existencia_repository import ExistenciaRepository
 from app.modules.inventario.application.ports.movimiento_repository import MovimientoRepository
 from app.modules.inventario.application.ports.event_port import EventPort
+from app.modules.sucursales.application.ports.sucursal_repository import SucursalRepository
 
 EVENTO_TRANSFERENCIA = "TransferenciaInventarioRegistrada"
 
@@ -39,17 +40,44 @@ class TransferirStockUseCase:
         existencia_repo: ExistenciaRepository,
         movimiento_repo: MovimientoRepository,
         event_port: EventPort | None = None,
+        sucursal_repo: SucursalRepository | None = None,
     ):
         self._producto_repo = producto_repo
         self._existencia_repo = existencia_repo
         self._movimiento_repo = movimiento_repo
         self._event_port = event_port
+        self._sucursal_repo = sucursal_repo
+
+    async def _validar_jerarquia(self, origen_id: UUID, destino_id: UUID) -> None:
+        """Un traspaso sólo es válido entre sucursales de la misma familia: una
+        es padre directa de la otra, o son hermanas (mismo `sucursal_padre_id`)."""
+        if self._sucursal_repo is None:
+            return
+        origen = await self._sucursal_repo.obtener_por_id(origen_id)
+        destino = await self._sucursal_repo.obtener_por_id(destino_id)
+        if origen is None or destino is None:
+            raise TransferenciaInvalida("Sucursal de origen o destino inexistente.")
+        padre_hijo = (
+            origen.sucursal_padre_id == destino.id
+            or destino.sucursal_padre_id == origen.id
+        )
+        hermanas = (
+            origen.sucursal_padre_id is not None
+            and origen.sucursal_padre_id == destino.sucursal_padre_id
+        )
+        if not (padre_hijo or hermanas):
+            raise TransferenciaInvalida(
+                "Sólo se permite transferir entre una sucursal y su padre directa "
+                "o entre sucursales hermanas (mismo padre)."
+            )
 
     async def ejecutar(self, data: TransferirStockInput) -> None:
         if data.sucursal_origen_id == data.sucursal_destino_id:
             raise TransferenciaInvalida("La sucursal de origen y destino no pueden ser la misma.")
         if data.cantidad is None or data.cantidad <= 0:
             raise TransferenciaInvalida("La cantidad a transferir debe ser un número positivo.")
+
+        await self._validar_jerarquia(data.sucursal_origen_id, data.sucursal_destino_id)
 
         producto = await self._producto_repo.obtener_por_id(data.producto_id)
         if not producto:

@@ -1,6 +1,6 @@
-from app.modules.usuarios.domain.entities import Usuario, Rol, Permiso, Sucursal, RefreshToken
+from app.modules.usuarios.domain.entities import Usuario, Rol, Permiso, RefreshToken
 from app.modules.usuarios.infrastructure.persistence.orm_models import (
-    UsuarioORM, RolORM, PermisoORM, SucursalORM, RefreshTokenORM,
+    UsuarioORM, RolORM, PermisoORM, RefreshTokenORM,
 )
 
 
@@ -14,16 +14,6 @@ def to_domain_rol(orm: RolORM) -> Rol:
         descripcion=orm.descripcion,
         codigo=orm.codigo,
         permisos=[to_domain_permiso(p) for p in orm.permisos] if orm.permisos else []
-    )
-
-def to_domain_sucursal(orm: SucursalORM) -> Sucursal:
-    return Sucursal(
-        id=orm.id,
-        nombre=orm.nombre,
-        direccion=orm.direccion,
-        telefono=orm.telefono,
-        activo=orm.activo,
-        created_at=orm.created_at
     )
 
 def to_domain_usuario(orm: UsuarioORM, includes: frozenset[str] = frozenset()) -> Usuario:

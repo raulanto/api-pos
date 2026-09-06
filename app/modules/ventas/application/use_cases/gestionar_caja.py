@@ -5,9 +5,25 @@ from uuid import UUID
 from app.modules.ventas.domain.entities import CajaTurno
 from app.modules.ventas.domain.exceptions import (
     TurnoNoEncontrado, TurnoYaAbierto, TurnoYaCerrado, CierreTurnoNoPermitido,
+    SucursalNoOperativa,
 )
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
 from app.modules.ventas.application.ports.event_port import EventPort
+from app.modules.sucursales.application.ports.sucursal_repository import SucursalRepository
+
+
+async def _exigir_sucursal_operativa(
+    sucursal_repo: SucursalRepository | None, sucursal_id: UUID,
+) -> None:
+    """Bloquea la operación si la sucursal está inactiva o `permite_ventas=False`."""
+    if sucursal_repo is None:
+        return
+    sucursal = await sucursal_repo.obtener_por_id(sucursal_id)
+    if sucursal is None or not sucursal.activo or not sucursal.permite_ventas:
+        raise SucursalNoOperativa(
+            f"La sucursal {sucursal_id} no está operativa para ventas "
+            "(inactiva o con permite_ventas=false)."
+        )
 
 
 @dataclass
@@ -18,11 +34,18 @@ class AbrirCajaTurnoInput:
 
 
 class AbrirCajaTurnoUseCase:
-    def __init__(self, caja_repo: CajaTurnoRepository, event_port: EventPort | None = None):
+    def __init__(
+        self,
+        caja_repo: CajaTurnoRepository,
+        event_port: EventPort | None = None,
+        sucursal_repo: SucursalRepository | None = None,
+    ):
         self._repo = caja_repo
         self._event_port = event_port
+        self._sucursal_repo = sucursal_repo
 
     async def ejecutar(self, data: AbrirCajaTurnoInput) -> CajaTurno:
+        await _exigir_sucursal_operativa(self._sucursal_repo, data.sucursal_id)
         abierto = await self._repo.obtener_abierto_de_usuario(data.usuario_id, data.sucursal_id)
         if abierto is not None:
             raise TurnoYaAbierto(

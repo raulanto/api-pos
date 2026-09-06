@@ -2,11 +2,10 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from app.modules.usuarios.domain.entities import Usuario
-from app.modules.usuarios.domain.exceptions import (
-    UsuarioNoEncontrado, SucursalNoEncontrada, EmailDuplicado,
-)
+from app.modules.usuarios.domain.exceptions import UsuarioNoEncontrado, EmailDuplicado
 from app.modules.usuarios.application.ports.usuario_repository import UsuarioRepository
-from app.modules.usuarios.application.ports.catalogos_repository import SucursalRepository
+from app.modules.sucursales.application.ports.sucursal_repository import SucursalRepository
+from app.modules.sucursales.domain.exceptions import SucursalNoEncontrada
 
 
 @dataclass

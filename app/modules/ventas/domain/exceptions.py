@@ -13,6 +13,11 @@ class CajaNoAbierta(Exception):
 class VentaCreditoSinCliente(Exception):
     pass
 
+class SucursalNoOperativa(Exception):
+    """La sucursal está inactiva o tiene `permite_ventas = False`: no se puede
+    abrir turno de caja ni registrar ventas ahí."""
+    pass
+
 # --- Turno de caja ---
 class TurnoNoEncontrado(Exception):
     pass

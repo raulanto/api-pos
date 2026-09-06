@@ -1,7 +1,1 @@
-from dataclasses import dataclass
-
-
-@dataclass
-class FiltroSucursales:
-    activo: bool | None = None
-    busqueda: str | None = None  # coincide contra nombre / dirección / teléfono
+# Los DTOs de sucursales se movieron a app/modules/sucursales/application/dtos.py

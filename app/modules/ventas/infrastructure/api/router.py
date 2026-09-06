@@ -44,6 +44,9 @@ from app.modules.clientes.infrastructure.persistence.cliente_repository_impl imp
 )
 from app.modules.ventas.infrastructure.adapters.inventario_port_impl import InventarioPortImpl
 from app.modules.ventas.infrastructure.adapters.event_port_impl import EventPortImpl
+from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
+    SqlAlchemySucursalRepository,
+)
 
 router = APIRouter(route_class=EnvelopeRoute)
 caja_router = APIRouter(route_class=EnvelopeRoute)
@@ -56,7 +59,10 @@ _INC_VENTAS = make_include_dependency({"cliente", "usuario", "caja_turno"})
 # Mapeo de excepciones de dominio -> HTTP
 # --------------------------------------------------------------------------- #
 _NOT_FOUND = (vexc.VentaNoEncontrada, vexc.TurnoNoEncontrado, ClienteNoEncontrado, ProductoNoEncontrado)
-_CONFLICT = (vexc.VentaYaCancelada, vexc.TurnoYaAbierto, vexc.TurnoYaCerrado)
+_CONFLICT = (
+    vexc.VentaYaCancelada, vexc.TurnoYaAbierto, vexc.TurnoYaCerrado,
+    vexc.SucursalNoOperativa,
+)
 _FORBIDDEN = (vexc.AnulacionNoPermitida, vexc.CierreTurnoNoPermitido)
 _BAD_REQUEST = (
     vexc.CajaNoAbierta, vexc.VentaCreditoSinCliente, vexc.VentaSinLineas,
@@ -101,6 +107,7 @@ def _venta_use_case(db: AsyncSession) -> CrearVentaUseCase:
         inventario=InventarioPortImpl(db),
         cliente_repo=SqlAlchemyClienteRepository(db),
         event_port=EventPortImpl(db),
+        sucursal_repo=SqlAlchemySucursalRepository(db),
     )
 
 
@@ -231,7 +238,8 @@ async def abrir_turno(
     sucursal_id = _exige_sucursal(actual)
     try:
         turno = await AbrirCajaTurnoUseCase(
-            SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db)
+            SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db),
+            SqlAlchemySucursalRepository(db),
         ).ejecutar(AbrirCajaTurnoInput(
             sucursal_id=sucursal_id, usuario_id=actual.id, saldo_inicial=body.saldo_inicial,
         ))

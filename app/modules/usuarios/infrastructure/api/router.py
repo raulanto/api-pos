@@ -31,14 +31,18 @@ from app.modules.usuarios.application.use_cases.reactivar_usuario import Reactiv
 from app.modules.usuarios.application.use_cases.cambiar_password import CambiarPasswordUseCase, CambiarPasswordInput
 from app.modules.usuarios.infrastructure.persistence.usuario_repository_impl import SqlAlchemyUsuarioRepository
 from app.modules.usuarios.infrastructure.persistence.catalogos_repository_impl import (
-    SqlAlchemyRolRepository, SqlAlchemySucursalRepository,
+    SqlAlchemyRolRepository,
+)
+from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
+    SqlAlchemySucursalRepository,
 )
 from app.modules.usuarios.infrastructure.persistence.refresh_token_repository_impl import SqlAlchemyRefreshTokenRepository
 from app.modules.usuarios.domain.exceptions import (
-    RolNoEncontrado, SucursalNoEncontrada, EmailDuplicado, CredencialesInvalidas,
+    RolNoEncontrado, EmailDuplicado, CredencialesInvalidas,
     PasswordInvalida, UsuarioNoEncontrado, UltimoAdminActivo, AutoDesactivacionNoPermitida,
     RefreshTokenInvalido,
 )
+from app.modules.sucursales.domain.exceptions import SucursalNoEncontrada
 
 router = APIRouter(route_class=EnvelopeRoute)
 

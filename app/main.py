@@ -26,7 +26,7 @@ from app.modules.auditoria.infrastructure import listeners as _auditoria_listene
 
 from app.modules.usuarios.infrastructure.api.router import router as usuarios_router
 from app.modules.usuarios.infrastructure.api.roles_router import router as roles_router, permisos_router
-from app.modules.usuarios.infrastructure.api.sucursales_router import router as sucursales_router
+from app.modules.sucursales.infrastructure.api.router import router as sucursales_router
 from app.modules.inventario.infrastructure.api.router import router as inventario_router
 from app.modules.clientes.infrastructure.api.router import router as clientes_router
 from app.modules.ventas.infrastructure.api.router import router as ventas_router, caja_router

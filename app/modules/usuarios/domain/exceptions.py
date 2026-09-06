@@ -4,17 +4,6 @@ class UsuarioNoEncontrado(Exception):
 class RolNoEncontrado(Exception):
     pass
 
-class SucursalNoEncontrada(Exception):
-    pass
-
-class NombreSucursalDuplicado(Exception):
-    """Ya existe una sucursal activa/inactiva con ese nombre."""
-    pass
-
-class SucursalConUsuariosActivos(Exception):
-    """No se puede desactivar una sucursal con usuarios activos asignados."""
-    pass
-
 class EmailDuplicado(Exception):
     pass
 

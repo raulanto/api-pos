@@ -12,12 +12,13 @@ rol_permiso_table = Table(
     Column("permiso_id", PGUUID(as_uuid=True), ForeignKey("permiso.id"), primary_key=True),
 )
 
-class SucursalORM(Base, TimestampMixin, SoftDeleteMixin):
-    __tablename__ = "sucursal"
-    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    nombre = Column(String(100), nullable=False)
-    direccion = Column(String(255), nullable=False)
-    telefono = Column(String(20), nullable=False)
+# `SucursalORM` vive ahora en el módulo `sucursales`. Se reimporta acá para que
+# `UsuarioORM.sucursal = relationship("SucursalORM")` resuelva por nombre y para
+# que el modelo quede registrado en `Base.metadata`.
+from app.modules.sucursales.infrastructure.persistence.orm_models import (  # noqa: E402,F401
+    SucursalORM,
+)
+
 
 class PermisoORM(Base):
     __tablename__ = "permiso"

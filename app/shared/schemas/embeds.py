@@ -28,7 +28,9 @@ class UsuarioEmbed(BaseModel):
 class SucursalEmbed(BaseModel):
     model_config = _ORM
     id: UUID
+    codigo: Optional[str] = None
     nombre: str
+    tipo: Optional[str] = None
     direccion: str
     telefono: str
     activo: bool

@@ -23,6 +23,9 @@ from app.modules.inventario.application.use_cases.transferir_stock import (
     TransferirStockUseCase, TransferirStockInput,
 )
 from app.modules.inventario.infrastructure.adapters.event_port_impl import EventPortImpl
+from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
+    SqlAlchemySucursalRepository,
+)
 from app.modules.inventario.infrastructure.api.schemas import (
     AplicarMovimientoRequest, TransferenciaRequest, MovimientoResponse,
 )
@@ -114,7 +117,8 @@ async def transferir_stock(
     verificar_alcance_sucursal(actual, body.sucursal_origen_id)
 
     use_case = TransferirStockUseCase(
-        prod_repo(db), exist_repo(db), mov_repo(db), EventPortImpl(db)
+        prod_repo(db), exist_repo(db), mov_repo(db), EventPortImpl(db),
+        SqlAlchemySucursalRepository(db),
     )
     try:
         await use_case.ejecutar(TransferirStockInput(

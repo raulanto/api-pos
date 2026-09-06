@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
-from app.modules.usuarios.domain.entities import Rol, Sucursal, Permiso
-from app.modules.usuarios.application.dto import FiltroSucursales
+from app.modules.usuarios.domain.entities import Rol, Permiso
 from app.shared.responses import Page, PageParams, Sort
 
 
@@ -45,23 +44,5 @@ class PermisoRepository(ABC):
     async def existen_todos(self, permiso_ids: list[UUID]) -> bool: ...
 
 
-class SucursalRepository(ABC):
-    @abstractmethod
-    async def obtener_por_id(self, sucursal_id: UUID) -> Sucursal | None: ...
-
-    @abstractmethod
-    async def obtener_por_nombre(self, nombre: str) -> Sucursal | None: ...
-
-    @abstractmethod
-    async def listar(
-        self, filtro: FiltroSucursales, paginacion: PageParams, orden: Sort
-    ) -> Page: ...
-
-    @abstractmethod
-    async def crear(self, sucursal: Sucursal) -> Sucursal: ...
-
-    @abstractmethod
-    async def actualizar(self, sucursal: Sucursal) -> None: ...
-
-    @abstractmethod
-    async def tiene_usuarios_activos(self, sucursal_id: UUID) -> bool: ...
+# `SucursalRepository` se movió a
+# app/modules/sucursales/application/ports/sucursal_repository.py

@@ -6,8 +6,9 @@ from typing import List
 from app.modules.ventas.domain.entities import Venta, DetalleVenta, Pago
 from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago
 from app.modules.ventas.domain.exceptions import (
-    CajaNoAbierta, VentaCreditoSinCliente, TurnoDeOtraSucursal,
+    CajaNoAbierta, VentaCreditoSinCliente, TurnoDeOtraSucursal, SucursalNoOperativa,
 )
+from app.modules.sucursales.application.ports.sucursal_repository import SucursalRepository
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
 from app.modules.ventas.application.ports.inventario_port import InventarioPort
@@ -47,13 +48,15 @@ class CrearVentaUseCase:
         caja_repo: CajaTurnoRepository,
         inventario: InventarioPort,
         cliente_repo: ClienteRepository,
-        event_port: EventPort
+        event_port: EventPort,
+        sucursal_repo: SucursalRepository | None = None,
     ):
         self._venta_repo = venta_repo
         self._caja_repo = caja_repo
         self._inventario = inventario
         self._cliente_repo = cliente_repo
         self._event_port = event_port
+        self._sucursal_repo = sucursal_repo
 
     async def ejecutar(self, data: CrearVentaInput) -> Venta:
         # Idempotencia: si ya se procesó esta clave, devolver la venta existente.
@@ -61,6 +64,15 @@ class CrearVentaUseCase:
             previa = await self._venta_repo.obtener_por_idempotency_key(data.idempotency_key)
             if previa is not None:
                 return previa
+
+        # Defensa: aunque el turno se validó al abrirlo, la sucursal pudo
+        # quedar inactiva / permite_ventas=false entre medio.
+        if self._sucursal_repo is not None:
+            sucursal = await self._sucursal_repo.obtener_por_id(data.sucursal_id)
+            if sucursal is None or not sucursal.activo or not sucursal.permite_ventas:
+                raise SucursalNoOperativa(
+                    f"La sucursal {data.sucursal_id} no está operativa para ventas."
+                )
 
         turno = await self._caja_repo.obtener_por_id(data.caja_turno_id)
         if turno is None or not turno.esta_abierto:
