@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
+
 from app.modules.ventas.domain.entities import CajaTurno
 from app.modules.ventas.domain.exceptions import (
     TurnoNoEncontrado, TurnoYaAbierto, TurnoYaCerrado, CierreTurnoNoPermitido,
@@ -57,7 +59,14 @@ class AbrirCajaTurnoUseCase:
             usuario_id=data.usuario_id,
             saldo_inicial=data.saldo_inicial,
         )
-        await self._repo.guardar(turno)
+        try:
+            await self._repo.guardar(turno)
+        except IntegrityError:
+            # Carrera: otro request abrió un turno entre el chequeo y el insert.
+            # El índice único parcial `uq_caja_turno_abierto` lo frena en la BD.
+            raise TurnoYaAbierto(
+                "El usuario ya tiene un turno abierto en esta sucursal."
+            )
 
         if self._event_port is not None:
             await self._event_port.publicar("CajaTurnoAbierto", {
@@ -98,7 +107,8 @@ class CerrarCajaTurnoUseCase:
             raise CierreTurnoNoPermitido("Sólo el dueño del turno (o un gerente) puede cerrarlo")
 
         efectivo = await self._repo.total_efectivo_del_turno(turno.id)
-        saldo_esperado = turno.saldo_inicial + efectivo
+        dev_efectivo = await self._repo.total_devoluciones_efectivo_del_turno(turno.id)
+        saldo_esperado = turno.saldo_inicial + efectivo - dev_efectivo
         turno.cerrar(data.saldo_final_declarado, saldo_esperado)
         await self._repo.actualizar(turno)
 
@@ -135,6 +145,7 @@ class ObtenerTurnoActualUseCase:
 class ResumenTurno:
     turno: CajaTurno
     total_efectivo: Decimal
+    total_devoluciones_efectivo: Decimal
     cantidad_ventas: int
     saldo_esperado: Decimal
 
@@ -150,10 +161,12 @@ class ObtenerResumenTurnoUseCase:
         if turno is None:
             raise TurnoNoEncontrado(f"No existe el turno {caja_turno_id}")
         efectivo = await self._repo.total_efectivo_del_turno(turno.id)
+        dev_efectivo = await self._repo.total_devoluciones_efectivo_del_turno(turno.id)
         cantidad = await self._repo.contar_ventas_del_turno(turno.id)
         return ResumenTurno(
             turno=turno,
             total_efectivo=efectivo,
+            total_devoluciones_efectivo=dev_efectivo,
             cantidad_ventas=cantidad,
-            saldo_esperado=turno.saldo_inicial + efectivo,
+            saldo_esperado=turno.saldo_inicial + efectivo - dev_efectivo,
         )

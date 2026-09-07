@@ -15,7 +15,7 @@ from app.modules.reportes.application.ports.reporte_query_port import (
 )
 # Lecturas directas de los modelos ORM de otros módulos (patrón CQRS de solo lectura).
 from app.modules.ventas.infrastructure.persistence.orm_models import (
-    VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM,
+    VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM, DevolucionORM,
 )
 from app.modules.ventas.domain.value_objects import MetodoPago, EstadoVenta
 from app.modules.inventario.infrastructure.persistence.orm_models import (
@@ -27,9 +27,12 @@ from app.modules.clientes.infrastructure.persistence.orm_models import ClienteOR
 _CERO = Decimal("0")
 _CANCELADA = EstadoVenta.CANCELADA.value
 
-# Subtotal de una línea: cantidad * precio - descuento_linea
+# Subtotal de una línea: cantidad * precio - descuento_linea - promo_descuento
+# (mismo cálculo que `DetalleVenta.subtotal` en el dominio de ventas).
 _LINEA_SUBTOTAL = (
-    DetalleVentaORM.cantidad * DetalleVentaORM.precio_unitario - DetalleVentaORM.descuento_linea
+    DetalleVentaORM.cantidad * DetalleVentaORM.precio_unitario
+    - DetalleVentaORM.descuento_linea
+    - DetalleVentaORM.promo_descuento
 )
 
 
@@ -41,11 +44,12 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
     # Helpers
     # ------------------------------------------------------------------ #
     def _lineas_por_venta_sq(self):
-        """Subconsulta: subtotal (suma de líneas) por venta_id."""
+        """Subconsulta: subtotal y descuento de promoción (suma de líneas) por venta_id."""
         return (
             select(
                 DetalleVentaORM.venta_id.label("venta_id"),
                 func.coalesce(func.sum(_LINEA_SUBTOTAL), 0).label("subtotal"),
+                func.coalesce(func.sum(DetalleVentaORM.promo_descuento), 0).label("promo"),
             )
             .group_by(DetalleVentaORM.venta_id)
             .subquery()
@@ -90,6 +94,21 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             elif metodo == MetodoPago.CREDITO.value:
                 credito += total
 
+        promo = await self._db.scalar(
+            select(func.coalesce(func.sum(DetalleVentaORM.promo_descuento), 0))
+            .select_from(DetalleVentaORM)
+            .join(VentaORM, VentaORM.id == DetalleVentaORM.venta_id)
+            .where(VentaORM.caja_turno_id == caja_turno_id, VentaORM.estado != _CANCELADA)
+        )
+        dev_efectivo = await self._db.scalar(
+            select(func.coalesce(func.sum(DevolucionORM.monto_devuelto), 0))
+            .where(
+                DevolucionORM.caja_turno_id == caja_turno_id,
+                DevolucionORM.metodo_devolucion == "efectivo",
+            )
+        )
+        dev_efectivo = Decimal(dev_efectivo or 0)
+
         return CorteDeCajaOutput(
             caja_turno_id=caja_turno_id,
             monto_inicial=turno.saldo_inicial,
@@ -97,7 +116,9 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             total_tarjeta=tarjeta,
             total_transferencia=transferencia,
             total_credito=credito,
-            monto_final_esperado=turno.saldo_inicial + efectivo,
+            monto_final_esperado=turno.saldo_inicial + efectivo - dev_efectivo,
+            total_descuento_promo=Decimal(promo or 0),
+            total_devoluciones_efectivo=dev_efectivo,
         )
 
     # ------------------------------------------------------------------ #
@@ -114,6 +135,7 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             select(
                 func.coalesce(func.sum(venta_total), 0),
                 func.count(VentaORM.id),
+                func.coalesce(func.sum(lineas_sq.c.promo), 0),
             )
             .select_from(VentaORM)
             .join(lineas_sq, lineas_sq.c.venta_id == VentaORM.id)
@@ -121,6 +143,7 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
         )).one()
         total_vendido = Decimal(totales[0] or 0)
         numero = int(totales[1] or 0)
+        total_promo = Decimal(totales[2] or 0)
         ticket = (total_vendido / numero) if numero else _CERO
 
         dia = func.date(VentaORM.created_at)
@@ -137,6 +160,7 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             desde=desde, hasta=hasta, sucursal_id=sucursal_id,
             total_vendido=total_vendido, numero_ventas=numero,
             ticket_promedio=ticket.quantize(Decimal("0.01")) if numero else _CERO,
+            total_descuento_promo=total_promo,
             por_dia=[
                 VentasDiaOutput(dia=d, numero_ventas=int(n), total=Decimal(t or 0))
                 for d, n, t in filas_dia

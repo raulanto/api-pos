@@ -44,7 +44,7 @@ class _UMRepo:
 
 class _ExistRepo:
     def __init__(self, cant): self.cant = Decimal(cant); self.nuevo = None
-    async def obtener(self, pid, sid):
+    async def obtener(self, pid, sid, para_actualizar=False):
         return type("E", (), {"cantidad": self.cant})()
     async def actualizar_cantidad(self, pid, sid, q): self.nuevo = q
     async def crear(self, e): pass

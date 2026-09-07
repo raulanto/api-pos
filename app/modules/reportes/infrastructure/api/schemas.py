@@ -17,6 +17,8 @@ class CorteDeCajaResponse(BaseModel):
     total_transferencia: Decimal
     total_credito: Decimal
     monto_final_esperado: Decimal
+    total_descuento_promo: Decimal
+    total_devoluciones_efectivo: Decimal
     nota: str
 
 
@@ -35,6 +37,7 @@ class ReporteVentasResponse(BaseModel):
     total_vendido: Decimal
     numero_ventas: int
     ticket_promedio: Decimal
+    total_descuento_promo: Decimal
     por_dia: List[VentasDiaResponse]
 
 

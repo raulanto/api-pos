@@ -1,5 +1,7 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, Numeric, DateTime
+from sqlalchemy import (
+    Column, String, Text, ForeignKey, Numeric, DateTime, CheckConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
 from app.shared.infrastructure.orm_base import Base, TimestampMixin
@@ -50,6 +52,14 @@ class DetalleVentaORM(Base):
     # Cantidad equivalente en la unidad base del producto (cantidad * factor de
     # la presentación). Se persiste para no recalcularla en anulaciones/reportes.
     cantidad_en_unidad_base = Column(Numeric(14, 4), nullable=True)
+    # Promoción aplicada (motor de `promociones`). `promo_descuento` resta en el
+    # subtotal, aparte del `descuento_linea` manual; `promo_etiqueta` es el
+    # nombre de la promo congelado al momento de la venta.
+    promo_id = Column(PGUUID(as_uuid=True), ForeignKey("promocion.id"), nullable=True)
+    promo_descuento = Column(Numeric(12, 2), nullable=False, default=0)
+    promo_etiqueta = Column(String(120), nullable=True)
+    # Cantidad de esta línea ya devuelta (acumulado). Sube con cada devolución.
+    cantidad_devuelta = Column(Numeric(14, 4), nullable=False, default=0)
 
 class PagoORM(Base, TimestampMixin):
     __tablename__ = "pago"
@@ -57,3 +67,40 @@ class PagoORM(Base, TimestampMixin):
     venta_id = Column(PGUUID(as_uuid=True), ForeignKey("venta.id"), nullable=False)
     monto = Column(Numeric(12, 2), nullable=False)
     metodo_pago = Column(String(50), nullable=False)
+    # Sólo efectivo: con cuánto pagó el cliente (para calcular el cambio en el ticket).
+    monto_recibido = Column(Numeric(12, 2), nullable=True)
+
+
+class DevolucionORM(Base, TimestampMixin):
+    __tablename__ = "devolucion"
+    __table_args__ = (
+        CheckConstraint(
+            "metodo_devolucion IN ('efectivo', 'tarjeta', 'credito')",
+            name="ck_devolucion_metodo",
+        ),
+    )
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    venta_id = Column(PGUUID(as_uuid=True), ForeignKey("venta.id"), nullable=False, index=True)
+    caja_turno_id = Column(PGUUID(as_uuid=True), ForeignKey("caja_turno.id"), nullable=False)
+    usuario_id = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=False)
+    motivo = Column(Text, nullable=True)
+    monto_devuelto = Column(Numeric(12, 2), nullable=False)
+    metodo_devolucion = Column(String(20), nullable=False)
+    idempotency_key = Column(String(80), nullable=True, unique=True)
+
+    lineas = relationship(
+        "DevolucionLineaORM", backref="devolucion", cascade="all, delete-orphan",
+    )
+
+
+class DevolucionLineaORM(Base):
+    __tablename__ = "devolucion_linea"
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    devolucion_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("devolucion.id", ondelete="CASCADE"), nullable=False,
+    )
+    detalle_venta_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("detalle_venta.id"), nullable=False,
+    )
+    cantidad = Column(Numeric(14, 4), nullable=False)
+    monto = Column(Numeric(12, 2), nullable=False)

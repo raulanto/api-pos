@@ -21,6 +21,12 @@ class VentaRepository(ABC):
     async def actualizar_estado(self, venta_id: UUID, estado: EstadoVenta) -> None: ...
 
     @abstractmethod
+    async def registrar_devolucion(self, venta: "Venta") -> None:
+        """Persiste `estado` de la venta y `cantidad_devuelta` de cada línea tras
+        una devolución (el resto de la venta es inmutable)."""
+        ...
+
+    @abstractmethod
     async def listar(
         self,
         filtro: FiltroVentas,

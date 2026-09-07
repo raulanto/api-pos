@@ -39,13 +39,16 @@ class LoteRepository(ABC):
 
     # ---- saldo por lote (existencia_lote) ----
     @abstractmethod
-    async def saldo(self, sucursal_id: UUID, lote_id: UUID) -> Decimal:
-        """Saldo del lote en la sucursal (0 si no hay fila)."""
+    async def saldo(
+        self, sucursal_id: UUID, lote_id: UUID, para_actualizar: bool = False,
+    ) -> Decimal:
+        """Saldo del lote en la sucursal (0 si no hay fila). `para_actualizar`
+        bloquea la fila de `existencia_lote`."""
         ...
 
     @abstractmethod
     async def lotes_fefo(
-        self, producto_id: UUID, sucursal_id: UUID
+        self, producto_id: UUID, sucursal_id: UUID, para_actualizar: bool = False,
     ) -> list[tuple[UUID, Decimal]]:
         """(lote_id, cantidad) de los lotes con saldo > 0 de ese producto y
         sucursal, ordenados FEFO: `fecha_caducidad` ascendente, NULLs al final,

@@ -21,8 +21,12 @@ class ClienteRepository(ABC):
 
     @abstractmethod
     async def obtener_por_id(
-        self, cliente_id: UUID, includes: frozenset[str] = frozenset()
-    ) -> Cliente | None: ...
+        self, cliente_id: UUID, includes: frozenset[str] = frozenset(),
+        para_actualizar: bool = False,
+    ) -> Cliente | None:
+        """`para_actualizar=True` bloquea la fila (`FOR UPDATE`) para chequear y
+        subir el saldo de crédito sin condición de carrera."""
+        ...
 
     @abstractmethod
     async def buscar_por_email(self, email: str, solo_activos: bool = True) -> Cliente | None: ...

@@ -1,6 +1,12 @@
-from app.modules.ventas.domain.entities import Venta, DetalleVenta, Pago, CajaTurno
-from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago
-from app.modules.ventas.infrastructure.persistence.orm_models import VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM
+from app.modules.ventas.domain.entities import (
+    Venta, DetalleVenta, Pago, CajaTurno, Devolucion, DevolucionLinea,
+)
+from app.modules.ventas.domain.value_objects import (
+    EstadoVenta, MetodoPago, MetodoDevolucion,
+)
+from app.modules.ventas.infrastructure.persistence.orm_models import (
+    VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM, DevolucionORM, DevolucionLineaORM,
+)
 
 def to_domain_caja_turno(orm: CajaTurnoORM) -> CajaTurno:
     return CajaTurno(
@@ -52,6 +58,10 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
             impuesto_tasa=l.impuesto_tasa,
             producto_unidad_id=l.producto_unidad_id,
             cantidad_en_unidad_base=l.cantidad_en_unidad_base,
+            promo_id=l.promo_id,
+            promo_descuento=l.promo_descuento,
+            promo_etiqueta=l.promo_etiqueta,
+            cantidad_devuelta=l.cantidad_devuelta,
         ) for l in entidad.lineas
     ]
     orm.pagos = [
@@ -60,6 +70,7 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
             venta_id=p.venta_id,
             monto=p.monto,
             metodo_pago=p.metodo_pago.value,
+            monto_recibido=p.monto_recibido,
             created_at=p.created_at
         ) for p in entidad.pagos
     ]
@@ -87,6 +98,10 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
                 impuesto_tasa=l.impuesto_tasa,
                 producto_unidad_id=l.producto_unidad_id,
                 cantidad_en_unidad_base=l.cantidad_en_unidad_base,
+                promo_id=l.promo_id,
+                promo_etiqueta=l.promo_etiqueta,
+                promo_descuento=l.promo_descuento,
+                cantidad_devuelta=l.cantidad_devuelta,
             ) for l in orm.lineas
         ],
         pagos=[
@@ -95,6 +110,7 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
                 venta_id=p.venta_id,
                 monto=p.monto,
                 metodo_pago=MetodoPago(p.metodo_pago),
+                monto_recibido=p.monto_recibido,
                 created_at=p.created_at
             ) for p in orm.pagos
         ]
@@ -106,3 +122,44 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
     if "caja_turno" in includes:
         venta.caja_turno = orm.caja_turno
     return venta
+
+
+def to_orm_devolucion(entidad: Devolucion) -> DevolucionORM:
+    orm = DevolucionORM(
+        id=entidad.id,
+        venta_id=entidad.venta_id,
+        caja_turno_id=entidad.caja_turno_id,
+        usuario_id=entidad.usuario_id,
+        motivo=entidad.motivo,
+        monto_devuelto=entidad.monto_devuelto,
+        metodo_devolucion=entidad.metodo_devolucion.value,
+        idempotency_key=entidad.idempotency_key,
+        created_at=entidad.created_at,
+    )
+    orm.lineas = [
+        DevolucionLineaORM(
+            id=l.id, devolucion_id=l.devolucion_id,
+            detalle_venta_id=l.detalle_venta_id, cantidad=l.cantidad, monto=l.monto,
+        ) for l in entidad.lineas
+    ]
+    return orm
+
+
+def to_domain_devolucion(orm: DevolucionORM) -> Devolucion:
+    return Devolucion(
+        id=orm.id,
+        venta_id=orm.venta_id,
+        caja_turno_id=orm.caja_turno_id,
+        usuario_id=orm.usuario_id,
+        metodo_devolucion=MetodoDevolucion(orm.metodo_devolucion),
+        monto_devuelto=orm.monto_devuelto,
+        motivo=orm.motivo,
+        idempotency_key=orm.idempotency_key,
+        created_at=orm.created_at,
+        lineas=[
+            DevolucionLinea(
+                id=l.id, devolucion_id=l.devolucion_id,
+                detalle_venta_id=l.detalle_venta_id, cantidad=l.cantidad, monto=l.monto,
+            ) for l in orm.lineas
+        ],
+    )

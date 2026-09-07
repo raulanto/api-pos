@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -23,13 +23,18 @@ from app.modules.inventario.domain.exceptions import (
 )
 from app.modules.ventas.infrastructure.api.schemas import (
     CrearVentaRequest, AnularVentaRequest, VentaResponse, VentaListItem,
+    CotizarVentaRequest, CotizacionResponse,
+    DevolverVentaRequest, DevolucionResponse,
     AbrirCajaTurnoRequest, CerrarCajaTurnoRequest, CajaTurnoResponse, ResumenTurnoResponse,
 )
 from app.modules.ventas.application.use_cases.crear_venta import (
-    CrearVentaUseCase, CrearVentaInput, LineaInput, PagoInput,
+    CrearVentaUseCase, CrearVentaInput, CotizarVentaInput, LineaInput, PagoInput,
 )
 from app.modules.ventas.application.use_cases.anular_venta import (
     AnularVentaUseCase, AnularVentaInput,
+)
+from app.modules.ventas.application.use_cases.devolver_venta import (
+    DevolverVentaUseCase, DevolverVentaInput, DevolverVentaLineaInput,
 )
 from app.modules.ventas.application.use_cases.gestionar_caja import (
     AbrirCajaTurnoUseCase, AbrirCajaTurnoInput,
@@ -39,13 +44,19 @@ from app.modules.ventas.application.use_cases.gestionar_caja import (
 from app.modules.ventas.application.use_cases.listar_ventas import (
     ListarVentasUseCase, ObtenerVentaUseCase,
 )
+from app.modules.ventas.application.use_cases.generar_ticket import GenerarTicketUseCase
+from app.modules.ventas.infrastructure.pdf.ticket_pdf import render_ticket_pdf
 from app.modules.ventas.infrastructure.persistence.repositories_impl import (
-    SqlAlchemyVentaRepository, SqlAlchemyCajaTurnoRepository,
+    SqlAlchemyVentaRepository, SqlAlchemyCajaTurnoRepository, SqlAlchemyDevolucionRepository,
 )
 from app.modules.clientes.infrastructure.persistence.cliente_repository_impl import (
     SqlAlchemyClienteRepository,
 )
+from app.modules.inventario.infrastructure.persistence.repositories.producto import (
+    SqlAlchemyProductoRepository,
+)
 from app.modules.ventas.infrastructure.adapters.inventario_port_impl import InventarioPortImpl
+from app.modules.ventas.infrastructure.adapters.promociones_port_impl import PromocionesPortImpl
 from app.modules.ventas.infrastructure.adapters.event_port_impl import EventPortImpl
 from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
     SqlAlchemySucursalRepository,
@@ -71,6 +82,7 @@ _BAD_REQUEST = (
     vexc.CajaNoAbierta, vexc.VentaCreditoSinCliente, vexc.VentaSinLineas,
     vexc.TurnoDeOtraSucursal, LimiteCreditoExcedido, StockInsuficiente,
     CantidadNoVendible, LoteRequerido, LoteInvalido, ValueError,
+    vexc.VentaNoDevolvible, vexc.CantidadDevolucionExcedida, vexc.DevolucionInvalida,
 )
 
 
@@ -112,12 +124,25 @@ def _venta_use_case(db: AsyncSession) -> CrearVentaUseCase:
         cliente_repo=SqlAlchemyClienteRepository(db),
         event_port=EventPortImpl(db),
         sucursal_repo=SqlAlchemySucursalRepository(db),
+        promociones=PromocionesPortImpl(db),
     )
 
 
 def _anular_use_case(db: AsyncSession) -> AnularVentaUseCase:
     return AnularVentaUseCase(
         venta_repo=SqlAlchemyVentaRepository(db),
+        caja_repo=SqlAlchemyCajaTurnoRepository(db),
+        inventario=InventarioPortImpl(db),
+        cliente_repo=SqlAlchemyClienteRepository(db),
+        event_port=EventPortImpl(db),
+        devolucion_repo=SqlAlchemyDevolucionRepository(db),
+    )
+
+
+def _devolver_use_case(db: AsyncSession) -> DevolverVentaUseCase:
+    return DevolverVentaUseCase(
+        venta_repo=SqlAlchemyVentaRepository(db),
+        devolucion_repo=SqlAlchemyDevolucionRepository(db),
         caja_repo=SqlAlchemyCajaTurnoRepository(db),
         inventario=InventarioPortImpl(db),
         cliente_repo=SqlAlchemyClienteRepository(db),
@@ -151,7 +176,11 @@ async def crear_venta(
                 impuesto_tasa=l.impuesto_tasa, producto_unidad_id=l.producto_unidad_id,
             ) for l in body.lineas
         ],
-        pagos=[PagoInput(monto=p.monto, metodo_pago=p.metodo_pago) for p in body.pagos],
+        pagos=[
+            PagoInput(monto=p.monto, metodo_pago=p.metodo_pago,
+                      monto_recibido=p.monto_recibido)
+            for p in body.pagos
+        ],
         idempotency_key=idempotency_key,
     )
     try:
@@ -159,6 +188,33 @@ async def crear_venta(
     except Exception as e:
         raise _traducir(e)
     return ok(venta)
+
+
+@router.post("/cotizar", response_model=ApiResponse[CotizacionResponse])
+async def cotizar_venta(
+    body: CotizarVentaRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("ventas.crear")),
+):
+    """Previsualiza el total con mayoreo y promociones aplicados, sin turno,
+    sin pagos y sin tocar stock. Para mostrar el precio final en el POS."""
+    sucursal_id = _exige_sucursal(actual)
+    entrada = CotizarVentaInput(
+        sucursal_id=sucursal_id,
+        descuento_total=body.descuento_total,
+        lineas=[
+            LineaInput(
+                producto_id=l.producto_id, cantidad=l.cantidad,
+                precio_unitario=l.precio_unitario, descuento_linea=l.descuento_linea,
+                impuesto_tasa=l.impuesto_tasa, producto_unidad_id=l.producto_unidad_id,
+            ) for l in body.lineas
+        ],
+    )
+    try:
+        cotizacion = await _venta_use_case(db).cotizar(entrada)
+    except Exception as e:
+        raise _traducir(e)
+    return ok(cotizacion)
 
 
 @router.get("/", response_model=ApiResponse[list[VentaListItem]])
@@ -228,6 +284,80 @@ async def anular_venta(
     return ok(venta)
 
 
+@router.post(
+    "/{venta_id}/devolucion", response_model=ApiResponse[DevolucionResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def devolver_venta(
+    venta_id: UUID,
+    body: DevolverVentaRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("ventas.devolver")),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+):
+    try:
+        existente = await ObtenerVentaUseCase(SqlAlchemyVentaRepository(db)).ejecutar(venta_id)
+        verificar_alcance_sucursal(actual, existente.sucursal_id)
+        devolucion = await _devolver_use_case(db).ejecutar(DevolverVentaInput(
+            venta_id=venta_id,
+            caja_turno_id=body.caja_turno_id,
+            usuario_id=actual.id,
+            metodo_devolucion=body.metodo_devolucion,
+            lineas=[
+                DevolverVentaLineaInput(detalle_venta_id=l.detalle_venta_id, cantidad=l.cantidad)
+                for l in body.lineas
+            ],
+            motivo=body.motivo,
+            puede_turno_cerrado=actual.ve_todas_las_sucursales,
+            idempotency_key=idempotency_key,
+        ))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _traducir(e)
+    return ok(devolucion)
+
+
+@router.get("/{venta_id}/devoluciones", response_model=ApiResponse[list[DevolucionResponse]])
+async def listar_devoluciones(
+    venta_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("ventas.leer")),
+):
+    try:
+        existente = await ObtenerVentaUseCase(SqlAlchemyVentaRepository(db)).ejecutar(venta_id)
+    except Exception as e:
+        raise _traducir(e)
+    verificar_alcance_sucursal(actual, existente.sucursal_id)
+    devoluciones = await SqlAlchemyDevolucionRepository(db).listar_por_venta(venta_id)
+    return ok(devoluciones)
+
+
+@router.get("/{venta_id}/ticket")
+async def ticket_pdf(
+    venta_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("ventas.leer")),
+):
+    """PDF del ticket de la venta (`application/pdf`, `inline` para pintarlo en la
+    app). Ancho ~80 mm, listo para impresora térmica."""
+    try:
+        data = await GenerarTicketUseCase(
+            SqlAlchemyVentaRepository(db),
+            SqlAlchemyProductoRepository(db),
+            SqlAlchemySucursalRepository(db),
+        ).ejecutar(venta_id)
+    except Exception as e:
+        raise _traducir(e)
+    verificar_alcance_sucursal(actual, data.sucursal_id)
+    pdf = render_ticket_pdf(data)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="ticket-{data.folio}.pdf"'},
+    )
+
+
 # ========================================================================== #
 # CAJA
 # ========================================================================== #
@@ -237,7 +367,7 @@ async def anular_venta(
 async def abrir_turno(
     body: AbrirCajaTurnoRequest,
     db: AsyncSession = Depends(get_db),
-    actual: UsuarioAutenticado = Depends(require_permission("ventas.crear")),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "ventas.crear")),
 ):
     sucursal_id = _exige_sucursal(actual)
     try:
@@ -257,7 +387,7 @@ async def cerrar_turno(
     turno_id: UUID,
     body: CerrarCajaTurnoRequest,
     db: AsyncSession = Depends(get_db),
-    actual: UsuarioAutenticado = Depends(require_permission("ventas.crear")),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "ventas.crear")),
 ):
     try:
         turno = await CerrarCajaTurnoUseCase(
@@ -276,7 +406,7 @@ async def cerrar_turno(
 @caja_router.get("/actual", response_model=ApiResponse[CajaTurnoResponse])
 async def turno_actual(
     db: AsyncSession = Depends(get_db),
-    actual: UsuarioAutenticado = Depends(require_permission("ventas.leer")),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "ventas.leer")),
 ):
     sucursal_id = _exige_sucursal(actual)
     try:
@@ -292,7 +422,7 @@ async def turno_actual(
 async def resumen_turno(
     turno_id: UUID,
     db: AsyncSession = Depends(get_db),
-    actual: UsuarioAutenticado = Depends(require_permission("ventas.leer")),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "ventas.leer")),
 ):
     try:
         resumen = await ObtenerResumenTurnoUseCase(SqlAlchemyCajaTurnoRepository(db)).ejecutar(turno_id)
@@ -302,6 +432,7 @@ async def resumen_turno(
     return ok(ResumenTurnoResponse(
         turno=CajaTurnoResponse.model_validate(resumen.turno),
         total_efectivo=resumen.total_efectivo,
+        total_devoluciones_efectivo=resumen.total_devoluciones_efectivo,
         cantidad_ventas=resumen.cantidad_ventas,
         saldo_esperado=resumen.saldo_esperado,
     ))

@@ -96,18 +96,21 @@ class SqlAlchemyLoteRepository(LoteRepository):
         await self._db.flush()
 
     # -------------------------------------------------------- existencia_lote
-    async def saldo(self, sucursal_id: UUID, lote_id: UUID) -> Decimal:
-        val = await self._db.scalar(
-            select(_EL.cantidad).where(
-                _EL.sucursal_id == sucursal_id, _EL.lote_id == lote_id
-            )
+    async def saldo(
+        self, sucursal_id: UUID, lote_id: UUID, para_actualizar: bool = False,
+    ) -> Decimal:
+        stmt = select(_EL.cantidad).where(
+            _EL.sucursal_id == sucursal_id, _EL.lote_id == lote_id
         )
+        if para_actualizar:
+            stmt = stmt.with_for_update()
+        val = await self._db.scalar(stmt)
         return val if val is not None else Decimal("0")
 
     async def lotes_fefo(
-        self, producto_id: UUID, sucursal_id: UUID
+        self, producto_id: UUID, sucursal_id: UUID, para_actualizar: bool = False,
     ) -> list[tuple[UUID, Decimal]]:
-        filas = (await self._db.execute(
+        stmt = (
             select(_EL.lote_id, _EL.cantidad)
             .join(_L, _L.id == _EL.lote_id)
             .where(
@@ -117,7 +120,10 @@ class SqlAlchemyLoteRepository(LoteRepository):
                 _L.activo.is_(True),
             )
             .order_by(*_FEFO)
-        )).all()
+        )
+        if para_actualizar:
+            stmt = stmt.with_for_update(of=_EL)
+        filas = (await self._db.execute(stmt)).all()
         return [(lote_id, cant) for (lote_id, cant) in filas]
 
     async def ajustar_saldo(
@@ -125,6 +131,7 @@ class SqlAlchemyLoteRepository(LoteRepository):
     ) -> Decimal:
         fila = (await self._db.execute(
             select(_EL).where(_EL.sucursal_id == sucursal_id, _EL.lote_id == lote_id)
+            .with_for_update()
         )).scalars().first()
         if fila is None:
             fila = _EL(

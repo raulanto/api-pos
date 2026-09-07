@@ -26,11 +26,33 @@ class InventarioPort(ABC):
         ...
 
     @abstractmethod
+    async def stock_disponible(
+        self, producto_id: UUID, sucursal_id: UUID,
+        producto_unidad_id: UUID | None = None,
+    ) -> Decimal | None:
+        """Cantidad disponible expresada en la unidad de la línea (si viene
+        `producto_unidad_id`, en esa presentación). `None` = ilimitado a efectos
+        de la cotización (servicio, `permite_venta_sin_stock`, kit sin receta).
+        Sólo lectura, sin lock: es para previsualizar, no reserva nada."""
+        ...
+
+    @abstractmethod
     async def precio_mayoreo_aplicable(
         self, producto_id: UUID, cantidad: Decimal,
     ) -> Decimal | None:
         """`precio_mayoreo` del producto si `cantidad` (en unidad base) alcanza
         `cantidad_minima_mayoreo`; None si va a precio de menudeo o no tiene mayoreo."""
+        ...
+
+    @abstractmethod
+    async def reponer_parcial(
+        self, venta_id: UUID, producto_id: UUID, cantidad_base: Decimal,
+        sucursal_id: UUID, devolucion_id: UUID, usuario_id: UUID,
+    ) -> None:
+        """Devolución parcial: ENTRADA de `cantidad_base` (unidad base) del
+        producto, repartida contra las SALIDAS que la venta generó para ese
+        producto (mismo `lote_id` de cada tramo, orden de creación). Un kit se
+        explota; un servicio no toca stock."""
         ...
 
     @abstractmethod

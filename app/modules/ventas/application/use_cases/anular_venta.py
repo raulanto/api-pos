@@ -7,6 +7,7 @@ from app.modules.ventas.domain.value_objects import EstadoVenta
 from app.modules.ventas.domain.exceptions import VentaNoEncontrada, AnulacionNoPermitida
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
+from app.modules.ventas.application.ports.devolucion_repository import DevolucionRepository
 from app.modules.ventas.application.ports.inventario_port import InventarioPort
 from app.modules.ventas.application.ports.event_port import EventPort
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
@@ -33,17 +34,28 @@ class AnularVentaUseCase:
         inventario: InventarioPort,
         cliente_repo: ClienteRepository,
         event_port: EventPort,
+        devolucion_repo: DevolucionRepository | None = None,
     ):
         self._venta_repo = venta_repo
         self._caja_repo = caja_repo
         self._inventario = inventario
         self._cliente_repo = cliente_repo
         self._event_port = event_port
+        self._devolucion_repo = devolucion_repo
 
     async def ejecutar(self, data: AnularVentaInput) -> Venta:
         venta = await self._venta_repo.obtener_por_id(data.venta_id)
         if venta is None:
             raise VentaNoEncontrada(f"No existe la venta {data.venta_id}")
+
+        # Una venta con devoluciones ya tuvo reingresos de stock parciales;
+        # anularla completa duplicaría el reingreso. Hay que devolver el resto.
+        if self._devolucion_repo is not None:
+            if await self._devolucion_repo.listar_por_venta(venta.id):
+                raise AnulacionNoPermitida(
+                    "La venta tiene devoluciones registradas; no se puede anular "
+                    "(devolvé las líneas restantes en su lugar)."
+                )
 
         # Regla: el cajero sólo anula ventas propias mientras su turno siga abierto.
         # Anular ventas de turnos cerrados o ajenas requiere rol global.

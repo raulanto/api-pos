@@ -10,7 +10,7 @@ from app.modules.inventario.application.use_cases.gestionar_unidades import (
     ListarUnidadesUseCase,
     AgregarUnidadUseCase, AgregarUnidadInput,
     ActualizarUnidadUseCase, ActualizarUnidadInput,
-    DesactivarUnidadUseCase,
+    DesactivarUnidadUseCase, ReactivarUnidadUseCase,
     ResolverCodigoBarrasUseCase,
 )
 from app.modules.inventario.infrastructure.api.schemas import (
@@ -132,3 +132,24 @@ async def desactivar_unidad(
         )
     except Exception as e:
         raise traducir(e)
+
+
+@router.patch(
+    "/productos/{producto_id}/unidades/{unidad_id}/reactivar",
+    response_model=ApiResponse[UnidadResponse],
+)
+async def reactivar_unidad(
+    producto_id: UUID,
+    unidad_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
+):
+    """Vuelve a activar una presentación dada de baja. Falla si otra presentación
+    activa del mismo producto ya usa su `nombre` o `codigo_barras`."""
+    try:
+        unidad = await ReactivarUnidadUseCase(unidad_repo(db), prod_repo(db)).ejecutar(
+            producto_id, unidad_id,
+        )
+    except Exception as e:
+        raise traducir(e)
+    return ok(unidad)

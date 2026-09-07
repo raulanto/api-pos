@@ -48,11 +48,15 @@ class SqlAlchemyClienteRepository(ClienteRepository):
         await self._db.flush()
 
     async def obtener_por_id(
-        self, cliente_id: UUID, includes: frozenset[str] = frozenset()
+        self, cliente_id: UUID, includes: frozenset[str] = frozenset(),
+        para_actualizar: bool = False,
     ) -> Cliente | None:
-        orm = (await self._db.execute(
-            select(ClienteORM).options(*self._opts(includes)).where(ClienteORM.id == cliente_id)
-        )).scalar_one_or_none()
+        stmt = select(ClienteORM).options(*self._opts(includes)).where(
+            ClienteORM.id == cliente_id
+        )
+        if para_actualizar:
+            stmt = stmt.with_for_update()
+        orm = (await self._db.execute(stmt)).scalar_one_or_none()
         return to_domain_cliente(orm, includes) if orm else None
 
     async def buscar_por_email(self, email: str, solo_activos: bool = True) -> Cliente | None:

@@ -24,4 +24,10 @@ class CajaTurnoRepository(ABC):
         ...
 
     @abstractmethod
+    async def total_devoluciones_efectivo_del_turno(self, turno_id: UUID) -> Decimal:
+        """Suma de devoluciones en efectivo hechas EN este turno (sale plata del
+        cajón, descuenta del arqueo)."""
+        ...
+
+    @abstractmethod
     async def contar_ventas_del_turno(self, turno_id: UUID) -> int: ...

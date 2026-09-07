@@ -123,7 +123,9 @@ class AplicarMovimientoUseCase:
 
     # ------------------------------------------------------------------ sin lote
     async def _ejecutar_sin_lote(self, data, producto, decimales: int) -> None:
-        existencia = await self._existencia_repo.obtener(data.producto_id, data.sucursal_id)
+        existencia = await self._existencia_repo.obtener(
+            data.producto_id, data.sucursal_id, para_actualizar=True,
+        )
         cantidad_actual = existencia.cantidad if existencia else Decimal("0")
 
         if data.tipo == TipoMovimiento.AJUSTE:
@@ -179,7 +181,9 @@ class AplicarMovimientoUseCase:
             raise ValueError(
                 "Falta el repositorio de lotes para operar un producto con control por lote."
             )
-        existencia = await self._existencia_repo.obtener(data.producto_id, data.sucursal_id)
+        existencia = await self._existencia_repo.obtener(
+            data.producto_id, data.sucursal_id, para_actualizar=True,
+        )
         cantidad_actual = existencia.cantidad if existencia else Decimal("0")
 
         if data.tipo == TipoMovimiento.ENTRADA:
@@ -243,7 +247,9 @@ class AplicarMovimientoUseCase:
                 raise LoteInvalido(
                     f"El lote {data.lote_id} no pertenece al producto {data.producto_id}."
                 )
-            saldo_lote = await self._lote_repo.saldo(data.sucursal_id, data.lote_id)
+            saldo_lote = await self._lote_repo.saldo(
+                data.sucursal_id, data.lote_id, para_actualizar=True,
+            )
             objetivo = _cuantizar(data.cantidad_final, decimales)
             delta = objetivo - saldo_lote
             await self._lote_repo.ajustar_saldo(
@@ -304,7 +310,9 @@ class AplicarMovimientoUseCase:
                 raise LoteInvalido(
                     f"El lote {data.lote_id} no pertenece al producto {data.producto_id}."
                 )
-            disp = await self._lote_repo.saldo(data.sucursal_id, data.lote_id)
+            disp = await self._lote_repo.saldo(
+                data.sucursal_id, data.lote_id, para_actualizar=True,
+            )
             if disp < total and not producto.permite_venta_sin_stock:
                 raise StockInsuficiente(
                     f"Stock insuficiente en el lote {lote.codigo_lote} para "
@@ -312,7 +320,9 @@ class AplicarMovimientoUseCase:
                 )
             return [(data.lote_id, total)]
 
-        disponibles = await self._lote_repo.lotes_fefo(producto.id, data.sucursal_id)
+        disponibles = await self._lote_repo.lotes_fefo(
+            producto.id, data.sucursal_id, para_actualizar=True,
+        )
         plan: list[tuple[UUID, Decimal]] = []
         restante = total
         for lote_id, disp in disponibles:

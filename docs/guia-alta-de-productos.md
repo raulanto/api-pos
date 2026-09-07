@@ -20,6 +20,10 @@ Antes de venderlo hay que:
 El stock siempre se guarda en **una sola unidad** (la "unidad base" del producto).
 Todo lo demás —rejas, cajas, six-packs— son sólo formas de vender esa misma unidad.
 
+Los **descuentos y 2x1** (y el mayoreo de una presentación puntual) no se cargan
+en el producto: van en el módulo de **Promociones**, que apunta a productos o
+presentaciones. Sección "Promociones" más abajo.
+
 ---
 
 ## Los 4 tipos de producto (en palabras)
@@ -182,6 +186,12 @@ sistema cobra `precio_mayoreo` — lo aplica solo y lo congela en la venta, aunq
 el POS haya mandado otro precio. Menos de 12 → `precio_venta` normal. Las
 presentaciones (la reja) siguen con su propio precio.
 
+Este `precio_mayoreo` es el **mayoreo simple, sólo para la unidad base**. Para
+2x1 / 3x2, un % de descuento, mayoreo **de una presentación concreta** (la reja),
+o promociones con fecha de inicio y fin, se usa el módulo de **Promociones**
+(sección más abajo). Los dos pueden convivir: el `precio_mayoreo` fija el precio
+y la promoción se calcula encima.
+
 **Sobre pedido.** `"es_sobre_pedido": true` para lo que no se guarda en stock y se
 encarga al proveedor cuando alguien lo compra. Se puede vender aunque la
 existencia esté en 0.
@@ -215,6 +225,16 @@ reja tiene 6 refrescos grandes → `"unidades_por_base": 6`.
 
 Cada presentación puede tener su **propio código de barras** (`codigo_barras`),
 así el escáner del POS la reconoce sola.
+
+**Editar / dar de baja / reactivar una presentación:**
+
+- `PATCH /productos/{id}/unidades/{unidad_id}` — cambia nombre, factor, precio o código.
+- `DELETE /productos/{id}/unidades/{unidad_id}` — baja **lógica** (`activo = false`);
+  las ventas históricas siguen apuntando a ella.
+- `PATCH /productos/{id}/unidades/{unidad_id}/reactivar` — la vuelve a activar.
+  Falla con 409 si otra presentación **activa** del mismo producto ya usa ese
+  `nombre` o `codigo_barras` (renombrá o desactivá esa primero).
+- `GET /productos/{id}/unidades?incluir_inactivas=true` para listar también las dadas de baja.
 
 > Los `kit` **no** llevan presentaciones (su "receta" se arma con
 > `PUT /productos/{id}/componentes`). Eso es otro flujo.
@@ -339,6 +359,116 @@ lote**.
 
 ---
 
+## Promociones (2x1, descuentos, mayoreo por presentación)
+
+Una **promoción** es una regla de descuento que apunta a uno o varios productos
+(o a presentaciones concretas). Se configuran en su propio endpoint —**no**
+cuelgan de `/api/v1/inventario`— y no cambian nada del producto: son una capa
+aparte.
+
+```
+POST /api/v1/promociones          (permiso promociones.crear)
+GET  /api/v1/promociones          ?activo= &tipo= &sucursal_id= &q=
+GET  /api/v1/promociones/{id}
+PATCH /api/v1/promociones/{id}                 (permiso promociones.editar)
+PATCH /api/v1/promociones/{id}/desactivar
+PATCH /api/v1/promociones/{id}/reactivar
+```
+
+### Campos de una promoción
+
+| Campo | ¿Obligatorio? | Qué es |
+|-------|---------------|--------|
+| `nombre` | sí | Único. Es lo que se guarda en la venta como etiqueta de la promo |
+| `tipo` | sí | `nxm` · `porcentaje` · `precio_fijo` |
+| `objetivos` | sí (≥ 1) | Lista. Cada objetivo lleva **exactamente uno** de `producto_id` (aplica a la venta por unidad base de ese producto) o `producto_unidad_id` (aplica a **esa** presentación) |
+| `prioridad` | no (por defecto `100`) | Si a una línea le pegan varias promos, gana la de **número menor** |
+| `sucursal_id` | no | Limita la promo a una sucursal. Sin este campo aplica en todas |
+| `vigente_desde` / `vigente_hasta` | no | Ventana de fechas (ISO). Sin fechas, la promo está activa mientras `activo` sea `true` |
+| `nxm_lleva` / `nxm_paga` | sólo `tipo: nxm` | 2x1 → `lleva 2, paga 1`. 3x2 → `lleva 3, paga 2`. Regla: `lleva > paga > 0` |
+| `descuento_pct` | sólo `tipo: porcentaje` | % a restar de la línea (0–100) |
+| `precio_fijo` | sólo `tipo: precio_fijo` | Precio unitario forzado. Sólo aplica si es **menor** que el precio de la línea |
+| `cantidad_minima` | opcional (`porcentaje` / `precio_fijo`) | Umbral: la promo aplica sólo si la línea llega a esa cantidad. Así se arma un **mayoreo por presentación** |
+
+### Cómo se aplica en la venta
+
+- El backend busca las promos **vigentes** de la sucursal y calcula el descuento
+  por línea: lo congela en `detalle_venta` como `promo_descuento` +
+  `promo_etiqueta` (el `nombre` de la promo). El POS no manda nada.
+- **Una promo por línea.** Si varias podrían aplicar, gana la de `prioridad`
+  menor; el resto no toca esa línea.
+- **NxM** junta las unidades de todas las líneas que caen en el mismo objetivo
+  (2 refrescos en dos renglones distintos cuentan como 2) y **regala las más
+  baratas**. Ignora cantidades con decimales.
+- **`precio_fijo`** con `cantidad_minima` = mayoreo de una presentación: "la reja
+  a $x si llevás 5 o más".
+- El total de la venta es
+  `Σ(cantidad × precio − descuento_linea − promo_descuento) − descuento_total`.
+  El impuesto no se suma (sigue siendo informativo).
+
+### Ejemplos
+
+**2x1 en un refresco (unidad base):**
+
+```json
+POST /api/v1/promociones
+{
+  "nombre": "2x1 Refresco Cola",
+  "tipo": "nxm",
+  "nxm_lleva": 2,
+  "nxm_paga": 1,
+  "prioridad": 10,
+  "objetivos": [ { "producto_id": "<id del refresco>" } ]
+}
+```
+
+**Mayoreo de la reja (presentación) por volumen y con vigencia:**
+
+```json
+POST /api/v1/promociones
+{
+  "nombre": "Reja a $340 llevando 5+",
+  "tipo": "precio_fijo",
+  "precio_fijo": 340,
+  "cantidad_minima": 5,
+  "vigente_desde": "2026-09-01T00:00:00Z",
+  "vigente_hasta": "2026-09-30T23:59:59Z",
+  "objetivos": [ { "producto_unidad_id": "<id de la presentación Reja x24>" } ]
+}
+```
+
+**10% en toda una lista de productos, sólo en una sucursal:**
+
+```json
+POST /api/v1/promociones
+{
+  "nombre": "Septiembre -10% botanas",
+  "tipo": "porcentaje",
+  "descuento_pct": 10,
+  "sucursal_id": "<id sucursal>",
+  "objetivos": [
+    { "producto_id": "<botana 1>" },
+    { "producto_id": "<botana 2>" },
+    { "producto_id": "<botana 3>" }
+  ]
+}
+```
+
+### Editar una promoción
+
+`PATCH /api/v1/promociones/{id}` — sólo los campos que cambian. Para **limpiar**
+un opcional hay que mandar su flag:
+
+- `cambiar_vigencia: true` (con o sin `vigente_desde` / `vigente_hasta`; si no
+  vienen, se quitan las dos fechas → promo sin límite).
+- `cambiar_sucursal: true` (sin `sucursal_id` → pasa a aplicar en todas).
+- `cambiar_cantidad_minima: true` (sin `cantidad_minima` → se quita el umbral).
+- `objetivos`: si lo mandás, **reemplaza** la lista completa.
+
+`PATCH …/desactivar` y `…/reactivar` prenden y apagan la promo sin borrarla.
+
+---
+
 ## Casos completos de ejemplo
 
 ### A) Abarrote común
@@ -388,6 +518,20 @@ La app limita el input a múltiplos de 50 g.
 3. Al vender, descuenta solo del lote que vence primero (FEFO)
 4. `GET /lotes/por-vencer` para ver qué está por caducar
 
+### G) Bebida con 2x1 en la lata y mayoreo en la reja
+
+1. `POST /productos` — unidad base = **lata**
+2. `POST /productos/{id}/unidades` — "Reja x24", `factor: 24`
+3. `POST /movimientos` `entrada` — cantidad en **latas**
+4. `POST /api/v1/promociones` — `tipo: "nxm"`, `nxm_lleva: 2`, `nxm_paga: 1`,
+   `objetivos: [{ "producto_id": "<id>" }]` → 2x1 en la lata
+5. `POST /api/v1/promociones` — `tipo: "precio_fijo"`, `precio_fijo: 340`,
+   `cantidad_minima: 5`, `objetivos: [{ "producto_unidad_id": "<id reja>" }]`
+   → la reja a $340 llevando 5 o más
+
+Al vender, cada línea agarra la promo que le corresponde y el descuento queda
+congelado en el ticket.
+
 ---
 
 ## Editar un producto después
@@ -429,6 +573,11 @@ Dar de baja / reactivar / borrar:
 | 400 | "No se puede activar el control por lote con stock cargado" | Intentaste poner `requiere_lote: true` con stock > 0 |
 | 400 | "`precio_mayoreo` y `cantidad_minima_mayoreo` deben definirse juntos" | Mandaste uno solo del par de mayoreo |
 | 400 | "`rastrea_instancia_abierta` requiere `instancia_capacidad_default` > 0" | Activaste el rastreo de envase abierto sin capacidad |
+| 400 | "NxM debe cumplir `nxm_lleva > nxm_paga > 0`" | Promoción `nxm` con esos dos números mal (o faltando uno) |
+| 400 | "`descuento_pct` debe estar en (0, 100]" | Promoción `porcentaje` con un % fuera de rango |
+| 400 | "La promoción necesita al menos un producto o presentación objetivo" | Mandaste `objetivos: []` |
+| 400 | "Cada objetivo lleva exactamente uno de `producto_id` o `producto_unidad_id`" | Un objetivo con los dos, o con ninguno |
+| 400 / 409 | "Ya existe una promoción con nombre …" | El `nombre` de la promo está repetido |
 | 409 | "…referenciado por ventas u otros registros históricos" | Quisiste `DELETE` un producto que ya tiene movimientos/ventas — usá `/desactivar` |
 | 404 | "No existe el producto …" | El `id` está mal o el producto fue borrado |
 | 409 | "El nombre … ya existe para este producto" | Dos presentaciones con el mismo nombre |
@@ -452,3 +601,6 @@ Dar de baja / reactivar / borrar:
 - [ ] Sección **Fotos**: subir archivo (`/imagenes/upload`) o pegar URL externa; marcar portada
 - [ ] Sección **Stock inicial por sucursal** (cantidad + costo + stock mínimo) — omitir para kit/servicio; si es **por lote**, pedir además código de lote + caducidad
 - [ ] Al guardar: crear producto → presentaciones → imágenes → movimientos de entrada, en ese orden
+- [ ] (Aparte del alta) Pantalla de **Promociones** (`/api/v1/promociones`): tipo
+      2x1 / % / precio fijo, lista de productos o presentaciones objetivo,
+      prioridad, sucursal y vigencia opcionales

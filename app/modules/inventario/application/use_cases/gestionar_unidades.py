@@ -200,6 +200,36 @@ class DesactivarUnidadUseCase:
 
 
 # --------------------------------------------------------------------------- #
+class ReactivarUnidadUseCase:
+    def __init__(self, unidad_repo: ProductoUnidadRepository, producto_repo: ProductoRepository):
+        self._repo = unidad_repo
+        self._producto_repo = producto_repo
+
+    async def ejecutar(self, producto_id: UUID, unidad_id: UUID) -> ProductoUnidad:
+        unidad = await self._repo.obtener(unidad_id)
+        if unidad is None or unidad.producto_id != producto_id:
+            raise UnidadNoEncontrada(
+                f"El producto {producto_id} no tiene la presentación {unidad_id}."
+            )
+        if not unidad.activo:
+            # Los índices únicos son parciales (`WHERE activo`): si mientras estuvo
+            # inactiva se creó otra presentación con el mismo nombre o código, no
+            # se puede reactivar sin chocar.
+            if await self._repo.existe_nombre(producto_id, unidad.nombre):
+                raise UnidadDuplicada(
+                    f"Ya hay otra presentación activa '{unidad.nombre}' para este producto; "
+                    "renombrá o desactivá esa antes de reactivar."
+                )
+            if unidad.codigo_barras:
+                await _validar_codigo_barras(
+                    self._producto_repo, self._repo, unidad.codigo_barras, unidad.id
+                )
+            unidad.activar()
+            await self._repo.actualizar(unidad)
+        return unidad
+
+
+# --------------------------------------------------------------------------- #
 @dataclass
 class ResolucionCodigo:
     producto_id: UUID

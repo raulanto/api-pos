@@ -45,13 +45,16 @@ class SqlAlchemyExistenciaRepository(ExistenciaRepository):
         @returns:
         - Existencia | None
     """
-    async def obtener(self, producto_id: UUID, sucursal_id: UUID) -> Existencia | None:
-        orm = (await self._db.execute(
-            select(ExistenciaORM).where(
-                ExistenciaORM.producto_id == producto_id,
-                ExistenciaORM.sucursal_id == sucursal_id,
-            )
-        )).scalar_one_or_none()
+    async def obtener(
+        self, producto_id: UUID, sucursal_id: UUID, para_actualizar: bool = False,
+    ) -> Existencia | None:
+        stmt = select(ExistenciaORM).where(
+            ExistenciaORM.producto_id == producto_id,
+            ExistenciaORM.sucursal_id == sucursal_id,
+        )
+        if para_actualizar:
+            stmt = stmt.with_for_update()
+        orm = (await self._db.execute(stmt)).scalar_one_or_none()
         return to_domain_existencia(orm) if orm else None
 
     async def buscar(

@@ -39,5 +39,20 @@ class CierreTurnoNoPermitido(Exception):
 
 # --- Anulación ---
 class AnulacionNoPermitida(Exception):
-    """El usuario no puede anular esta venta (turno cerrado y sin rol de gerente)."""
+    """El usuario no puede anular esta venta (turno cerrado y sin rol de gerente),
+    o la venta tiene devoluciones parciales."""
+    pass
+
+# --- Devoluciones parciales ---
+class DevolucionInvalida(Exception):
+    """La devolución no cuadra: línea que no es de la venta, cantidad <= 0,
+    turno de la devolución no operable, etc."""
+    pass
+
+class VentaNoDevolvible(Exception):
+    """La venta está cancelada o ya devuelta por completo."""
+    pass
+
+class CantidadDevolucionExcedida(Exception):
+    """Se pidió devolver más de lo que queda por devolver en esa línea."""
     pass

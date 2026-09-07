@@ -224,6 +224,31 @@ class InventarioPortImpl(InventarioPort):
                 return lid
         return fefo[0][0] if fefo else None
 
+    async def stock_disponible(
+        self, producto_id: UUID, sucursal_id: UUID,
+        producto_unidad_id: UUID | None = None,
+    ) -> Decimal | None:
+        producto = await self._cargar_producto(producto_id)
+        if not producto.tipo.mueve_stock or producto.permite_venta_sin_stock:
+            return None
+        factor = await self._factor(producto_id, producto_unidad_id)
+
+        if producto.tipo == TipoProducto.KIT:
+            lineas = await self._componente_repo.listar_por_kit(producto.id)
+            if not lineas:
+                return None
+            posibles = []
+            for comp in lineas:
+                e = await self._existencia_repo.obtener(comp.producto_componente_id, sucursal_id)
+                saldo = e.cantidad if e is not None else Decimal("0")
+                posibles.append(saldo / comp.cantidad if comp.cantidad else Decimal("0"))
+            base_disp = min(posibles)
+        else:
+            e = await self._existencia_repo.obtener(producto_id, sucursal_id)
+            base_disp = e.cantidad if e is not None else Decimal("0")
+
+        return (base_disp / factor) if factor else base_disp
+
     async def precio_mayoreo_aplicable(
         self, producto_id: UUID, cantidad: Decimal,
     ) -> Decimal | None:
@@ -235,6 +260,56 @@ class InventarioPortImpl(InventarioPort):
         ):
             return producto.precio_mayoreo
         return None
+
+    async def reponer_parcial(
+        self, venta_id: UUID, producto_id: UUID, cantidad_base: Decimal,
+        sucursal_id: UUID, devolucion_id: UUID, usuario_id: UUID,
+    ) -> None:
+        producto = await self._cargar_producto(producto_id)
+        if not producto.tipo.mueve_stock:
+            return
+        # Kit -> se explota en componentes (cada uno con su propio producto_id en
+        # los movimientos de la venta). Producto normal -> él mismo.
+        for pid, qty in await self._expandir(producto, cantidad_base):
+            await self._reponer_tramo(pid, qty, venta_id, sucursal_id, devolucion_id, usuario_id)
+
+    async def _reponer_tramo(
+        self, pid: UUID, qty: Decimal, venta_id: UUID, sucursal_id: UUID,
+        devolucion_id: UUID, usuario_id: UUID,
+    ) -> None:
+        salidas = [
+            m for m in await self._movimiento_repo.listar_por_referencia(
+                venta_id, tipo=TipoMovimiento.SALIDA, referencia_tipo="venta",
+            )
+            if m.producto_id == pid
+        ]
+        restante = qty
+        # Reparte la devolución contra los tramos de SALIDA (mismo lote), en orden
+        # de creación. Si sobra (no debería, la línea acota) va sin lote.
+        for m in salidas:
+            if restante <= 0:
+                break
+            toma = restante if restante < m.cantidad else m.cantidad
+            await self._entrada_devolucion(pid, sucursal_id, toma, venta_id, devolucion_id, usuario_id, m.lote_id)
+            restante -= toma
+        if restante > 0:
+            await self._entrada_devolucion(pid, sucursal_id, restante, venta_id, devolucion_id, usuario_id, None)
+
+    async def _entrada_devolucion(
+        self, pid: UUID, sucursal_id: UUID, cantidad: Decimal, venta_id: UUID,
+        devolucion_id: UUID, usuario_id: UUID, lote_id: UUID | None,
+    ) -> None:
+        await self._use_case.ejecutar(AplicarMovimientoInput(
+            producto_id=pid,
+            sucursal_id=sucursal_id,
+            tipo=TipoMovimiento.ENTRADA,
+            cantidad=cantidad,
+            referencia_tipo="devolucion_venta",
+            referencia_id=devolucion_id,
+            usuario_id=usuario_id,
+            motivo=f"Devolución de venta {venta_id}",
+            lote_id=lote_id,
+        ))
 
     async def revertir_venta(self, venta_id: UUID, usuario_id: UUID) -> None:
         """ENTRADA inversa por cada SALIDA que generó la venta, al mismo lote."""
@@ -256,7 +331,9 @@ class InventarioPortImpl(InventarioPort):
             )
             await self._movimiento_repo.guardar(reverso)
 
-            existencia = await self._existencia_repo.obtener(m.producto_id, m.sucursal_id)
+            existencia = await self._existencia_repo.obtener(
+                m.producto_id, m.sucursal_id, para_actualizar=True,
+            )
             actual = existencia.cantidad if existencia else Decimal("0")
             nuevo = actual + m.cantidad
             if existencia:

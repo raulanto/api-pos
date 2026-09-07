@@ -18,7 +18,9 @@ class CorteDeCajaOutput:
     total_tarjeta: Decimal
     total_transferencia: Decimal
     total_credito: Decimal
-    monto_final_esperado: Decimal  # = monto_inicial + total_efectivo
+    monto_final_esperado: Decimal  # = monto_inicial + total_efectivo - total_devoluciones_efectivo
+    total_descuento_promo: Decimal = Decimal("0")  # descuentos por promoción del turno
+    total_devoluciones_efectivo: Decimal = Decimal("0")  # devoluciones en efectivo del turno
     nota: str = NOTA_ARQUEO
 
 
@@ -40,6 +42,7 @@ class ReporteVentasOutput:
     total_vendido: Decimal
     numero_ventas: int
     ticket_promedio: Decimal
+    total_descuento_promo: Decimal = Decimal("0")  # descuentos por promoción del período
     por_dia: list[VentasDiaOutput] = field(default_factory=list)
 
 

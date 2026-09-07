@@ -7,7 +7,12 @@ from app.shared.responses import Page, PageParams, Sort
 
 class ExistenciaRepository(ABC):
     @abstractmethod
-    async def obtener(self, producto_id: UUID, sucursal_id: UUID) -> Existencia | None: ...
+    async def obtener(
+        self, producto_id: UUID, sucursal_id: UUID, para_actualizar: bool = False,
+    ) -> Existencia | None:
+        """`para_actualizar=True` bloquea la fila (`SELECT ... FOR UPDATE`) para
+        que dos SALIDAS simultáneas no se pisen el saldo."""
+        ...
 
     @abstractmethod
     async def buscar(

@@ -7,15 +7,19 @@ from sqlalchemy.orm import selectinload
 
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
+from app.modules.ventas.application.ports.devolucion_repository import DevolucionRepository
 from app.modules.ventas.application.dtos import FiltroVentas
 from app.shared.responses import Page, PageParams, Sort
-from app.modules.ventas.domain.entities import Venta, CajaTurno, ESTADO_TURNO_ABIERTO
+from app.modules.ventas.domain.entities import (
+    Venta, CajaTurno, Devolucion, ESTADO_TURNO_ABIERTO,
+)
 from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago
 from app.modules.ventas.infrastructure.persistence.orm_models import (
-    VentaORM, CajaTurnoORM, PagoORM,
+    VentaORM, CajaTurnoORM, PagoORM, DetalleVentaORM, DevolucionORM,
 )
 from app.modules.ventas.infrastructure.persistence.mappers import (
     to_domain_venta, to_orm_venta, to_domain_caja_turno, to_orm_caja_turno,
+    to_orm_devolucion, to_domain_devolucion,
 )
 
 # Los métodos de escritura hacen `flush`, nunca `commit`: la transacción la
@@ -70,6 +74,18 @@ class SqlAlchemyVentaRepository(VentaRepository):
         )
         await self._db.flush()
 
+    async def registrar_devolucion(self, venta: Venta) -> None:
+        await self._db.execute(
+            update(VentaORM).where(VentaORM.id == venta.id).values(estado=venta.estado.value)
+        )
+        for linea in venta.lineas:
+            await self._db.execute(
+                update(DetalleVentaORM)
+                .where(DetalleVentaORM.id == linea.id)
+                .values(cantidad_devuelta=linea.cantidad_devuelta)
+            )
+        await self._db.flush()
+
     async def listar(
         self,
         filtro: FiltroVentas,
@@ -108,6 +124,32 @@ class SqlAlchemyVentaRepository(VentaRepository):
         return Page(
             items=[to_domain_venta(o, includes) for o in filas], total=int(total or 0)
         )
+
+
+class SqlAlchemyDevolucionRepository(DevolucionRepository):
+    def __init__(self, db: AsyncSession):
+        self._db = db
+
+    async def crear(self, devolucion: Devolucion) -> None:
+        self._db.add(to_orm_devolucion(devolucion))
+        await self._db.flush()
+
+    async def obtener_por_idempotency_key(self, key: str) -> Devolucion | None:
+        orm = (await self._db.execute(
+            select(DevolucionORM)
+            .options(selectinload(DevolucionORM.lineas))
+            .where(DevolucionORM.idempotency_key == key)
+        )).scalar_one_or_none()
+        return to_domain_devolucion(orm) if orm else None
+
+    async def listar_por_venta(self, venta_id: UUID) -> list[Devolucion]:
+        filas = (await self._db.execute(
+            select(DevolucionORM)
+            .options(selectinload(DevolucionORM.lineas))
+            .where(DevolucionORM.venta_id == venta_id)
+            .order_by(DevolucionORM.created_at.asc())
+        )).scalars().all()
+        return [to_domain_devolucion(o) for o in filas]
 
 
 class SqlAlchemyCajaTurnoRepository(CajaTurnoRepository):
@@ -160,6 +202,16 @@ class SqlAlchemyCajaTurnoRepository(CajaTurnoRepository):
                 VentaORM.caja_turno_id == turno_id,
                 VentaORM.estado != EstadoVenta.CANCELADA.value,
                 PagoORM.metodo_pago == MetodoPago.EFECTIVO.value,
+            )
+        )
+        return Decimal(total or 0)
+
+    async def total_devoluciones_efectivo_del_turno(self, turno_id: UUID) -> Decimal:
+        total = await self._db.scalar(
+            select(func.coalesce(func.sum(DevolucionORM.monto_devuelto), 0))
+            .where(
+                DevolucionORM.caja_turno_id == turno_id,
+                DevolucionORM.metodo_devolucion == "efectivo",
             )
         )
         return Decimal(total or 0)

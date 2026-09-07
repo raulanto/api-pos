@@ -77,3 +77,6 @@ class ProductoUnidad:
 
     def desactivar(self) -> None:
         self.activo = False
+
+    def activar(self) -> None:
+        self.activo = True
