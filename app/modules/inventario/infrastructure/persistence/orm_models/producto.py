@@ -75,6 +75,13 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     # `instancia_capacidad_default` = capacidad para auto-abrir uno al vender.
     rastrea_instancia_abierta = Column(Boolean, default=False, nullable=False)
     instancia_capacidad_default = Column(Numeric(14, 4), nullable=True)
+    # Precio: `precio_venta` ya incluye el IVA (precio final al público).
+    precio_incluye_impuesto = Column(Boolean, default=False, nullable=False)
+    # Mayoreo: precio alternativo a partir de `cantidad_minima_mayoreo` (unidad base).
+    precio_mayoreo = Column(Numeric(12, 2), nullable=True)
+    cantidad_minima_mayoreo = Column(Numeric(14, 4), nullable=True)
+    # Sobre pedido: no se mantiene en stock; se puede vender sin existencia.
+    es_sobre_pedido = Column(Boolean, default=False, nullable=False)
 
     # Solo lectura, para `?include=categoria,existencias,componentes`.
     categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")

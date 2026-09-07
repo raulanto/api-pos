@@ -155,6 +155,10 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         requiere_lote=orm.requiere_lote,
         rastrea_instancia_abierta=orm.rastrea_instancia_abierta,
         instancia_capacidad_default=orm.instancia_capacidad_default,
+        precio_incluye_impuesto=orm.precio_incluye_impuesto,
+        precio_mayoreo=orm.precio_mayoreo,
+        cantidad_minima_mayoreo=orm.cantidad_minima_mayoreo,
+        es_sobre_pedido=orm.es_sobre_pedido,
         # Siempre presente: no depende de `includes` (ver `_opts_producto`,
         # que carga `imagen_principal` incondicionalmente).
         imagen_principal=to_domain_imagen(orm.imagen_principal) if orm.imagen_principal else None,
@@ -284,6 +288,10 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         requiere_lote=entidad.requiere_lote,
         rastrea_instancia_abierta=entidad.rastrea_instancia_abierta,
         instancia_capacidad_default=entidad.instancia_capacidad_default,
+        precio_incluye_impuesto=entidad.precio_incluye_impuesto,
+        precio_mayoreo=entidad.precio_mayoreo,
+        cantidad_minima_mayoreo=entidad.cantidad_minima_mayoreo,
+        es_sobre_pedido=entidad.es_sobre_pedido,
         activo=entidad.activo
     )
 

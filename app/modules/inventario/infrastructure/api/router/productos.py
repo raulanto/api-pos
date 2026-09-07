@@ -74,6 +74,10 @@ async def crear_producto(
                 requiere_lote=body.requiere_lote,
                 rastrea_instancia_abierta=body.rastrea_instancia_abierta,
                 instancia_capacidad_default=body.instancia_capacidad_default,
+                precio_incluye_impuesto=body.precio_incluye_impuesto,
+                precio_mayoreo=body.precio_mayoreo,
+                cantidad_minima_mayoreo=body.cantidad_minima_mayoreo,
+                es_sobre_pedido=body.es_sobre_pedido,
                 codigo_barras=body.codigo_barras, descripcion=body.descripcion,
             )
         )
@@ -246,6 +250,11 @@ async def actualizar_producto(
                 rastrea_instancia_abierta=body.rastrea_instancia_abierta,
                 instancia_capacidad_default=body.instancia_capacidad_default,
                 cambiar_instancia_capacidad_default=body.cambiar_instancia_capacidad_default,
+                precio_incluye_impuesto=body.precio_incluye_impuesto,
+                es_sobre_pedido=body.es_sobre_pedido,
+                precio_mayoreo=body.precio_mayoreo,
+                cantidad_minima_mayoreo=body.cantidad_minima_mayoreo,
+                cambiar_mayoreo=body.cambiar_mayoreo,
                 codigo_barras=body.codigo_barras, cambiar_codigo_barras=body.cambiar_codigo_barras,
                 cambiar_descripcion=body.cambiar_descripcion,
             )

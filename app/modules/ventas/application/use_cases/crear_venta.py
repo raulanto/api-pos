@@ -82,17 +82,25 @@ class CrearVentaUseCase:
                 "El turno de caja indicado no pertenece a la sucursal del usuario"
             )
 
-        lineas = [
-            DetalleVenta.crear(
+        lineas = []
+        for l in data.lineas:
+            precio = l.precio_unitario
+            # Mayoreo: sólo en venta por unidad base; el backend fuerza el precio
+            # y lo congela en detalle_venta (ignora el que mandó el front).
+            if l.producto_unidad_id is None:
+                mayoreo = await self._inventario.precio_mayoreo_aplicable(
+                    l.producto_id, l.cantidad
+                )
+                if mayoreo is not None:
+                    precio = mayoreo
+            lineas.append(DetalleVenta.crear(
                 producto_id=l.producto_id,
                 cantidad=l.cantidad,
-                precio_unitario=l.precio_unitario,
+                precio_unitario=precio,
                 descuento_linea=l.descuento_linea,
                 impuesto_tasa=l.impuesto_tasa,
                 producto_unidad_id=l.producto_unidad_id,
-            )
-            for l in data.lineas
-        ]
+            ))
         pagos = [Pago.crear(monto=p.monto, metodo_pago=p.metodo_pago) for p in data.pagos]
 
         venta = Venta.crear(

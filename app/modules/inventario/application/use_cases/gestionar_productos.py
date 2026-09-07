@@ -25,7 +25,9 @@ from app.modules.inventario.application.ports.unidad_repository import (
 )
 from app.modules.inventario.application.ports.movimiento_repository import MovimientoRepository
 from app.modules.inventario.application.ports.almacen_imagenes import AlmacenImagenes
-from app.modules.inventario.application.use_cases.crear_producto import _traducir_integridad
+from app.modules.inventario.application.use_cases.crear_producto import (
+    _traducir_integridad, _validar_mayoreo,
+)
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import Page, PageParams, Sort
 
@@ -102,6 +104,11 @@ class ActualizarProductoInput:
     rastrea_instancia_abierta: bool | None = None
     instancia_capacidad_default: Decimal | None = None
     cambiar_instancia_capacidad_default: bool = False
+    precio_incluye_impuesto: bool | None = None
+    es_sobre_pedido: bool | None = None
+    precio_mayoreo: Decimal | None = None
+    cantidad_minima_mayoreo: Decimal | None = None
+    cambiar_mayoreo: bool = False
     codigo_barras: str | None = None
     cambiar_codigo_barras: bool = False
     cambiar_descripcion: bool = False
@@ -208,10 +215,17 @@ class ActualizarProductoUseCase:
             rastrea_instancia_abierta=data.rastrea_instancia_abierta,
             instancia_capacidad_default=data.instancia_capacidad_default,
             cambiar_instancia_capacidad_default=data.cambiar_instancia_capacidad_default,
+            precio_incluye_impuesto=data.precio_incluye_impuesto,
+            es_sobre_pedido=data.es_sobre_pedido,
+            precio_mayoreo=data.precio_mayoreo,
+            cantidad_minima_mayoreo=data.cantidad_minima_mayoreo,
+            cambiar_mayoreo=data.cambiar_mayoreo,
             codigo_barras=data.codigo_barras,
             cambiar_codigo_barras=data.cambiar_codigo_barras,
             cambiar_descripcion=data.cambiar_descripcion,
         )
+        if data.cambiar_mayoreo:
+            _validar_mayoreo(producto.precio_mayoreo, producto.cantidad_minima_mayoreo)
         # Coherencia: si el producto queda rastreando instancias, necesita una
         # capacidad default > 0 para poder auto-abrir al vender a granel.
         if producto.rastrea_instancia_abierta and not (

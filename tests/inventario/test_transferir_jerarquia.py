@@ -30,7 +30,10 @@ class _SucRepo:
 
 class _ProdRepo:
     async def obtener_por_id(self, pid):
-        return type("P", (), {"nombre": "P", "requiere_lote": False, "permite_stock_negativo": True})()
+        return type("P", (), {
+            "nombre": "P", "requiere_lote": False,
+            "permite_stock_negativo": True, "permite_venta_sin_stock": True,
+        })()
 
 
 class _ExistRepo:

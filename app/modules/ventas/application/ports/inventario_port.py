@@ -26,6 +26,14 @@ class InventarioPort(ABC):
         ...
 
     @abstractmethod
+    async def precio_mayoreo_aplicable(
+        self, producto_id: UUID, cantidad: Decimal,
+    ) -> Decimal | None:
+        """`precio_mayoreo` del producto si `cantidad` (en unidad base) alcanza
+        `cantidad_minima_mayoreo`; None si va a precio de menudeo o no tiene mayoreo."""
+        ...
+
+    @abstractmethod
     async def revertir_venta(self, venta_id: UUID, usuario_id: UUID) -> None:
         """Anula el efecto en inventario de una venta: por cada movimiento de
         SALIDA que la venta generó, registra la ENTRADA inversa al MISMO lote y

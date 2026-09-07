@@ -11,6 +11,7 @@ from app.modules.inventario.application.ports.producto_repository import Product
 from app.modules.inventario.application.ports.existencia_repository import ExistenciaRepository
 from app.modules.inventario.application.ports.movimiento_repository import MovimientoRepository
 from app.modules.inventario.application.ports.event_port import EventPort
+from app.modules.inventario.application.ports.lote_repository import LoteRepository
 from app.modules.sucursales.application.ports.sucursal_repository import SucursalRepository
 
 EVENTO_TRANSFERENCIA = "TransferenciaInventarioRegistrada"
@@ -41,12 +42,14 @@ class TransferirStockUseCase:
         movimiento_repo: MovimientoRepository,
         event_port: EventPort | None = None,
         sucursal_repo: SucursalRepository | None = None,
+        lote_repo: LoteRepository | None = None,
     ):
         self._producto_repo = producto_repo
         self._existencia_repo = existencia_repo
         self._movimiento_repo = movimiento_repo
         self._event_port = event_port
         self._sucursal_repo = sucursal_repo
+        self._lote_repo = lote_repo
 
     async def _validar_jerarquia(self, origen_id: UUID, destino_id: UUID) -> None:
         """Un traspaso sólo es válido entre sucursales de la misma familia: una
@@ -83,19 +86,13 @@ class TransferirStockUseCase:
         if not producto:
             raise ProductoNoEncontrado(f"No existe el producto {data.producto_id}")
         if producto.requiere_lote:
-            # Transferencia con control por lote todavía no soportada: hay que
-            # decidir de qué lote sale y a qué lote entra en destino. Por ahora
-            # se hace con SALIDA (FEFO) en origen + ENTRADA (lote) en destino.
-            raise TransferenciaInvalida(
-                f"{producto.nombre} lleva control por lote: la transferencia entre "
-                "sucursales todavía no está soportada para estos productos. Usá una "
-                "SALIDA en origen y una ENTRADA (indicando el lote) en destino."
-            )
+            await self._transferir_con_lote(data, producto)
+            return
 
         origen = await self._existencia_repo.obtener(data.producto_id, data.sucursal_origen_id)
         saldo_origen = origen.cantidad if origen else Decimal("0")
         nuevo_origen = saldo_origen - data.cantidad
-        if nuevo_origen < 0 and not producto.permite_stock_negativo:
+        if nuevo_origen < 0 and not producto.permite_venta_sin_stock:
             raise StockInsuficiente(
                 f"Stock insuficiente en sucursal origen para {producto.nombre}: "
                 f"disponible {saldo_origen}, solicitado {data.cantidad}"
@@ -170,3 +167,118 @@ class TransferirStockUseCase:
                     "motivo": data.motivo,
                 },
             })
+
+    # ---------------------------------------------------------------- con lote
+    async def _transferir_con_lote(self, data: TransferirStockInput, producto) -> None:
+        """FEFO-out en origen + ENTRADA al MISMO lote en destino (un lote no es
+        de sucursal: sólo su saldo `existencia_lote` es por sucursal). Un traspaso
+        que toca varios lotes genera un par de movimientos por lote."""
+        if self._lote_repo is None:
+            raise TransferenciaInvalida(
+                "Falta el repositorio de lotes para transferir un producto con "
+                "control por lote."
+            )
+
+        disponibles = await self._lote_repo.lotes_fefo(
+            data.producto_id, data.sucursal_origen_id
+        )
+        plan: list[tuple[UUID, Decimal]] = []
+        restante = data.cantidad
+        for lote_id, disp in disponibles:
+            if restante <= 0:
+                break
+            toma = disp if disp < restante else restante
+            plan.append((lote_id, toma))
+            restante -= toma
+        if restante > 0:
+            if not producto.permite_venta_sin_stock or not plan:
+                raise StockInsuficiente(
+                    f"Stock insuficiente en sucursal origen para {producto.nombre}: "
+                    f"faltan {restante} (sin lote disponible para cubrirlo)"
+                )
+            lote_id, qty = plan[0]           # el sobrante lo absorbe el lote FEFO más antiguo
+            plan[0] = (lote_id, qty + restante)
+
+        origen = await self._existencia_repo.obtener(data.producto_id, data.sucursal_origen_id)
+        destino = await self._existencia_repo.obtener(data.producto_id, data.sucursal_destino_id)
+        saldo_origen = origen.cantidad if origen else Decimal("0")
+        saldo_destino = destino.cantidad if destino else Decimal("0")
+
+        primer_mov: UUID | None = None
+        resumen: list[dict] = []
+        for lote_id, qty in plan:
+            lote = await self._lote_repo.obtener(lote_id)
+            costo = lote.costo if lote is not None else data.costo_unitario
+
+            await self._lote_repo.ajustar_saldo(
+                data.producto_id, data.sucursal_origen_id, lote_id, -qty
+            )
+            mov_out = MovimientoInventario.crear(
+                producto_id=data.producto_id,
+                sucursal_id=data.sucursal_origen_id,
+                tipo=TipoMovimiento.TRANSFERENCIA,
+                cantidad=qty,
+                referencia_tipo="transferencia",
+                usuario_id=data.usuario_id,
+                referencia_id=data.referencia_id,
+                costo_unitario=costo,
+                motivo=data.motivo or f"Transferencia a sucursal {data.sucursal_destino_id}",
+                lote_id=lote_id,
+            )
+            await self._movimiento_repo.guardar(mov_out)
+            primer_mov = primer_mov or mov_out.id
+
+            await self._lote_repo.ajustar_saldo(
+                data.producto_id, data.sucursal_destino_id, lote_id, qty
+            )
+            mov_in = MovimientoInventario.crear(
+                producto_id=data.producto_id,
+                sucursal_id=data.sucursal_destino_id,
+                tipo=TipoMovimiento.TRANSFERENCIA,
+                cantidad=qty,
+                referencia_tipo="transferencia",
+                usuario_id=data.usuario_id,
+                referencia_id=mov_out.id,
+                costo_unitario=costo,
+                motivo=data.motivo or f"Transferencia desde sucursal {data.sucursal_origen_id}",
+                lote_id=lote_id,
+            )
+            await self._movimiento_repo.guardar(mov_in)
+            resumen.append({"lote_id": str(lote_id), "cantidad": str(qty)})
+
+        nuevo_origen = saldo_origen - data.cantidad
+        nuevo_destino = saldo_destino + data.cantidad
+        await self._ajustar_agregado(data.producto_id, data.sucursal_origen_id, origen, nuevo_origen)
+        await self._ajustar_agregado(data.producto_id, data.sucursal_destino_id, destino, nuevo_destino)
+
+        if self._event_port is not None:
+            await self._event_port.publicar(EVENTO_TRANSFERENCIA, {
+                "usuario_id": data.usuario_id,
+                "modulo": "inventario",
+                "accion": "movimiento_transferencia",
+                "entidad": "MovimientoInventario",
+                "entidad_id": str(primer_mov) if primer_mov else None,
+                "detalle": {
+                    "producto_id": str(data.producto_id),
+                    "sucursal_origen_id": str(data.sucursal_origen_id),
+                    "sucursal_destino_id": str(data.sucursal_destino_id),
+                    "cantidad": str(data.cantidad),
+                    "saldo_origen_anterior": str(saldo_origen),
+                    "saldo_origen_nuevo": str(nuevo_origen),
+                    "saldo_destino_anterior": str(saldo_destino),
+                    "saldo_destino_nuevo": str(nuevo_destino),
+                    "motivo": data.motivo,
+                    "lotes": resumen,
+                },
+            })
+
+    async def _ajustar_agregado(
+        self, producto_id: UUID, sucursal_id: UUID, existencia, nuevo_saldo: Decimal
+    ) -> None:
+        if existencia:
+            await self._existencia_repo.actualizar_cantidad(producto_id, sucursal_id, nuevo_saldo)
+        else:
+            await self._existencia_repo.crear(Existencia(
+                id=uuid4(), producto_id=producto_id, sucursal_id=sucursal_id,
+                cantidad=nuevo_saldo, stock_minimo=Decimal("0"), stock_maximo=None,
+            ))

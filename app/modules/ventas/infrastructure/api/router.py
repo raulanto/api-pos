@@ -17,7 +17,10 @@ from app.modules.ventas.application.dtos import FiltroVentas
 from app.modules.ventas.domain.value_objects import EstadoVenta
 from app.modules.ventas.domain import exceptions as vexc
 from app.modules.clientes.domain.exceptions import LimiteCreditoExcedido, ClienteNoEncontrado
-from app.modules.inventario.domain.exceptions import StockInsuficiente, ProductoNoEncontrado
+from app.modules.inventario.domain.exceptions import (
+    StockInsuficiente, ProductoNoEncontrado, CantidadNoVendible,
+    LoteRequerido, LoteInvalido,
+)
 from app.modules.ventas.infrastructure.api.schemas import (
     CrearVentaRequest, AnularVentaRequest, VentaResponse, VentaListItem,
     AbrirCajaTurnoRequest, CerrarCajaTurnoRequest, CajaTurnoResponse, ResumenTurnoResponse,
@@ -66,7 +69,8 @@ _CONFLICT = (
 _FORBIDDEN = (vexc.AnulacionNoPermitida, vexc.CierreTurnoNoPermitido)
 _BAD_REQUEST = (
     vexc.CajaNoAbierta, vexc.VentaCreditoSinCliente, vexc.VentaSinLineas,
-    vexc.TurnoDeOtraSucursal, LimiteCreditoExcedido, StockInsuficiente, ValueError,
+    vexc.TurnoDeOtraSucursal, LimiteCreditoExcedido, StockInsuficiente,
+    CantidadNoVendible, LoteRequerido, LoteInvalido, ValueError,
 )
 
 

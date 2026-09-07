@@ -33,6 +33,12 @@ class CrearProductoRequest(BaseModel):
     # es obligatorio (capacidad para auto-abrir un envase al vender a granel).
     rastrea_instancia_abierta: bool = False
     instancia_capacidad_default: Optional[Decimal] = Field(default=None, gt=0)
+    # `precio_venta` ya trae el IVA adentro (precio final al público).
+    precio_incluye_impuesto: bool = False
+    # Mayoreo: precio y cantidad mínima van juntos. Se aplica solo/backend.
+    precio_mayoreo: Optional[Decimal] = Field(default=None, ge=0)
+    cantidad_minima_mayoreo: Optional[Decimal] = Field(default=None, gt=0)
+    es_sobre_pedido: bool = False
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     descripcion: Optional[str] = None
 
@@ -63,6 +69,12 @@ class ActualizarProductoRequest(BaseModel):
     instancia_capacidad_default: Optional[Decimal] = Field(default=None, gt=0)
     # Para dejar `instancia_capacidad_default` en NULL hay que mandarlo explícito.
     cambiar_instancia_capacidad_default: bool = False
+    precio_incluye_impuesto: Optional[bool] = None
+    es_sobre_pedido: Optional[bool] = None
+    precio_mayoreo: Optional[Decimal] = Field(default=None, ge=0)
+    cantidad_minima_mayoreo: Optional[Decimal] = Field(default=None, gt=0)
+    # Mandar `cambiar_mayoreo=true` para fijar/limpiar el par mayoreo (ambos a NULL si no vienen).
+    cambiar_mayoreo: bool = False
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     cambiar_codigo_barras: bool = False
     # Para dejar `descripcion` en NULL hay que mandarlo explícitamente.
@@ -120,6 +132,10 @@ class ProductoResponse(EmbeddableModel):
     requiere_lote: bool = False
     rastrea_instancia_abierta: bool = False
     instancia_capacidad_default: Optional[Decimal] = None
+    precio_incluye_impuesto: bool = False
+    precio_mayoreo: Optional[Decimal] = None
+    cantidad_minima_mayoreo: Optional[Decimal] = None
+    es_sobre_pedido: bool = False
     activo: bool
     # Siempre presente (no depende de `?include=`): la imagen de portada del
     # producto, o null si no tiene ninguna marcada como principal.

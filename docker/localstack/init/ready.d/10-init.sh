@@ -24,8 +24,12 @@ awslocal s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration '{
 }'
 
 if [ ! -f "$ZIP" ]; then
-  echo "[init] ERROR: no encuentro $ZIP (¿corrió el servicio lambda_build?)" >&2
-  exit 1
+  # La Lambda de miniaturas es opcional: sin el zip (lambda_build no corrió o
+  # falló el pip install), el bucket + CORS ya quedaron listos y la API funciona
+  # igual. Se salta el deploy de la Lambda en vez de tumbar todo el init.
+  echo "[init] AVISO: no hay $ZIP; se omite la Lambda de miniaturas." >&2
+  echo "[init] listo (sin Lambda)."
+  exit 0
 fi
 
 echo "[init] lambda $FN"

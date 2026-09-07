@@ -58,6 +58,16 @@ class InventarioPortImpl(InventarioPort):
         unidad = await self._um_repo.obtener(producto.unidad_medida_id)
         return unidad.decimales if unidad is not None else DECIMALES_STOCK_DEFAULT
 
+    async def _decimales_stock(self, producto, producto_unidad_id: UUID | None) -> int:
+        """Decimales para guardar la cantidad en unidad base. Al vender una
+        PRESENTACIÓN cuyo `factor < 1` (sub-unidad, ej: 1 botella = 1/8 de reja),
+        el resultado en unidad base es fraccional aunque la unidad base sea
+        entera: se usa la precisión de la columna (NUMERIC 14,4)."""
+        dec = await self._decimales(producto)
+        if producto_unidad_id is not None:
+            return max(dec, DECIMALES_STOCK_DEFAULT)
+        return dec
+
     async def _factor(self, producto_id: UUID, producto_unidad_id: UUID | None) -> Decimal:
         if producto_unidad_id is None:
             return Decimal("1")
@@ -75,7 +85,7 @@ class InventarioPortImpl(InventarioPort):
     ) -> Decimal:
         producto = await self._cargar_producto(producto_id)
         factor = await self._factor(producto_id, producto_unidad_id)
-        decimales = await self._decimales(producto)
+        decimales = await self._decimales_stock(producto, producto_unidad_id)
         return _cuantizar(cantidad * factor, decimales)
 
     async def _expandir(
@@ -97,11 +107,20 @@ class InventarioPortImpl(InventarioPort):
             return
 
         factor = await self._factor(producto_id, producto_unidad_id)
-        decimales = await self._decimales(producto)
+        decimales = await self._decimales_stock(producto, producto_unidad_id)
         cantidad_base = _cuantizar(cantidad * factor, decimales)
 
-        # Reglas de fraccionamiento del producto padre sobre la cantidad base.
-        producto.validar_cantidad_vendible(cantidad_base)
+        if cantidad_base <= 0:
+            raise ValueError(
+                f"La venta de {cantidad} de esa presentación equivale a 0 en unidad "
+                f"base ({producto.unidad_medida}); revisá el `factor` de la presentación."
+            )
+
+        # Las reglas de fraccionamiento ("no admite medio", "múltiplo de X")
+        # aplican a la venta EN UNIDAD BASE. Al vender una presentación entera se
+        # omiten: el cliente compró N presentaciones discretas, no una fracción.
+        if producto_unidad_id is None:
+            producto.validar_cantidad_vendible(cantidad_base)
 
         # Venta a granel = sin presentación (se vendió en unidad base). Sólo en
         # ese caso un producto que rastrea instancias consume de envases abiertos;
@@ -204,6 +223,18 @@ class InventarioPortImpl(InventarioPort):
             if disp >= capacidad:
                 return lid
         return fefo[0][0] if fefo else None
+
+    async def precio_mayoreo_aplicable(
+        self, producto_id: UUID, cantidad: Decimal,
+    ) -> Decimal | None:
+        producto = await self._cargar_producto(producto_id)
+        if (
+            producto.precio_mayoreo is not None
+            and producto.cantidad_minima_mayoreo is not None
+            and cantidad >= producto.cantidad_minima_mayoreo
+        ):
+            return producto.precio_mayoreo
+        return None
 
     async def revertir_venta(self, venta_id: UUID, usuario_id: UUID) -> None:
         """ENTRADA inversa por cada SALIDA que generó la venta, al mismo lote."""

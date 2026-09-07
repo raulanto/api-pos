@@ -1,6 +1,6 @@
 # Sistema de Inventario — estado actual y roadmap
 
-> Última actualización: 2026-09-05 · Head de migraciones: `a1c2e3f4b5d6`
+> Última actualización: 2026-09-06 · Head de migraciones del proyecto: `f7a8b9c0d1e2`
 > Cubre el módulo `app/modules/inventario` y su integración con `ventas`.
 
 Este documento describe **lo que el sistema de inventario hace hoy** y **lo que
@@ -18,8 +18,9 @@ sucursal**. Sigue arquitectura hexagonal por capas:
 inventario/
 ├── domain/
 │   ├── entities/         # Categoria, UnidadMedida, Producto, ProductoComponente,
-│   │                     # ProductoUnidad, ProductoImagen, Existencia, MovimientoInventario
-│   ├── value_objects.py  # TipoMovimiento, TipoProducto, TipoMagnitud
+│   │                     # ProductoUnidad, ProductoImagen, InstanciaAbierta,
+│   │                     # Lote, ExistenciaLote, Existencia, MovimientoInventario
+│   ├── value_objects.py  # TipoMovimiento, TipoProducto, TipoMagnitud, EstadoInstancia
 │   └── exceptions.py     # excepciones de dominio (se traducen a HTTP en router/common.py)
 ├── application/
 │   ├── ports/            # interfaces de repositorio (1 por agregado)
@@ -32,7 +33,7 @@ inventario/
     │   └── mappers.py    # ORM <-> dominio
     └── api/
         ├── router/       # categorias, unidades_medida, productos, componentes,
-        │                 # unidades, imagenes, existencias, movimientos
+        │                 # unidades, imagenes, instancias, lotes, existencias, movimientos
         └── schemas/      # request/response Pydantic v2
 ```
 
@@ -52,7 +53,8 @@ Reglas transversales del proyecto que aplican aquí:
 - **Unicidad "entre activos"**: índices únicos parciales `WHERE activo` — al dar de
   baja un recurso, su clave (SKU, código, nombre) queda libre para reutilizarse.
 - **Permisos** (seed por migración): `inventario.leer`, `inventario.crear`,
-  `inventario.editar`, `inventario.movimiento`.
+  `inventario.editar`, `inventario.movimiento`, `inventario.eliminar` (borrado
+  físico de producto).
 
 ---
 
@@ -100,6 +102,12 @@ Registro central del catálogo.
 | `permite_venta_fraccionada` | bool          | permite cantidades no enteras de la unidad base |
 | `incremento_minimo_venta`   | numeric(14,4) | nullable; si se define, toda venta/salida debe ser múltiplo exacto |
 | `requiere_lote`             | bool          | activa el control por lote: ENTRADA con lote obligatorio, SALIDA por FEFO |
+| `rastrea_instancia_abierta` | bool          | activa el rastreo de envases abiertos (ver §5.9). Requiere `instancia_capacidad_default` |
+| `instancia_capacidad_default` | numeric(14,4) | nullable; capacidad con la que se auto-abre un envase al vender a granel |
+| `precio_incluye_impuesto`   | bool          | `precio_venta` ya trae el IVA adentro (precio final al público) |
+| `precio_mayoreo`            | numeric(12,2) | nullable; precio alternativo a partir de `cantidad_minima_mayoreo` (ver §5.10) |
+| `cantidad_minima_mayoreo`   | numeric(14,4) | nullable; va junto con `precio_mayoreo` (ambos o ninguno) |
+| `es_sobre_pedido`           | bool          | no se mantiene en stock; se vende sin existencia (como `permite_stock_negativo`) |
 | `activo`                    | bool          | baja lógica |
 
 Relaciones embebidas (`?include=`): `categoria`, `existencias`, `componentes`,
@@ -211,7 +219,23 @@ Todo cambio de stock deja una fila (append-only).
 | `unidad_capturada_id` | FK producto_unidad | nullable — presentación tal como se capturó antes de convertir a base |
 | `cantidad_capturada`  | numeric(14,4) | nullable — cantidad en la presentación capturada |
 | `lote_id`             | FK lote       | nullable — lote afectado (productos con control por lote). Una salida FEFO que toca 2 lotes genera 2 filas |
+| `instancia_abierta_id`| FK instancia_abierta | nullable — envase abierto del que salió/entró la fracción (ver §5.9) |
 | `motivo`              | varchar(255)  | nullable |
+
+### 2.10 `instancia_abierta` — envase físico abierto (sólo si `producto.rastrea_instancia_abierta`)
+
+Un envase destapado con su saldo restante en fracciones de la unidad base
+(ej: un galón de 5 L abierto con 3.2 L). Complementa a `existencia` (total) y a
+`lote` (FEFO). Detalle completo en `docs/instancia-fisica-abierta.md`.
+
+| Columna | Tipo | Nota |
+|---|---|---|
+| `producto_id`, `sucursal_id` | FK | |
+| `producto_unidad_id` | FK producto_unidad | nullable — presentación origen (define capacidad) |
+| `lote_id` | FK lote | nullable — traza caducidad/costo del contenido |
+| `capacidad_inicial`, `saldo` | numeric(14,4) | CHECK `0 <= saldo <= capacidad_inicial` |
+| `estado` | varchar(12) | `abierta` \| `agotada` \| `descartada` |
+| `abierta_por`, `abierta_at`, `cerrada_at`, `motivo_cierre` | | |
 
 ---
 
@@ -265,12 +289,13 @@ Todo cambio de stock deja una fila (append-only).
 | Método | Ruta | Nota |
 |--------|------|------|
 | GET | `/productos` | filtros: `categoria_id` (multi), `activo`, `q`, `sucursal_id` (multi), `tipo`, `permite_stock_negativo`, `con_codigo_barras`, `precio_min/max`, `costo_min/max`, `solo_bajo_stock`. `?include=categoria,existencias,componentes,unidades,imagenes` |
-| POST | `/productos` | acepta `tipo`, `unidad_medida_id`, `permite_venta_fraccionada`, `incremento_minimo_venta` |
+| POST | `/productos` | acepta `tipo`, `unidad_medida_id`, `permite_venta_fraccionada`, `incremento_minimo_venta`, `requiere_lote`, `rastrea_instancia_abierta` + `instancia_capacidad_default`, `precio_incluye_impuesto`, `precio_mayoreo` + `cantidad_minima_mayoreo`, `es_sobre_pedido` |
 | GET | `/productos/kpis` | agregados de catálogo + valuación de stock, mismos filtros que el listado |
 | GET | `/productos/buscar?codigo_barras=` | resuelve un producto activo por código |
 | GET | `/productos/resolver-codigo?codigo_barras=` | POS: producto **o** presentación + `factor` + `precio_venta` |
-| GET / PATCH | `/productos/{id}` | PATCH edita también `sku`, `tipo`, `unidad_medida_id`, flags de fracción (con `cambiar_*` para volver a NULL) |
+| GET / PATCH | `/productos/{id}` | PATCH edita también `sku`, `tipo`, `unidad_medida_id`, flags de fracción/lote/instancia, mayoreo (`cambiar_mayoreo`), IVA-incluido, sobre-pedido (con `cambiar_*` para volver a NULL) |
 | PATCH | `/productos/{id}/activar` · `/desactivar` | `desactivar` acepta `?confirmar_con_stock=true` |
+| DELETE | `/productos/{id}` | **borrado físico** (producto + imágenes/S3 + presentaciones + kit + lotes + existencia). Permiso `inventario.eliminar`. Rechaza (409) si el producto tiene movimientos o ventas — ahí se usa `/desactivar` |
 
 ### Recetas de kit (componentes)
 | Método | Ruta |
@@ -285,18 +310,31 @@ Todo cambio de stock deja una fila (append-only).
 | PATCH / DELETE | `/productos/{id}/unidades/{unidad_id}` (DELETE = baja lógica) |
 
 ### Galería de imágenes
-| Método | Ruta |
-|--------|------|
-| GET / POST | `/productos/{id}/imagenes` |
-| PATCH / DELETE | `/productos/{id}/imagenes/{imagen_id}` |
-| GET / POST | `/productos/{id}/unidades/{unidad_id}/imagenes` |
-| PATCH / DELETE | `/productos/{id}/unidades/{unidad_id}/imagenes/{imagen_id}` |
+| Método | Ruta | Nota |
+|--------|------|------|
+| GET / POST | `/productos/{id}/imagenes` | POST JSON = URL externa |
+| POST | `/productos/{id}/imagenes/upload` | **multipart** `file` → sube a S3 (LocalStack en dev), guarda `object_key`; devuelve `url`/`thumbnail_url` prefirmadas. Ver `docs/imagenes-s3-localstack.md` |
+| PATCH / DELETE | `/productos/{id}/imagenes/{imagen_id}` | DELETE borra también el objeto y su miniatura de S3 |
+| GET / POST · `/upload` | `/productos/{id}/unidades/{unidad_id}/imagenes` | ídem para presentaciones |
+| PATCH / DELETE | `/productos/{id}/unidades/{unidad_id}/imagenes/{imagen_id}` | |
+
+### Instancias abiertas (`producto.rastrea_instancia_abierta`)
+
+| Método | Ruta | Permiso |
+|--------|------|---------|
+| GET | `/productos/{id}/instancias` — `?sucursal_id`, `?estado`, paginado | leer |
+| POST | `/productos/{id}/instancias/abrir` — `{sucursal_id, producto_unidad_id? XOR capacidad?, lote_id?, motivo?}` | movimiento |
+| GET | `/instancias/{iid}` | leer |
+| POST | `/instancias/{iid}/consumir` · `/merma` — `{cantidad, motivo?}` | movimiento |
+| POST | `/instancias/{iid}/ajustar` — `{saldo_medido, motivo?}` (sólo baja) | movimiento |
+| POST | `/instancias/{iid}/descartar` — `{motivo}` | movimiento |
 
 ### Existencias
 | Método | Ruta |
 |--------|------|
 | GET | `/existencias` — `producto_id`, `sucursal_id` (multi) |
 | GET | `/existencias/bajo-stock` — `sucursal_id` (multi) |
+| GET | `/productos/{producto_id}/existencias` — `sucursal_id` (multi) · **desglose** del saldo a cada presentación (ver §5.11) |
 | PATCH | `/existencias/{producto_id}/{sucursal_id}/umbrales` — requiere existencia ya creada |
 
 ### Movimientos
@@ -304,7 +342,7 @@ Todo cambio de stock deja una fila (append-only).
 |--------|------|------|
 | GET | `/movimientos` — `producto_id`, `sucursal_id`, `tipo`, `desde`, `hasta`. `?include=producto,usuario` |
 | POST | `/movimientos` | `sucursal_id` va en el body; opcionalmente `actualizar_costo` + `costo_unitario`, `nuevo_precio_venta`, `unidad_capturada_id` + `cantidad_capturada`, y para productos con lote: `lote_id` / `lote_nuevo` (ver §5.8) |
-| POST | `/movimientos/transferencia` | entre sucursales — **no soportado** para productos con `requiere_lote` |
+| POST | `/movimientos/transferencia` | entre sucursales; valida jerarquía (sólo padre directa o hermanas). Con `requiere_lote`: FEFO-out en origen + ENTRADA al mismo lote en destino (ver §5.8) |
 | GET | `/movimientos/{id}` | |
 
 ### Lotes
@@ -328,6 +366,15 @@ convierte `cantidad × factor` a unidad base **redondeando a los `decimales` de 
 unidad de medida** (`unidad_medida.decimales`; fallback 4 si el producto no tiene
 `unidad_medida_id`). El helper es `_cuantizar(valor, decimales)`.
 
+**Presentación sub-unidad (`factor < 1`)**: si la presentación es *más chica* que
+la unidad base (ej: base = "reja" con 0 decimales, presentación "botella" con
+`factor = 0.125`), vender 1 botella da `0.125` rejas. En ese caso la cantidad en
+unidad base se guarda con **precisión de columna (4 decimales)** en vez de los
+`decimales` de la unidad base, y las reglas de §5.2 **no** aplican (se compró una
+presentación discreta, no una fracción de reja). La SALIDA resultante lleva
+`unidad_capturada_id`, que es la señal de "ya convertido desde una presentación".
+Si `cantidad × factor` redondea a 0 igual → 400 pidiendo revisar el `factor`.
+
 ### 5.2 Venta fraccionada
 
 `Producto.validar_cantidad_vendible(cantidad)` lanza `CantidadNoVendible` (→ 400) si:
@@ -336,8 +383,9 @@ unidad de medida** (`unidad_medida.decimales`; fallback 4 si el producto no tien
 - define `incremento_minimo_venta` y la cantidad no es múltiplo exacto.
 
 Se valida en `AplicarMovimientoUseCase` (SALIDA / MERMA) y en el adapter de ventas
-(sobre la cantidad base del producto padre). Las ENTRADAS (compras) no tienen esta
-restricción: se puede comprar cualquier fracción.
+(sobre la cantidad base del producto padre), **sólo cuando la venta es en unidad
+base** (`producto_unidad_id = None`). Vender una presentación entera se salta esta
+regla (ver §5.1). Las ENTRADAS (compras) tampoco tienen esta restricción.
 
 ### 5.3 Kits
 
@@ -395,9 +443,59 @@ Si `producto.requiere_lote`:
   se mantiene como la **suma** (fuente única para "cuánto hay").
 - Activar `requiere_lote` con stock ya cargado ⇒ 400 (`LoteInvalido`): hay que
   llevar el stock a 0 y recargarlo por lote.
-- **Transferencia** entre sucursales todavía no soportada para estos productos.
+- **Transferencia** entre sucursales: FEFO-out en origen + ENTRADA al **mismo
+  `lote_id`** en destino (un lote no es de sucursal, sólo su `existencia_lote`).
+  Un traspaso que toca varios lotes genera un par de movimientos por lote.
 - `GET /lotes/por-vencer` lista los lotes con caducidad próxima (o vencidos) y su
   saldo por sucursal.
+
+### 5.9 Instancia física abierta
+
+Con `producto.rastrea_instancia_abierta` + `instancia_capacidad_default`: cada
+envase destapado se rastrea en `instancia_abierta` con su `saldo` en fracciones.
+**Abrir** un envase es neutral (no toca `existencia` ni genera movimiento, sólo
+auditoría). **Consumir / merma / descartar / ajustar** generan SALIDA o MERMA
+(con `instancia_abierta_id`) y bajan el saldo; en 0 → `agotada`. En una **venta a
+granel** (`producto_unidad_id = None`), el módulo `ventas` consume FIFO de las
+instancias abiertas y auto-abre las que falten. Detalle: `docs/instancia-fisica-abierta.md`.
+
+### 5.10 Mayoreo, precio con IVA incluido y sobre pedido
+
+- **Mayoreo**: si `precio_mayoreo` + `cantidad_minima_mayoreo` están definidos
+  (van juntos), una venta **por unidad base** con `cantidad ≥` el mínimo usa
+  `precio_mayoreo` — el backend lo fuerza en `crear_venta` y lo congela en
+  `detalle_venta` (ignora el precio del front). Presentaciones (`producto_unidad`)
+  usan su propio `precio_venta`.
+- **`precio_incluye_impuesto`**: bandera de catálogo — `precio_venta` es el precio
+  final con IVA. El módulo `ventas` no calcula impuesto server-side (el total es
+  `Σ (cantidad·precio − descuento)`), así que es informativa para el front/reportes.
+- **`es_sobre_pedido`**: `Producto.permite_venta_sin_stock = permite_stock_negativo
+  or es_sobre_pedido`; las SALIDA / transferencias no fallan por `StockInsuficiente`.
+
+### 5.11 Desglose de stock por presentación
+
+`GET /productos/{id}/existencias` traduce el saldo (en unidad base) a cada
+presentación activa, sin recalcular nada. Para "9 rejas menos 1 botella" en un
+producto con base = `reja` y presentación `botella` (`factor 0.125`):
+
+```json
+{
+  "producto_id": "…",
+  "unidad_base": "reja",
+  "cantidad_base_global": "8.8750",
+  "presentaciones_global": [
+    { "producto_unidad_id": null, "nombre": "reja",    "factor": "1",     "cantidad": "8.8750", "cantidad_entera": 8 },
+    { "producto_unidad_id": "…",  "nombre": "botella", "factor": "0.125", "cantidad": "71.0000","cantidad_entera": 71 }
+  ],
+  "por_sucursal": [
+    { "sucursal_id": "…", "cantidad_base": "8.8750", "stock_minimo": "1", "stock_maximo": "10",
+      "presentaciones": [ /* mismo shape */ ] }
+  ]
+}
+```
+
+`cantidad = cantidad_base / factor`; `cantidad_entera = floor(cantidad)`
+(presentaciones completas). `?sucursal_id=` (multi) acota el desglose.
 
 ---
 
@@ -436,16 +534,18 @@ Si `producto.requiere_lote`:
 - **Merma**: `POST /movimientos` `merma`.
 - **Recuento físico**: `POST /movimientos` `ajuste` con `cantidad_final`
   (+ `lote_id` obligatorio si lleva lote).
-- **Entre sucursales**: `POST /movimientos/transferencia` (no para productos con lote).
+- **Entre sucursales**: `POST /movimientos/transferencia` (con lote: FEFO-out + ENTRADA al mismo lote).
 
 ### 6.5 Venta (desde el módulo `ventas`)
 
-`CrearVentaUseCase` → por cada línea llama `InventarioPort.convertir_a_base(...)`
-y persiste `cantidad_en_unidad_base` → `descontar_stock` → si es `servicio` no
-hace nada; si es `kit` explota la receta; si lleva lote descuenta por FEFO; si no,
-aplica SALIDA en unidad base. `AnularVentaUseCase` llama
-`InventarioPort.revertir_venta(venta_id)`, que revierte cada SALIDA registrada al
-mismo lote.
+`CrearVentaUseCase` → por cada línea: aplica `precio_mayoreo` si corresponde
+(`InventarioPort.precio_mayoreo_aplicable`, sólo unidad base); llama
+`InventarioPort.convertir_a_base(...)` y persiste `cantidad_en_unidad_base` →
+`descontar_stock` → si es `servicio` no hace nada; si es `kit` explota la receta;
+si `rastrea_instancia_abierta` y es granel consume de instancias abiertas
+(FIFO + auto-open); si lleva lote descuenta por FEFO; si no, SALIDA en unidad
+base. `AnularVentaUseCase` llama `InventarioPort.revertir_venta(venta_id)`, que
+revierte cada SALIDA al mismo lote y repone la instancia abierta si la hubo.
 
 ---
 
@@ -465,7 +565,11 @@ mismo lote.
 | `e3c4d5e6f7a8` | trazabilidad: `movimiento.unidad_capturada_id`/`cantidad_capturada`, `detalle_venta.cantidad_en_unidad_base` |
 | `e4d5e6f7a8b9` | cantidades ampliadas a `numeric(14,4)` (existencia, movimiento, detalle_venta) |
 | `f2a3b4c5d6e7` | galería `producto_imagen` |
-| `a1c2e3f4b5d6` | **(head)** control por lote + FEFO: `lote`, `existencia_lote`, `producto.requiere_lote`, `movimiento_inventario.lote_id` |
+| `a1c2e3f4b5d6` | control por lote + FEFO: `lote`, `existencia_lote`, `producto.requiere_lote`, `movimiento_inventario.lote_id` |
+| `b3d4e5f6a7c8` | `producto_imagen`: almacenamiento en S3 (`object_key`, `content_type`; `url` nullable) |
+| `c4d5e6f7a8b9` | seed del permiso `inventario.eliminar` (borrado físico de producto) |
+| `d5e6f7a8b9c0` | instancia física abierta: tabla `instancia_abierta`, `producto.rastrea_instancia_abierta` + `instancia_capacidad_default`, `movimiento_inventario.instancia_abierta_id` |
+| `f7a8b9c0d1e2` | **(head)** `producto`: `precio_incluye_impuesto`, `precio_mayoreo` + `cantidad_minima_mayoreo`, `es_sobre_pedido` |
 
 ---
 
@@ -474,10 +578,10 @@ mismo lote.
 | # | Tema | Estado / decisión |
 |---|------|-------------------|
 | 1a | **Control por lote + FEFO** | **Implementado** (migración `a1c2e3f4b5d6`). Ver §2.7-2.8 y §5.8. |
-| 1b | **Instancia física abierta** (envase abierto vendido en fracciones) | **No implementado** — fase aparte. Rastrear cada envase físico abierto y su saldo en fracciones (ej: un galón de 5 L abierto con 3.2 L restantes). Otro conjunto de tablas/endpoints. |
-| 1c | **Transferencia entre sucursales de productos con lote** | **No implementada** — `POST /movimientos/transferencia` la rechaza. Falta decidir de qué lote sale y a qué lote entra en destino (FEFO-out + ENTRADA con lote). |
+| 1b | **Instancia física abierta** (envase abierto vendido en fracciones) | **Implementado** (migración `d5e6f7a8b9c0`). Ver §2.10 y §5.9, y `docs/instancia-fisica-abierta.md`. |
+| 1c | **Transferencia entre sucursales de productos con lote** | **Implementado** — FEFO-out en origen + ENTRADA al mismo lote en destino. Ver §5.8. |
 | 2 | **Backfill completo de `unidad_medida_id`** | Hoy el backfill es best-effort por match de texto. Falta una pasada de datos + eventualmente hacer la FK `NOT NULL` y dropear la columna string `unidad_medida`. |
-| 3 | **Subida de archivos de imagen** | Hoy `producto_imagen` sólo guarda URLs (el cliente sube a su CDN). Falta, si se quiere: endpoint `UploadFile` + almacenamiento (S3/local) + generación de miniaturas. No hay ninguna dependencia de storage en el proyecto. |
+| 3 | **Subida de archivos de imagen** | **Implementado** — `POST .../imagenes/upload` (multipart) → S3 (LocalStack en dev), URLs prefirmadas, Lambda de miniaturas. Ver `docs/imagenes-s3-localstack.md`. |
 | 4 | **Precio de presentación derivado de la unidad base** | Hoy cada `producto_unidad.precio_venta` es 100% manual e independiente. Contemplado: `producto.precio_por_unidad_base` + flag `precio_derivado` por presentación (precio calculado en lectura = `base × factor`). |
 | 5 | **Reportes por presentación** | Los KPIs (`/productos/kpis`) trabajan en unidad base. Ver ventas/stock por presentación requiere un endpoint nuevo con `group by producto_unidad_id`. |
 | 6 | **`decimales_permitidos` / redondeo configurable a nivel producto** | Hoy los decimales salen de `unidad_medida.decimales` (fallback 4). Contemplado exponerlo/overridearlo por producto si algún caso lo pide. |

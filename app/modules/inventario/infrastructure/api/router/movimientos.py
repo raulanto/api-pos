@@ -118,7 +118,7 @@ async def transferir_stock(
 
     use_case = TransferirStockUseCase(
         prod_repo(db), exist_repo(db), mov_repo(db), EventPortImpl(db),
-        SqlAlchemySucursalRepository(db),
+        SqlAlchemySucursalRepository(db), lote_repo(db),
     )
     try:
         await use_case.ejecutar(TransferirStockInput(

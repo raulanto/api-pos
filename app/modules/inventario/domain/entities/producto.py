@@ -58,6 +58,14 @@ class Producto:
     # capacidad con la que se auto-abre un envase al vender.
     rastrea_instancia_abierta: bool = False
     instancia_capacidad_default: Decimal | None = None
+    # Precio/venta: `precio_venta` ya trae el IVA adentro (precio final al público).
+    precio_incluye_impuesto: bool = False
+    # Mayoreo: al vender en unidad base cantidad >= `cantidad_minima_mayoreo`, el
+    # backend usa `precio_mayoreo` en vez de `precio_venta` (menudeo).
+    precio_mayoreo: Decimal | None = None
+    cantidad_minima_mayoreo: Decimal | None = None
+    # Sobre pedido: no se mantiene en stock; se puede vender sin existencia.
+    es_sobre_pedido: bool = False
 
     # Relaciones embebidas opcionales
     # (`?include=categoria,existencias,componentes,unidades,imagenes`).
@@ -102,6 +110,10 @@ class Producto:
         requiere_lote: bool = False,
         rastrea_instancia_abierta: bool = False,
         instancia_capacidad_default: Decimal | None = None,
+        precio_incluye_impuesto: bool = False,
+        precio_mayoreo: Decimal | None = None,
+        cantidad_minima_mayoreo: Decimal | None = None,
+        es_sobre_pedido: bool = False,
     ) -> "Producto":
         return Producto(
             id=uuid4(),
@@ -125,7 +137,27 @@ class Producto:
             requiere_lote=requiere_lote,
             rastrea_instancia_abierta=rastrea_instancia_abierta,
             instancia_capacidad_default=instancia_capacidad_default,
+            precio_incluye_impuesto=precio_incluye_impuesto,
+            precio_mayoreo=precio_mayoreo,
+            cantidad_minima_mayoreo=cantidad_minima_mayoreo,
+            es_sobre_pedido=es_sobre_pedido,
         )
+
+    @property
+    def permite_venta_sin_stock(self) -> bool:
+        """SALIDA/transferencia no fallan por stock insuficiente si el producto
+        admite negativo explícito o es sobre pedido."""
+        return self.permite_stock_negativo or self.es_sobre_pedido
+
+    def precio_para_cantidad(self, cantidad: Decimal) -> Decimal:
+        """Menudeo (`precio_venta`) o mayoreo si `cantidad` alcanza el mínimo."""
+        if (
+            self.precio_mayoreo is not None
+            and self.cantidad_minima_mayoreo is not None
+            and cantidad >= self.cantidad_minima_mayoreo
+        ):
+            return self.precio_mayoreo
+        return self.precio_venta
 
     """
     Método para actualizar un producto.
@@ -175,6 +207,11 @@ class Producto:
         rastrea_instancia_abierta: bool | None = None,
         instancia_capacidad_default: Decimal | None = None,
         cambiar_instancia_capacidad_default: bool = False,
+        precio_incluye_impuesto: bool | None = None,
+        es_sobre_pedido: bool | None = None,
+        precio_mayoreo: Decimal | None = None,
+        cantidad_minima_mayoreo: Decimal | None = None,
+        cambiar_mayoreo: bool = False,
     ) -> None:
         if sku is not None:
             self.sku = sku
@@ -206,6 +243,13 @@ class Producto:
             self.permite_venta_fraccionada = permite_venta_fraccionada
         if requiere_lote is not None:
             self.requiere_lote = requiere_lote
+        if precio_incluye_impuesto is not None:
+            self.precio_incluye_impuesto = precio_incluye_impuesto
+        if es_sobre_pedido is not None:
+            self.es_sobre_pedido = es_sobre_pedido
+        if cambiar_mayoreo:
+            self.precio_mayoreo = precio_mayoreo
+            self.cantidad_minima_mayoreo = cantidad_minima_mayoreo
         if rastrea_instancia_abierta is not None:
             self.rastrea_instancia_abierta = rastrea_instancia_abierta
         if cambiar_instancia_capacidad_default:

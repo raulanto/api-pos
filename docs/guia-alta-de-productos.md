@@ -105,6 +105,10 @@ Campos del formulario:
 | `requiere_lote` | no (por defecto `false`) | Si el producto se controla por lote: cada carga de stock pide un lote (código + caducidad) y las ventas descuentan del que vence primero. Ver la sección "Productos con lote". No se puede activar si ya tiene stock cargado |
 | `permite_venta_fraccionada` | no | Si se puede vender "medio". Con `tipo: "fraccionable"` se activa solo |
 | `incremento_minimo_venta` | no | Si se define, toda venta debe ser múltiplo de este número (ej: `0.25` kg, `50` ml) |
+| `precio_incluye_impuesto` | no (por defecto `false`) | `precio_venta` ya trae el IVA adentro (precio final al público). Es informativo para el front/reportes: el sistema no recalcula impuesto en la venta |
+| `precio_mayoreo` + `cantidad_minima_mayoreo` | no (van juntos) | Precio de **mayoreo**: al vender por unidad base una cantidad ≥ el mínimo, el sistema usa este precio en vez de `precio_venta` (menudeo). Ver "Mayoreo y sobre pedido" |
+| `es_sobre_pedido` | no (por defecto `false`) | El producto no se stockea: se puede vender sin existencia (como `permite_stock_negativo`) |
+| `rastrea_instancia_abierta` + `instancia_capacidad_default` | no | Rastrear cada **envase abierto** vendido en fracciones (aceite a granel, químicos). `instancia_capacidad_default` (> 0) es obligatorio si se activa. Flujo aparte: `docs/instancia-fisica-abierta.md` |
 
 **Ejemplo — producto normal (una lata de refresco):**
 
@@ -159,6 +163,34 @@ No pide stock, no aparece en inventario. Se puede vender siempre.
 
 La respuesta trae el `id` del producto nuevo. Guárdalo para los pasos siguientes.
 
+### Paso 3b — Mayoreo y "sobre pedido" (opcional)
+
+**Mayoreo.** Si el producto tiene un precio distinto por volumen, mandá los dos
+campos juntos:
+
+```json
+{
+  "…": "…",
+  "precio_venta": 18,
+  "precio_mayoreo": 15,
+  "cantidad_minima_mayoreo": 12
+}
+```
+
+Al vender **por unidad base** (no por presentación) una cantidad de 12 o más, el
+sistema cobra `precio_mayoreo` — lo aplica solo y lo congela en la venta, aunque
+el POS haya mandado otro precio. Menos de 12 → `precio_venta` normal. Las
+presentaciones (la reja) siguen con su propio precio.
+
+**Sobre pedido.** `"es_sobre_pedido": true` para lo que no se guarda en stock y se
+encarga al proveedor cuando alguien lo compra. Se puede vender aunque la
+existencia esté en 0.
+
+**Precio con IVA incluido.** `"precio_incluye_impuesto": true` avisa que
+`precio_venta` ya es el precio final. El sistema **no** recalcula impuestos en la
+venta (el total es cantidad × precio − descuento); la bandera es para que tu app
+sepa si mostrar "IVA incluido" o desglosarlo.
+
 ### Paso 4 — Formas de venta adicionales (opcional)
 
 Sólo si el producto se vende en **más de un formato**. Ejemplo: la lata suelta
@@ -189,8 +221,23 @@ así el escáner del POS la reconoce sola.
 
 ### Paso 5 — Fotos (opcional)
 
-Las fotos se suben primero a **tu** almacenamiento (S3, Cloudinary, lo que uses)
-y a la API le pasás la **URL**:
+Dos formas:
+
+**A) Subir el archivo a la API** (recomendado). `multipart/form-data`, el archivo
+en el campo `file`:
+
+```
+POST /productos/{id}/imagenes/upload
+  file=<jpg/png/webp, ≤ 5 MB>
+  alt_texto=Refresco cola lata 355ml
+  orden=0
+  es_principal=true
+```
+
+La API lo guarda en su almacén (S3) y responde con `url` y `thumbnail_url` ya
+firmadas y listas para mostrar. La miniatura puede tardar 1–2 s en generarse.
+
+**B) Registrar una URL externa** (si ya subiste la foto a tu propio CDN):
 
 ```
 POST /productos/{id}/imagenes
@@ -205,12 +252,14 @@ POST /productos/{id}/imagenes
 - `orden`: para el carrusel (0 = primera).
 - `es_principal`: la portada. Sólo puede haber **una**: si marcás otra como
   principal, la anterior se desmarca sola.
+- `DELETE /productos/{id}/imagenes/{imagen_id}` borra la imagen (y su archivo en
+  S3 si la habías subido por la opción A).
 
 La foto de portada aparece en `imagen_principal` cada vez que pedís el producto
 (en el detalle y en el listado), sin necesidad de pedir nada extra.
 
 Las presentaciones (la reja) también pueden tener sus propias fotos:
-`POST /productos/{id}/unidades/{unidad_id}/imagenes`.
+`POST /productos/{id}/unidades/{unidad_id}/imagenes` (o `.../imagenes/upload`).
 
 ### Paso 6 — Cargar el stock inicial
 
@@ -284,8 +333,9 @@ lote**.
 
 - No se puede activar `requiere_lote` en un producto que ya tiene stock. Primero
   llevá el stock a 0.
-- La transferencia entre sucursales todavía no funciona para productos con lote:
-  usá una salida en origen y una entrada (con su lote) en destino.
+- La transferencia entre sucursales sí funciona: saca por FEFO en origen y entra
+  al mismo lote en destino. Sólo se permite entre una sucursal y su sucursal
+  padre directa, o entre sucursales hermanas.
 
 ---
 
@@ -347,15 +397,22 @@ mandás quedan igual.
 
 - Para **borrar** la descripción o el código de barras (dejarlos vacíos) hay que
   mandar además el flag `cambiar_descripcion: true` / `cambiar_codigo_barras: true`.
-  Es a propósito: sin el flag, "no lo mandé" significa "no lo toques".
+  Es a propósito: sin el flag, "no lo mandé" significa "no lo toques". Lo mismo
+  para el par de mayoreo: `cambiar_mayoreo: true` (con o sin `precio_mayoreo` /
+  `cantidad_minima_mayoreo`; si no vienen, se limpian los dos) y
+  `cambiar_instancia_capacidad_default: true`.
 - Cambiar precio/costo suelto también se puede desde acá; pero lo normal es que
   el precio/costo se muevan solos con las compras (`actualizar_costo` en el
   movimiento).
 
-Dar de baja / reactivar:
+Dar de baja / reactivar / borrar:
 - `PATCH /productos/{id}/desactivar` (agregá `?confirmar_con_stock=true` si todavía
-  tiene stock y aun así lo querés desactivar)
+  tiene stock y aun así lo querés desactivar) — es lo normal.
 - `PATCH /productos/{id}/activar`
+- `DELETE /productos/{id}` — **borrado físico** (elimina también presentaciones,
+  imágenes, lotes y existencia). Sólo funciona si el producto **nunca** tuvo
+  movimientos ni ventas; si los tuvo, devuelve 409 y hay que usar `/desactivar`.
+  Requiere el permiso `inventario.eliminar`.
 
 ---
 
@@ -370,6 +427,9 @@ Dar de baja / reactivar:
 | 400 | "Indicá exactamente uno de `factor` o `unidades_por_base`" | En una presentación mandaste los dos, o ninguno |
 | 400 | "…lleva control por lote: indicá `lote_id` o `lote_nuevo`" | Entrada de un producto con lote sin decir a qué lote |
 | 400 | "No se puede activar el control por lote con stock cargado" | Intentaste poner `requiere_lote: true` con stock > 0 |
+| 400 | "`precio_mayoreo` y `cantidad_minima_mayoreo` deben definirse juntos" | Mandaste uno solo del par de mayoreo |
+| 400 | "`rastrea_instancia_abierta` requiere `instancia_capacidad_default` > 0" | Activaste el rastreo de envase abierto sin capacidad |
+| 409 | "…referenciado por ventas u otros registros históricos" | Quisiste `DELETE` un producto que ya tiene movimientos/ventas — usá `/desactivar` |
 | 404 | "No existe el producto …" | El `id` está mal o el producto fue borrado |
 | 409 | "El nombre … ya existe para este producto" | Dos presentaciones con el mismo nombre |
 | 422 | (validación de formato) | Falta un campo obligatorio o el tipo de dato es incorrecto |
@@ -383,9 +443,12 @@ Dar de baja / reactivar:
 - [ ] Selector de **tipo** (simple / fraccionable / kit / servicio) con ayuda contextual
 - [ ] Campos: nombre, SKU, precio de venta, costo, impuesto, código de barras, descripción
 - [ ] Si es **fraccionable**: mostrar campo "incremento mínimo de venta"
+- [ ] Campos opcionales: **precio de mayoreo** + cantidad mínima (van juntos),
+      checkbox **"precio con IVA incluido"**, checkbox **"sobre pedido"**
 - [ ] Checkbox **"controlar por lote"** (`requiere_lote`) — deshabilitarlo si el producto ya tiene stock
+- [ ] Checkbox **"rastrear envase abierto"** (`rastrea_instancia_abierta`) + capacidad — para venta a granel de envases
 - [ ] Sección opcional **"Otras formas de venta"** (presentaciones) — sólo si no es kit ni servicio
 - [ ] Si es **kit**: sección **"Receta"** para elegir productos componentes y cantidades
-- [ ] Sección **Fotos** (subir a tu CDN → mandar URL), marcar portada
+- [ ] Sección **Fotos**: subir archivo (`/imagenes/upload`) o pegar URL externa; marcar portada
 - [ ] Sección **Stock inicial por sucursal** (cantidad + costo + stock mínimo) — omitir para kit/servicio; si es **por lote**, pedir además código de lote + caducidad
 - [ ] Al guardar: crear producto → presentaciones → imágenes → movimientos de entrada, en ese orden

@@ -45,6 +45,7 @@ from .productos import (
 from .existencias import (
     ExistenciaResponse,
     ConfigurarUmbralesRequest,
+    DesgloseStockResponse,
 )
 from .movimientos import (
     AplicarMovimientoRequest,
@@ -87,6 +88,7 @@ __all__ = [
     "ResolucionCodigoResponse",
     "ExistenciaResponse",
     "ConfigurarUmbralesRequest",
+    "DesgloseStockResponse",
     "AplicarMovimientoRequest",
     "TransferenciaRequest",
     "MovimientoResponse",

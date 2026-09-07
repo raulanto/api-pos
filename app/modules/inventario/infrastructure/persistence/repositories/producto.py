@@ -142,6 +142,10 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 requiere_lote=producto.requiere_lote,
                 rastrea_instancia_abierta=producto.rastrea_instancia_abierta,
                 instancia_capacidad_default=producto.instancia_capacidad_default,
+                precio_incluye_impuesto=producto.precio_incluye_impuesto,
+                precio_mayoreo=producto.precio_mayoreo,
+                cantidad_minima_mayoreo=producto.cantidad_minima_mayoreo,
+                es_sobre_pedido=producto.es_sobre_pedido,
                 codigo_barras=producto.codigo_barras,
                 activo=producto.activo,
             )

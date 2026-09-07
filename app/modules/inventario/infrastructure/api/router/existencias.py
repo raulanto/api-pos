@@ -13,11 +13,12 @@ from app.shared.filtering import active_filters
 from app.modules.inventario.application.dtos import FiltroExistencias
 from app.modules.inventario.application.use_cases.consultar_existencias import (
     ConsultarExistenciasUseCase, ConfigurarUmbralesUseCase, ConfigurarUmbralesInput,
+    DesglosarStockUseCase,
 )
 from app.modules.inventario.infrastructure.api.schemas import (
-    ExistenciaResponse, ConfigurarUmbralesRequest,
+    ExistenciaResponse, ConfigurarUmbralesRequest, DesgloseStockResponse,
 )
-from .common import exist_repo, prod_repo, sucursales_efectivas, traducir
+from .common import exist_repo, prod_repo, unidad_repo, sucursales_efectivas, traducir
 
 router = APIRouter(route_class=EnvelopeRoute)
 
@@ -71,6 +72,29 @@ async def listar_bajo_stock(
         request, db, actual, None, sucursal_id, paginacion, orden, include,
         solo_bajo_stock=True,
     )
+
+
+@router.get(
+    "/productos/{producto_id}/existencias",
+    response_model=ApiResponse[DesgloseStockResponse],
+)
+async def desglose_stock(
+    producto_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
+    sucursal_id: list[UUID] | None = Query(default=None),
+):
+    """Saldo del producto traducido a cada presentación: p. ej. `8.8750 rejas`
+    global + por sucursal, con `71` botellas (`cantidad / factor`) y las
+    `cantidad_entera` (presentaciones completas)."""
+    efectivas = sucursales_efectivas(actual, sucursal_id)
+    try:
+        desglose = await DesglosarStockUseCase(
+            exist_repo(db), prod_repo(db), unidad_repo(db)
+        ).ejecutar(producto_id, efectivas)
+    except Exception as e:
+        raise traducir(e)
+    return ok(desglose)
 
 
 @router.patch(

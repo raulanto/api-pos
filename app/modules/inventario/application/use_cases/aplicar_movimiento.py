@@ -109,6 +109,11 @@ class AplicarMovimientoUseCase:
             raise ProductoNoEncontrado(f"No existe el producto {data.producto_id}")
 
         decimales = await self._decimales_stock(producto)
+        # SALIDA que vino de vender una PRESENTACIÓN: `cantidad` ya está en unidad
+        # base y puede ser fraccional aunque la unidad base sea entera (1 botella
+        # = 1/8 de reja). Se guarda con la precisión de la columna.
+        if data.unidad_capturada_id is not None:
+            decimales = max(decimales, DECIMALES_STOCK_DEFAULT)
 
         if producto.requiere_lote:
             await self._ejecutar_con_lote(data, producto, decimales)
@@ -133,10 +138,13 @@ class AplicarMovimientoUseCase:
             nuevo_saldo = cantidad_actual + cantidad_movimiento
         elif data.tipo in (TipoMovimiento.SALIDA, TipoMovimiento.MERMA):
             cantidad_cruda = _requerir_cantidad(data.cantidad)
-            producto.validar_cantidad_vendible(cantidad_cruda)
+            # Las reglas de fraccionamiento aplican a la venta en unidad base; una
+            # SALIDA que vino de una presentación entera ya se validó allá.
+            if data.unidad_capturada_id is None:
+                producto.validar_cantidad_vendible(cantidad_cruda)
             cantidad_movimiento = _cuantizar(cantidad_cruda, decimales)
             nuevo_saldo = cantidad_actual - cantidad_movimiento
-            if nuevo_saldo < 0 and not producto.permite_stock_negativo:
+            if nuevo_saldo < 0 and not producto.permite_venta_sin_stock:
                 raise StockInsuficiente(
                     f"Stock insuficiente para {producto.nombre}: "
                     f"disponible {cantidad_actual}, solicitado {cantidad_movimiento}"
@@ -195,7 +203,8 @@ class AplicarMovimientoUseCase:
 
         if data.tipo in (TipoMovimiento.SALIDA, TipoMovimiento.MERMA):
             cruda = _requerir_cantidad(data.cantidad)
-            producto.validar_cantidad_vendible(cruda)
+            if data.unidad_capturada_id is None:
+                producto.validar_cantidad_vendible(cruda)
             total = _cuantizar(cruda, decimales)
             plan = await self._plan_salida_lote(data, producto, total)
             primer_mov: UUID | None = None
@@ -296,7 +305,7 @@ class AplicarMovimientoUseCase:
                     f"El lote {data.lote_id} no pertenece al producto {data.producto_id}."
                 )
             disp = await self._lote_repo.saldo(data.sucursal_id, data.lote_id)
-            if disp < total and not producto.permite_stock_negativo:
+            if disp < total and not producto.permite_venta_sin_stock:
                 raise StockInsuficiente(
                     f"Stock insuficiente en el lote {lote.codigo_lote} para "
                     f"{producto.nombre}: disponible {disp}, solicitado {total}"
@@ -313,7 +322,7 @@ class AplicarMovimientoUseCase:
             plan.append((lote_id, toma))
             restante -= toma
         if restante > 0:
-            if not producto.permite_stock_negativo or not plan:
+            if not producto.permite_venta_sin_stock or not plan:
                 raise StockInsuficiente(
                     f"Stock insuficiente para {producto.nombre}: faltan {restante} "
                     "(sin lote disponible para cubrirlo)"
