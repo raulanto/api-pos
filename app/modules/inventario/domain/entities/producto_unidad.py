@@ -30,6 +30,9 @@ class ProductoUnidad:
     codigo_barras: str | None = None
     activo: bool = True
     created_at: datetime = None  # type: ignore[assignment]
+    # Imagen de portada de la presentación (`?include=unidades`); sólo se llena
+    # cuando el repo la trae cargada. Mismo criterio que `Producto.imagen_principal`.
+    imagen_principal: object | None = None
 
     @property
     def unidades_por_base(self) -> Decimal | None:

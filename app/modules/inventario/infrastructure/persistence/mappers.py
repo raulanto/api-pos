@@ -1,3 +1,5 @@
+from sqlalchemy import inspect as sa_inspect
+
 from app.modules.inventario.domain.entities import (
     Categoria, UnidadMedida, Producto, ProductoComponente, ProductoUnidad, ProductoImagen,
     InstanciaAbierta, Lote, ExistenciaLote, Existencia, MovimientoInventario,
@@ -226,8 +228,13 @@ def to_orm_imagen(entidad: ProductoImagen) -> ProductoImagenORM:
 
 """
     Transforma una presentación (producto_unidad) ORM a entidad de dominio.
+    `imagen_principal` sólo se mapea si el repo la trajo cargada (`?include=unidades`);
+    si no, la relación queda `lazy="raise"` y no se toca.
 """
 def to_domain_unidad(orm: ProductoUnidadORM) -> ProductoUnidad:
+    img = None
+    if "imagen_principal" not in sa_inspect(orm).unloaded and orm.imagen_principal:
+        img = to_domain_imagen(orm.imagen_principal)
     return ProductoUnidad(
         id=orm.id,
         producto_id=orm.producto_id,
@@ -238,6 +245,7 @@ def to_domain_unidad(orm: ProductoUnidadORM) -> ProductoUnidad:
         codigo_barras=orm.codigo_barras,
         activo=orm.activo,
         created_at=orm.created_at,
+        imagen_principal=img,
     )
 
 

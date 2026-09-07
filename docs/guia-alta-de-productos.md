@@ -280,6 +280,10 @@ La foto de portada aparece en `imagen_principal` cada vez que pedís el producto
 
 Las presentaciones (la reja) también pueden tener sus propias fotos:
 `POST /productos/{id}/unidades/{unidad_id}/imagenes` (o `.../imagenes/upload`).
+Su portada viaja en `unidades[].imagen_principal` cuando pedís
+`GET /productos?include=unidades` (mismo formato que la del producto: `url` y
+`thumbnail_url` prefirmadas si vive en S3), para que el POS pinte cada
+presentación con su miniatura.
 
 ### Paso 6 — Cargar el stock inicial
 

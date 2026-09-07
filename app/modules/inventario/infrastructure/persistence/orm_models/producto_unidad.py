@@ -65,3 +65,15 @@ class ProductoUnidadORM(Base, TimestampMixin, SoftDeleteMixin):
         viewonly=True,
         lazy="raise",
     )
+    # La imagen marcada como portada de la presentación (`es_principal`). Se carga
+    # sólo bajo `?include=unidades` (ver `_opts_producto`).
+    imagen_principal = relationship(
+        "ProductoImagenORM",
+        primaryjoin=(
+            "and_(ProductoUnidadORM.id == foreign(ProductoImagenORM.producto_unidad_id), "
+            "ProductoImagenORM.es_principal.is_(True))"
+        ),
+        viewonly=True,
+        uselist=False,
+        lazy="raise",
+    )

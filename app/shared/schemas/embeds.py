@@ -95,20 +95,6 @@ class ComponenteEmbed(BaseModel):
     producto: Optional[ProductoEmbed] = None
 
 
-class UnidadEmbed(BaseModel):
-    """Presentación de venta de un producto (`?include=unidades`)."""
-    model_config = _ORM
-    id: UUID
-    producto_id: UUID
-    nombre: str
-    unidad_medida: str
-    factor: Decimal
-    unidades_por_base: Optional[Decimal] = None
-    precio_venta: Decimal
-    codigo_barras: Optional[str] = None
-    activo: bool
-
-
 class ImagenEmbed(BaseModel):
     """Imagen de la galería de un producto o presentación (`?include=imagenes`).
 
@@ -126,3 +112,20 @@ class ImagenEmbed(BaseModel):
     alt_texto: Optional[str] = None
     orden: int
     es_principal: bool
+
+
+class UnidadEmbed(BaseModel):
+    """Presentación de venta de un producto (`?include=unidades`)."""
+    model_config = _ORM
+    id: UUID
+    producto_id: UUID
+    nombre: str
+    unidad_medida: str
+    factor: Decimal
+    unidades_por_base: Optional[Decimal] = None
+    precio_venta: Decimal
+    codigo_barras: Optional[str] = None
+    activo: bool
+    # Portada de la presentación (prefirmada si vive en S3); null si no tiene una
+    # imagen marcada como principal.
+    imagen_principal: Optional[ImagenEmbed] = None

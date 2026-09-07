@@ -80,7 +80,9 @@ def _opts_producto(includes: frozenset[str], sucursal_ids: list[UUID] | None = N
     if "componentes" in includes:
         opts.append(selectinload(ProductoORM.componentes))
     if "unidades" in includes:
-        opts.append(selectinload(ProductoORM.unidades))
+        opts.append(
+            selectinload(ProductoORM.unidades).selectinload(ProductoUnidadORM.imagen_principal)
+        )
     if "imagenes" in includes:
         opts.append(selectinload(ProductoORM.imagenes))
     return opts
