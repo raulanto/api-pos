@@ -368,113 +368,17 @@ lote**.
 
 ---
 
-## Promociones (2x1, descuentos, mayoreo por presentación)
+## Promociones y descuentos
 
-Una **promoción** es una regla de descuento que apunta a uno o varios productos
-(o a presentaciones concretas). Se configuran en su propio endpoint —**no**
-cuelgan de `/api/v1/inventario`— y no cambian nada del producto: son una capa
-aparte.
+Las promociones (2x1, %, precio fijo, mayoreo por presentación), los **cupones**
+y el **descuento manual** del POS viven en su propio módulo y tienen guía aparte:
+**`docs/guia-promociones.md`**.
 
-```
-POST /api/v1/promociones          (permiso promociones.crear)
-GET  /api/v1/promociones          ?activo= &tipo= &sucursal_id= &q=
-GET  /api/v1/promociones/{id}
-PATCH /api/v1/promociones/{id}                 (permiso promociones.editar)
-PATCH /api/v1/promociones/{id}/desactivar
-PATCH /api/v1/promociones/{id}/reactivar
-```
-
-### Campos de una promoción
-
-| Campo | ¿Obligatorio? | Qué es |
-|-------|---------------|--------|
-| `nombre` | sí | Único. Es lo que se guarda en la venta como etiqueta de la promo |
-| `tipo` | sí | `nxm` · `porcentaje` · `precio_fijo` |
-| `objetivos` | sí (≥ 1) | Lista. Cada objetivo lleva **exactamente uno** de `producto_id` (aplica a la venta por unidad base de ese producto) o `producto_unidad_id` (aplica a **esa** presentación) |
-| `prioridad` | no (por defecto `100`) | Si a una línea le pegan varias promos, gana la de **número menor** |
-| `sucursal_id` | no | Limita la promo a una sucursal. Sin este campo aplica en todas |
-| `vigente_desde` / `vigente_hasta` | no | Ventana de fechas (ISO). Sin fechas, la promo está activa mientras `activo` sea `true` |
-| `nxm_lleva` / `nxm_paga` | sólo `tipo: nxm` | 2x1 → `lleva 2, paga 1`. 3x2 → `lleva 3, paga 2`. Regla: `lleva > paga > 0` |
-| `descuento_pct` | sólo `tipo: porcentaje` | % a restar de la línea (0–100) |
-| `precio_fijo` | sólo `tipo: precio_fijo` | Precio unitario forzado. Sólo aplica si es **menor** que el precio de la línea |
-| `cantidad_minima` | opcional (`porcentaje` / `precio_fijo`) | Umbral: la promo aplica sólo si la línea llega a esa cantidad. Así se arma un **mayoreo por presentación** |
-
-### Cómo se aplica en la venta
-
-- El backend busca las promos **vigentes** de la sucursal y calcula el descuento
-  por línea: lo congela en `detalle_venta` como `promo_descuento` +
-  `promo_etiqueta` (el `nombre` de la promo). El POS no manda nada.
-- **Una promo por línea.** Si varias podrían aplicar, gana la de `prioridad`
-  menor; el resto no toca esa línea.
-- **NxM** junta las unidades de todas las líneas que caen en el mismo objetivo
-  (2 refrescos en dos renglones distintos cuentan como 2) y **regala las más
-  baratas**. Ignora cantidades con decimales.
-- **`precio_fijo`** con `cantidad_minima` = mayoreo de una presentación: "la reja
-  a $x si llevás 5 o más".
-- El total de la venta es
-  `Σ(cantidad × precio − descuento_linea − promo_descuento) − descuento_total`.
-  El impuesto no se suma (sigue siendo informativo).
-
-### Ejemplos
-
-**2x1 en un refresco (unidad base):**
-
-```json
-POST /api/v1/promociones
-{
-  "nombre": "2x1 Refresco Cola",
-  "tipo": "nxm",
-  "nxm_lleva": 2,
-  "nxm_paga": 1,
-  "prioridad": 10,
-  "objetivos": [ { "producto_id": "<id del refresco>" } ]
-}
-```
-
-**Mayoreo de la reja (presentación) por volumen y con vigencia:**
-
-```json
-POST /api/v1/promociones
-{
-  "nombre": "Reja a $340 llevando 5+",
-  "tipo": "precio_fijo",
-  "precio_fijo": 340,
-  "cantidad_minima": 5,
-  "vigente_desde": "2026-09-01T00:00:00Z",
-  "vigente_hasta": "2026-09-30T23:59:59Z",
-  "objetivos": [ { "producto_unidad_id": "<id de la presentación Reja x24>" } ]
-}
-```
-
-**10% en toda una lista de productos, sólo en una sucursal:**
-
-```json
-POST /api/v1/promociones
-{
-  "nombre": "Septiembre -10% botanas",
-  "tipo": "porcentaje",
-  "descuento_pct": 10,
-  "sucursal_id": "<id sucursal>",
-  "objetivos": [
-    { "producto_id": "<botana 1>" },
-    { "producto_id": "<botana 2>" },
-    { "producto_id": "<botana 3>" }
-  ]
-}
-```
-
-### Editar una promoción
-
-`PATCH /api/v1/promociones/{id}` — sólo los campos que cambian. Para **limpiar**
-un opcional hay que mandar su flag:
-
-- `cambiar_vigencia: true` (con o sin `vigente_desde` / `vigente_hasta`; si no
-  vienen, se quitan las dos fechas → promo sin límite).
-- `cambiar_sucursal: true` (sin `sucursal_id` → pasa a aplicar en todas).
-- `cambiar_cantidad_minima: true` (sin `cantidad_minima` → se quita el umbral).
-- `objetivos`: si lo mandás, **reemplaza** la lista completa.
-
-`PATCH …/desactivar` y `…/reactivar` prenden y apagan la promo sin borrarla.
+En resumen: son una capa sobre el producto, se configuran en `/api/v1/promociones`
+(permisos `promociones.crear|editar|leer`), pueden apuntar a un `producto_id`, a
+un `producto_unidad_id` (presentación) o a una `categoria_id`, y el backend las
+aplica solo al vender —el POS no manda nada—. No tocan el stock ni cambian el
+producto.
 
 ---
 

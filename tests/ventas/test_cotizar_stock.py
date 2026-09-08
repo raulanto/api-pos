@@ -34,7 +34,7 @@ class _Inv:
 
 
 class _Promos:
-    async def evaluar(self, sucursal_id, lineas):
+    async def evaluar(self, sucursal_id, lineas, **kw):
         return []
 
 

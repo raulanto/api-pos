@@ -16,6 +16,7 @@ class CrearClienteRequest(BaseModel):
     email: Optional[EmailStr] = None
     telefono: Optional[str] = Field(default=None, max_length=50)
     rfc_identificacion: Optional[str] = Field(default=None, max_length=50)
+    segmento: Optional[str] = Field(default=None, max_length=30)
     limite_credito: Decimal = Field(default=Decimal("0"), ge=0)
 
 
@@ -27,6 +28,7 @@ class ActualizarClienteRequest(BaseModel):
     cambiar_email: bool = False
     telefono: Optional[str] = Field(default=None, max_length=50)
     rfc_identificacion: Optional[str] = Field(default=None, max_length=50)
+    segmento: Optional[str] = Field(default=None, max_length=30)
 
 
 class AbonarClienteRequest(BaseModel):
@@ -74,6 +76,7 @@ class ClienteResponse(EmbeddableModel):
     email: Optional[str]
     telefono: Optional[str]
     rfc_identificacion: Optional[str]
+    segmento: Optional[str] = None
     limite_credito: Decimal
     saldo_credito: Decimal
     activo: bool

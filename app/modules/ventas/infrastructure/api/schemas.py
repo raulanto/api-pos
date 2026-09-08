@@ -42,12 +42,33 @@ class CrearVentaRequest(BaseModel):
     # historial por teléfono; NO obliga a registrar un cliente. Obligatorio sólo
     # si algún pago es `metodo_pago="monedero"`.
     telefono: Optional[str] = Field(default=None, max_length=50)
+    # Obligatorio si hay descuento manual (descuento_linea/descuento_total > 0).
+    motivo_descuento: Optional[str] = Field(default=None, max_length=255)
+    # Código de cupón que habilita una promo `requiere_cupon`.
+    codigo_cupon: Optional[str] = Field(default=None, max_length=40)
 
 
 class CotizarVentaRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     descuento_total: Decimal = Field(default=Decimal("0"), ge=0)
     lineas: List[LineaVentaRequest]
+    # Hints opcionales para previsualizar promos condicionadas.
+    metodos_pago: List[str] = []
+    cliente_segmento: Optional[str] = None
+    codigo_cupon: Optional[str] = Field(default=None, max_length=40)
+    telefono: Optional[str] = Field(default=None, max_length=50)
+
+
+class CuponValidarRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    codigo: str = Field(min_length=1, max_length=40)
+    telefono: Optional[str] = Field(default=None, max_length=50)
+    cliente_id: Optional[UUID] = None
+
+
+class CuponValidacionResponse(BaseModel):
+    promocion_id: UUID
+    valido: bool = True
 
 
 class CotizacionLineaResponse(BaseModel):
@@ -116,6 +137,13 @@ class DevolucionResponse(BaseModel):
     lineas: List[DevolucionLineaResponse]
 
 
+class PromoAplicadaResponse(BaseModel):
+    model_config = _ORM
+    promo_id: Optional[UUID] = None
+    etiqueta: Optional[str] = None
+    monto: Decimal
+
+
 class LineaVentaResponse(BaseModel):
     model_config = _ORM
     id: UUID
@@ -128,6 +156,7 @@ class LineaVentaResponse(BaseModel):
     impuesto_tasa: Decimal
     promo_descuento: Decimal = Decimal("0")
     promo_etiqueta: Optional[str] = None
+    promos_aplicadas: List[PromoAplicadaResponse] = []
     cantidad_devuelta: Decimal = Decimal("0")
     subtotal: Decimal
 
@@ -160,6 +189,7 @@ class VentaResponse(EmbeddableModel):
     telefono: Optional[str] = None
     monedero_generado: Decimal = Decimal("0")
     monedero_usado: Decimal = Decimal("0")
+    motivo_descuento: Optional[str] = None
     created_at: datetime
     lineas: List[LineaVentaResponse]
     pagos: List[PagoResponse]

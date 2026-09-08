@@ -24,10 +24,18 @@ from app.modules.inventario.domain.exceptions import (
     StockInsuficiente, ProductoNoEncontrado, CantidadNoVendible,
     LoteRequerido, LoteInvalido,
 )
+from app.modules.promociones.domain.exceptions import (
+    CuponNoEncontrado, CuponVencido, CuponAgotado,
+)
+from app.modules.promociones.application.use_cases.validar_cupon import ValidarCuponUseCase
+from app.modules.promociones.infrastructure.persistence.cupon_repository_impl import (
+    SqlAlchemyCuponRepository,
+)
 from app.modules.ventas.infrastructure.api.schemas import (
     CrearVentaRequest, AnularVentaRequest, VentaResponse, VentaListItem,
     CotizarVentaRequest, CotizacionResponse,
     DevolverVentaRequest, DevolucionResponse,
+    CuponValidarRequest, CuponValidacionResponse,
     AbrirCajaTurnoRequest, CerrarCajaTurnoRequest, CajaTurnoResponse, ResumenTurnoResponse,
 )
 from app.modules.ventas.application.use_cases.crear_venta import (
@@ -60,6 +68,9 @@ from app.modules.inventario.infrastructure.persistence.repositories.producto imp
 )
 from app.modules.ventas.infrastructure.adapters.inventario_port_impl import InventarioPortImpl
 from app.modules.ventas.infrastructure.adapters.promociones_port_impl import PromocionesPortImpl
+from app.modules.ventas.infrastructure.adapters.descuento_config_port_impl import (
+    DescuentoConfigPortImpl,
+)
 from app.modules.ventas.infrastructure.adapters.monedero_port_impl import MonederoPortImpl
 from app.modules.ventas.infrastructure.adapters.event_port_impl import EventPortImpl
 from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
@@ -76,18 +87,25 @@ _INC_VENTAS = make_include_dependency({"cliente", "usuario", "caja_turno"})
 # --------------------------------------------------------------------------- #
 # Mapeo de excepciones de dominio -> HTTP
 # --------------------------------------------------------------------------- #
-_NOT_FOUND = (vexc.VentaNoEncontrada, vexc.TurnoNoEncontrado, ClienteNoEncontrado, ProductoNoEncontrado)
+_NOT_FOUND = (
+    vexc.VentaNoEncontrada, vexc.TurnoNoEncontrado, ClienteNoEncontrado,
+    ProductoNoEncontrado, CuponNoEncontrado,
+)
 _CONFLICT = (
     vexc.VentaYaCancelada, vexc.TurnoYaAbierto, vexc.TurnoYaCerrado,
-    vexc.SucursalNoOperativa,
+    vexc.SucursalNoOperativa, CuponAgotado,
 )
-_FORBIDDEN = (vexc.AnulacionNoPermitida, vexc.CierreTurnoNoPermitido)
+_FORBIDDEN = (
+    vexc.AnulacionNoPermitida, vexc.CierreTurnoNoPermitido,
+    vexc.DescuentoManualNoAutorizado,
+)
 _BAD_REQUEST = (
     vexc.CajaNoAbierta, vexc.VentaCreditoSinCliente, vexc.VentaSinLineas,
     vexc.TurnoDeOtraSucursal, LimiteCreditoExcedido, StockInsuficiente,
     CantidadNoVendible, LoteRequerido, LoteInvalido, ValueError,
     vexc.VentaNoDevolvible, vexc.CantidadDevolucionExcedida, vexc.DevolucionInvalida,
-    SaldoMonederoInsuficiente, MovimientoMonederoInvalido,
+    SaldoMonederoInsuficiente, MovimientoMonederoInvalido, CuponVencido,
+    vexc.DescuentoManualExcedeTope, vexc.MotivoDescuentoRequerido,
 )
 
 
@@ -131,6 +149,7 @@ def _venta_use_case(db: AsyncSession) -> CrearVentaUseCase:
         sucursal_repo=SqlAlchemySucursalRepository(db),
         promociones=PromocionesPortImpl(db),
         monedero=MonederoPortImpl(db),
+        descuento_config=DescuentoConfigPortImpl(db),
     )
 
 
@@ -143,6 +162,7 @@ def _anular_use_case(db: AsyncSession) -> AnularVentaUseCase:
         event_port=EventPortImpl(db),
         devolucion_repo=SqlAlchemyDevolucionRepository(db),
         monedero=MonederoPortImpl(db),
+        promociones=PromocionesPortImpl(db),
     )
 
 
@@ -191,6 +211,10 @@ async def crear_venta(
         ],
         idempotency_key=idempotency_key,
         telefono=body.telefono,
+        motivo_descuento=body.motivo_descuento,
+        puede_descuento_manual=actual.tiene_permiso("ventas.descuento_manual"),
+        rol_id=actual.rol_id,
+        codigo_cupon=body.codigo_cupon,
     )
     try:
         venta = await _venta_use_case(db).ejecutar(entrada)
@@ -218,12 +242,33 @@ async def cotizar_venta(
                 impuesto_tasa=l.impuesto_tasa, producto_unidad_id=l.producto_unidad_id,
             ) for l in body.lineas
         ],
+        metodos_pago=frozenset(body.metodos_pago),
+        cliente_segmento=body.cliente_segmento,
+        codigo_cupon=body.codigo_cupon,
+        telefono=body.telefono,
     )
     try:
         cotizacion = await _venta_use_case(db).cotizar(entrada)
     except Exception as e:
         raise _traducir(e)
     return ok(cotizacion)
+
+
+@router.post("/cupon/validar", response_model=ApiResponse[CuponValidacionResponse])
+async def validar_cupon(
+    body: CuponValidarRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("ventas.crear")),
+):
+    """Previsualiza un código de cupón: devuelve la `promocion_id` que habilita
+    (o el error si está vencido/agotado). No consume el cupón."""
+    try:
+        pid = await ValidarCuponUseCase(SqlAlchemyCuponRepository(db)).ejecutar(
+            body.codigo, telefono=body.telefono, cliente_id=body.cliente_id,
+        )
+    except Exception as e:
+        raise _traducir(e)
+    return ok(CuponValidacionResponse(promocion_id=pid))
 
 
 @router.get("/", response_model=ApiResponse[list[VentaListItem]])

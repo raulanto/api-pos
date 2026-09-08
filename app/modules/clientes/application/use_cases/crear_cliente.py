@@ -27,6 +27,7 @@ class CrearClienteInput:
     email: str | None = None
     telefono: str | None = None
     rfc_identificacion: str | None = None
+    segmento: str | None = None
     limite_credito: Decimal = Decimal("0")
 
 
@@ -61,6 +62,7 @@ class CrearClienteUseCase:
             email=data.email,
             telefono=data.telefono,
             rfc_identificacion=data.rfc_identificacion,
+            segmento=data.segmento,
             limite_credito=data.limite_credito,
         )
         try:

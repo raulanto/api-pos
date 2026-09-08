@@ -14,6 +14,7 @@ def to_domain_cliente(orm: ClienteORM, includes: frozenset[str] = frozenset()) -
         email=orm.email,
         telefono=orm.telefono,
         rfc_identificacion=orm.rfc_identificacion,
+        segmento=orm.segmento,
         limite_credito=orm.limite_credito,
         saldo_credito=orm.saldo_credito,
         activo=orm.activo,
@@ -31,6 +32,7 @@ def to_orm_cliente(entidad: Cliente) -> ClienteORM:
         email=entidad.email,
         telefono=entidad.telefono,
         rfc_identificacion=entidad.rfc_identificacion,
+        segmento=entidad.segmento,
         limite_credito=entidad.limite_credito,
         saldo_credito=entidad.saldo_credito,
         activo=entidad.activo

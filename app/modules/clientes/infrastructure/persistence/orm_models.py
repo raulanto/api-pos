@@ -22,6 +22,7 @@ class ClienteORM(Base, TimestampMixin, SoftDeleteMixin):
     email = Column(String(150), nullable=True)
     telefono = Column(String(50), nullable=True)
     rfc_identificacion = Column(String(50), nullable=True)
+    segmento = Column(String(30), nullable=True)
     limite_credito = Column(Numeric(12, 2), default=0, nullable=False)
     saldo_credito = Column(Numeric(12, 2), default=0, nullable=False)
 

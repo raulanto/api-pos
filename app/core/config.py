@@ -15,6 +15,10 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
+    # Zona horaria local del negocio: interpreta `hora_desde`/`hora_hasta` y
+    # `dias_semana` de las promociones (los `momento` en BD son UTC).
+    app_timezone: str = "America/Mexico_City"
+
     # --- Seed del administrador inicial (usado por la migración-seeder) ---
     seed_admin_email: str | None = None
     seed_admin_password: str | None = None

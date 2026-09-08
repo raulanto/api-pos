@@ -3,11 +3,13 @@ from uuid import UUID
 from decimal import Decimal
 from typing import List
 
-from app.modules.ventas.domain.entities import Venta, DetalleVenta, Pago
+from app.modules.ventas.domain.entities import Venta, DetalleVenta, Pago, PromoAplicada
 from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago
 from app.modules.ventas.domain.exceptions import (
     CajaNoAbierta, VentaCreditoSinCliente, TurnoDeOtraSucursal, SucursalNoOperativa,
+    DescuentoManualNoAutorizado, DescuentoManualExcedeTope, MotivoDescuentoRequerido,
 )
+from app.modules.ventas.application.ports.descuento_config_port import DescuentoConfigPort
 from app.modules.sucursales.application.ports.sucursal_repository import SucursalRepository
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
@@ -50,6 +52,13 @@ class CrearVentaInput:
     pagos: List[PagoInput]
     idempotency_key: str | None = None
     telefono: str | None = None            # monedero: comprador; NO exige cliente
+    # Descuento manual: `motivo_descuento` obligatorio si hay descuento manual;
+    # `puede_descuento_manual` = el usuario tiene `ventas.descuento_manual`;
+    # `rol_id` para resolver el tope de %.
+    motivo_descuento: str | None = None
+    puede_descuento_manual: bool = False
+    rol_id: UUID | None = None
+    codigo_cupon: str | None = None
 
 
 @dataclass
@@ -57,6 +66,11 @@ class CotizarVentaInput:
     sucursal_id: UUID
     lineas: List[LineaInput]
     descuento_total: Decimal = Decimal("0")
+    # Hints opcionales del POS para previsualizar condiciones de promo.
+    metodos_pago: frozenset = frozenset()
+    cliente_segmento: str | None = None
+    codigo_cupon: str | None = None
+    telefono: str | None = None
 
 
 @dataclass
@@ -95,6 +109,7 @@ class CrearVentaUseCase:
         sucursal_repo: SucursalRepository | None = None,
         promociones: PromocionesPort | None = None,
         monedero: MonederoPort | None = None,
+        descuento_config: DescuentoConfigPort | None = None,
     ):
         self._venta_repo = venta_repo
         self._caja_repo = caja_repo
@@ -104,6 +119,7 @@ class CrearVentaUseCase:
         self._sucursal_repo = sucursal_repo
         self._promociones = promociones
         self._monedero = monedero
+        self._descuento_config = descuento_config
 
     async def ejecutar(self, data: CrearVentaInput) -> Venta:
         # Idempotencia: si ya se procesó esta clave, devolver la venta existente.
@@ -129,7 +145,19 @@ class CrearVentaUseCase:
                 "El turno de caja indicado no pertenece a la sucursal del usuario"
             )
 
-        lineas = await self._armar_lineas(data.sucursal_id, data.lineas)
+        metodos_pago = frozenset(p.metodo_pago.value for p in data.pagos)
+        cliente_segmento = None
+        if data.cliente_id is not None:
+            _c = await self._cliente_repo.obtener_por_id(data.cliente_id)
+            cliente_segmento = getattr(_c, "segmento", None) if _c else None
+
+        lineas = await self._armar_lineas(
+            data.sucursal_id, data.lineas,
+            metodos_pago=metodos_pago, cliente_segmento=cliente_segmento,
+            codigo_cupon=data.codigo_cupon, telefono=data.telefono,
+            cliente_id=data.cliente_id,
+        )
+        await self._validar_descuento_manual(data, lineas)
         pagos = [
             Pago.crear(monto=p.monto, metodo_pago=p.metodo_pago,
                        monto_recibido=p.monto_recibido)
@@ -146,6 +174,7 @@ class CrearVentaUseCase:
             descuento_total=data.descuento_total,
             idempotency_key=data.idempotency_key,
             telefono=data.telefono,
+            motivo_descuento=data.motivo_descuento,
         )
 
         # Pago con monedero: exige teléfono y puerto de monedero disponible.
@@ -215,6 +244,34 @@ class CrearVentaUseCase:
                 venta.monedero_generado = generado
                 await self._venta_repo.registrar_monedero_generado(venta.id, generado)
 
+        # Cupón: consumir el uso (FOR UPDATE + recuento). Si otro se llevó el
+        # último uso, CuponAgotado sube y se revierte toda la venta.
+        if data.codigo_cupon and self._promociones is not None and venta.total_promociones > 0:
+            await self._promociones.registrar_uso_cupon(
+                data.codigo_cupon, venta.id, venta.total_promociones,
+                telefono=venta.telefono, cliente_id=venta.cliente_id,
+            )
+
+        if venta.motivo_descuento:
+            desc_manual = venta.descuento_total + sum(
+                (l.descuento_linea for l in venta.lineas), Decimal("0")
+            )
+            await self._event_port.publicar("DescuentoManualAplicado", {
+                "usuario_id": data.usuario_id,
+                "modulo": "ventas",
+                "accion": "descuento_manual",
+                "entidad": "Venta",
+                "entidad_id": str(venta.id),
+                "detalle": {
+                    "venta_id": str(venta.id),
+                    "descuento_total": str(venta.descuento_total),
+                    "descuento_lineas": str(desc_manual - venta.descuento_total),
+                    "monto": str(desc_manual),
+                    "motivo": venta.motivo_descuento,
+                    "rol_id": str(data.rol_id) if data.rol_id else None,
+                },
+            })
+
         await self._event_port.publicar("VentaCreada", {
             "usuario_id": data.usuario_id,
             "modulo": "ventas",
@@ -227,6 +284,10 @@ class CrearVentaUseCase:
                 "caja_turno_id": str(data.caja_turno_id),
                 "total": str(venta.total),
                 "estado": venta.estado.value,
+                "promociones": [
+                    {"promo_id": str(a.promo_id), "etiqueta": a.etiqueta, "monto": str(a.monto)}
+                    for l in venta.lineas for a in l.promos_aplicadas
+                ],
             },
         })
 
@@ -238,7 +299,12 @@ class CrearVentaUseCase:
         base + promociones + conversión a unidad base, que valida producto y
         presentación) pero NO toca stock, NO exige turno ni pagos y NO persiste.
         Para que el POS muestre el total con descuentos antes de cobrar."""
-        lineas = await self._armar_lineas(data.sucursal_id, data.lineas)
+        lineas = await self._armar_lineas(
+            data.sucursal_id, data.lineas,
+            metodos_pago=frozenset(data.metodos_pago),
+            cliente_segmento=data.cliente_segmento,
+            codigo_cupon=data.codigo_cupon, telefono=data.telefono,
+        )
         cot_lineas = []
         for l in lineas:
             disp = await self._inventario.stock_disponible(
@@ -279,8 +345,53 @@ class CrearVentaUseCase:
         )
 
     # ------------------------------------------------------------------ #
+    async def _validar_descuento_manual(
+        self, data: CrearVentaInput, lineas: List[DetalleVenta]
+    ) -> None:
+        """Descuento manual (`descuento_linea`/`descuento_total`): exige permiso,
+        motivo y respeta el tope de % del rol. Sólo se aplica si el use case
+        recibió `descuento_config` (en tests legacy queda desactivado)."""
+        if self._descuento_config is None:
+            return
+        hay_manual = data.descuento_total > 0 or any(l.descuento_linea > 0 for l in lineas)
+        if not hay_manual:
+            return
+        if not data.puede_descuento_manual:
+            raise DescuentoManualNoAutorizado(
+                "Se requiere el permiso `ventas.descuento_manual` para aplicar un "
+                "descuento manual."
+            )
+        if not (data.motivo_descuento and data.motivo_descuento.strip()):
+            raise MotivoDescuentoRequerido(
+                "El descuento manual requiere `motivo_descuento`."
+            )
+        pct_max = (
+            await self._descuento_config.pct_max_para_rol(data.rol_id)
+            if data.rol_id is not None else None
+        )
+        if pct_max is None:
+            return
+        for l in lineas:
+            bruto = l.cantidad * l.precio_unitario
+            if l.descuento_linea > 0 and bruto > 0 and (l.descuento_linea / bruto * 100) > pct_max:
+                raise DescuentoManualExcedeTope(
+                    f"El descuento de línea supera el tope de {pct_max}% del rol."
+                )
+        total_bruto = sum((l.cantidad * l.precio_unitario for l in lineas), Decimal("0"))
+        if (
+            data.descuento_total > 0 and total_bruto > 0
+            and (data.descuento_total / total_bruto * 100) > pct_max
+        ):
+            raise DescuentoManualExcedeTope(
+                f"El descuento total supera el tope de {pct_max}% del rol."
+            )
+
+    # ------------------------------------------------------------------ #
     async def _armar_lineas(
-        self, sucursal_id: UUID, lineas_input: List[LineaInput]
+        self, sucursal_id: UUID, lineas_input: List[LineaInput],
+        *, metodos_pago: frozenset = frozenset(), cliente_segmento: str | None = None,
+        codigo_cupon: str | None = None, telefono: str | None = None,
+        cliente_id: UUID | None = None,
     ) -> List[DetalleVenta]:
         """Construye las líneas con el precio final: mayoreo de unidad base,
         descuento de promoción congelado, y `cantidad_en_unidad_base`."""
@@ -318,6 +429,8 @@ class CrearVentaUseCase:
                     )
                     for i, linea in enumerate(lineas)
                 ],
+                metodos_pago=metodos_pago, cliente_segmento=cliente_segmento,
+                codigo_cupon=codigo_cupon, telefono=telefono, cliente_id=cliente_id,
             )
             for res in evaluacion:
                 if res.promo_descuento > 0:
@@ -325,6 +438,10 @@ class CrearVentaUseCase:
                     linea.promo_id = res.promo_id
                     linea.promo_etiqueta = res.promo_etiqueta
                     linea.promo_descuento = res.promo_descuento
+                    linea.promos_aplicadas = [
+                        PromoAplicada(promo_id=a.promo_id, etiqueta=a.etiqueta, monto=a.monto)
+                        for a in (res.desglose or [])
+                    ]
 
         # Cantidad en unidad base (cantidad * factor); valida producto/presentación.
         # Se persiste para no recalcularla en anulaciones ni reportes.

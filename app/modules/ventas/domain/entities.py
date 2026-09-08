@@ -8,6 +8,14 @@ from app.modules.ventas.domain.exceptions import (
 )
 
 @dataclass
+class PromoAplicada:
+    """Una promoción congelada en una línea (para el desglose cuando apilan)."""
+    promo_id: UUID
+    etiqueta: str
+    monto: Decimal
+
+
+@dataclass
 class DetalleVenta:
     id: UUID
     venta_id: UUID
@@ -23,9 +31,12 @@ class DetalleVenta:
     cantidad_en_unidad_base: Decimal | None = None
     # Promoción aplicada por el motor de `promociones` (2x1, %, precio fijo). El
     # backend la fuerza y la congela acá; `promo_descuento` resta en el subtotal.
+    # `promo_id`/`promo_etiqueta` = la de mayor monto; `promo_descuento` = Σ del
+    # desglose (`promos_aplicadas`).
     promo_id: UUID | None = None
     promo_etiqueta: str | None = None
     promo_descuento: Decimal = Decimal("0")
+    promos_aplicadas: list[PromoAplicada] = field(default_factory=list)
     # Cantidad de esta línea ya devuelta (acumulado de todas las devoluciones).
     cantidad_devuelta: Decimal = Decimal("0")
 
@@ -159,6 +170,9 @@ class Venta:
     # saldo de monedero que esta venta generó (congelado; lo llena el use case).
     telefono: str | None = None
     monedero_generado: Decimal = Decimal("0")
+    # Motivo del descuento manual (obligatorio si `descuento_total` o alguna
+    # `descuento_linea` > 0). Se congela.
+    motivo_descuento: str | None = None
 
     # Relaciones embebidas opcionales (`?include=`); las puebla el mapper.
     cliente: object | None = field(default=None, compare=False, repr=False)
@@ -170,7 +184,8 @@ class Venta:
               cliente_id: UUID | None, lineas: list[DetalleVenta], pagos: list[Pago],
               descuento_total: Decimal = Decimal("0"),
               idempotency_key: str | None = None,
-              telefono: str | None = None) -> "Venta":
+              telefono: str | None = None,
+              motivo_descuento: str | None = None) -> "Venta":
         if not lineas:
             raise VentaSinLineas("Una venta debe tener al menos una línea")
 
@@ -187,6 +202,7 @@ class Venta:
             estado=EstadoVenta.PENDIENTE_PAGO, lineas=lineas, pagos=pagos,
             descuento_total=descuento_total, idempotency_key=idempotency_key,
             telefono=tel,
+            motivo_descuento=(motivo_descuento.strip() if motivo_descuento else None),
         )
 
     @property

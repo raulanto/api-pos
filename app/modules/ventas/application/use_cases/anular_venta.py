@@ -37,6 +37,7 @@ class AnularVentaUseCase:
         event_port: EventPort,
         devolucion_repo: DevolucionRepository | None = None,
         monedero: MonederoPort | None = None,
+        promociones=None,
     ):
         self._venta_repo = venta_repo
         self._caja_repo = caja_repo
@@ -45,6 +46,7 @@ class AnularVentaUseCase:
         self._event_port = event_port
         self._devolucion_repo = devolucion_repo
         self._monedero = monedero
+        self._promociones = promociones
 
     async def ejecutar(self, data: AnularVentaInput) -> Venta:
         venta = await self._venta_repo.obtener_por_id(data.venta_id)
@@ -91,6 +93,10 @@ class AnularVentaUseCase:
         # y reintegra lo que se pagó con monedero.
         if self._monedero is not None:
             await self._monedero.revertir_venta(venta.telefono, venta.id, data.usuario_id)
+
+        # 2c) Liberar los usos de cupón de la venta (vuelven al conteo disponible).
+        if self._promociones is not None:
+            await self._promociones.liberar_cupones_de_venta(venta.id)
 
         # 3) Persistir el nuevo estado.
         await self._venta_repo.actualizar_estado(venta.id, EstadoVenta.CANCELADA)

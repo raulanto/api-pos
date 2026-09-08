@@ -56,3 +56,16 @@ class VentaNoDevolvible(Exception):
 class CantidadDevolucionExcedida(Exception):
     """Se pidió devolver más de lo que queda por devolver en esa línea."""
     pass
+
+# --- Descuento manual en POS ---
+class DescuentoManualNoAutorizado(Exception):
+    """El usuario no tiene el permiso `ventas.descuento_manual`."""
+    pass
+
+class DescuentoManualExcedeTope(Exception):
+    """El % de descuento manual supera el tope del rol."""
+    pass
+
+class MotivoDescuentoRequerido(Exception):
+    """Hay descuento manual (`descuento_linea`/`descuento_total`) sin `motivo_descuento`."""
+    pass

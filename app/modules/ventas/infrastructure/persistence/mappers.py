@@ -1,13 +1,14 @@
 from decimal import Decimal
 
 from app.modules.ventas.domain.entities import (
-    Venta, DetalleVenta, Pago, CajaTurno, Devolucion, DevolucionLinea,
+    Venta, DetalleVenta, Pago, CajaTurno, Devolucion, DevolucionLinea, PromoAplicada,
 )
 from app.modules.ventas.domain.value_objects import (
     EstadoVenta, MetodoPago, MetodoDevolucion,
 )
 from app.modules.ventas.infrastructure.persistence.orm_models import (
-    VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM, DevolucionORM, DevolucionLineaORM,
+    VentaORM, DetalleVentaORM, DetalleVentaPromoORM, PagoORM, CajaTurnoORM,
+    DevolucionORM, DevolucionLineaORM,
 )
 
 def to_domain_caja_turno(orm: CajaTurnoORM) -> CajaTurno:
@@ -49,10 +50,12 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
         idempotency_key=entidad.idempotency_key,
         telefono=entidad.telefono,
         monedero_generado=entidad.monedero_generado,
+        motivo_descuento=entidad.motivo_descuento,
         created_at=entidad.created_at
     )
-    orm.lineas = [
-        DetalleVentaORM(
+    orm.lineas = []
+    for l in entidad.lineas:
+        det = DetalleVentaORM(
             id=l.id,
             venta_id=l.venta_id,
             producto_id=l.producto_id,
@@ -66,8 +69,14 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
             promo_descuento=l.promo_descuento,
             promo_etiqueta=l.promo_etiqueta,
             cantidad_devuelta=l.cantidad_devuelta,
-        ) for l in entidad.lineas
-    ]
+        )
+        det.promos = [
+            DetalleVentaPromoORM(
+                detalle_venta_id=l.id, promo_id=a.promo_id,
+                promo_etiqueta=a.etiqueta, monto=a.monto,
+            ) for a in l.promos_aplicadas
+        ]
+        orm.lineas.append(det)
     orm.pagos = [
         PagoORM(
             id=p.id,
@@ -92,6 +101,7 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
         idempotency_key=orm.idempotency_key,
         telefono=orm.telefono,
         monedero_generado=orm.monedero_generado if orm.monedero_generado is not None else Decimal("0"),
+        motivo_descuento=orm.motivo_descuento,
         created_at=orm.created_at,
         lineas=[
             DetalleVenta(
@@ -107,6 +117,10 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
                 promo_id=l.promo_id,
                 promo_etiqueta=l.promo_etiqueta,
                 promo_descuento=l.promo_descuento,
+                promos_aplicadas=[
+                    PromoAplicada(promo_id=p.promo_id, etiqueta=p.promo_etiqueta, monto=p.monto)
+                    for p in getattr(l, "promos", []) or []
+                ],
                 cantidad_devuelta=l.cantidad_devuelta,
             ) for l in orm.lineas
         ],

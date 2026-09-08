@@ -124,6 +124,7 @@ async def crear_cliente(
             email=body.email,
             telefono=body.telefono,
             rfc_identificacion=body.rfc_identificacion,
+            segmento=body.segmento,
             limite_credito=body.limite_credito,
         ))
     except Exception as e:
@@ -265,6 +266,7 @@ async def actualizar_cliente(
             cambiar_email=body.cambiar_email,
             telefono=body.telefono,
             rfc_identificacion=body.rfc_identificacion,
+            segmento=body.segmento,
         ))
     except Exception as e:
         raise _traducir(e)

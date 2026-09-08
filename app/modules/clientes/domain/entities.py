@@ -39,6 +39,7 @@ class Cliente:
     email: str | None
     telefono: str | None
     rfc_identificacion: str | None
+    segmento: str | None
     limite_credito: Decimal
     saldo_credito: Decimal
     activo: bool
@@ -64,6 +65,7 @@ class Cliente:
         sucursal_id: UUID, nombre: str,
         email: str | None = None, telefono: str | None = None,
         rfc_identificacion: str | None = None,
+        segmento: str | None = None,
         limite_credito: Decimal = Decimal("0")
     ) -> "Cliente":
         return Cliente(
@@ -73,6 +75,7 @@ class Cliente:
             email=email,
             telefono=telefono,
             rfc_identificacion=rfc_identificacion,
+            segmento=segmento,
             limite_credito=limite_credito,
             saldo_credito=Decimal("0"),
             activo=True
@@ -142,6 +145,7 @@ class Cliente:
         email: str | None = None,
         telefono: str | None = None,
         rfc_identificacion: str | None = None,
+        segmento: str | None = None,
         cambiar_email: bool = False,
     ) -> None:
         if nombre is not None:
@@ -150,6 +154,8 @@ class Cliente:
             self.telefono = telefono
         if rfc_identificacion is not None:
             self.rfc_identificacion = rfc_identificacion
+        if segmento is not None:
+            self.segmento = segmento
         # email se limpia/actualiza sólo si se envía explícitamente la clave.
         if cambiar_email:
             self.email = email

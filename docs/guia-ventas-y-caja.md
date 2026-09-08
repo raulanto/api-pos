@@ -182,6 +182,11 @@ Permiso: `ventas.crear`. La **sucursal** sale del usuario autenticado.
 > **No** obliga a registrar un `cliente` ni tiene nada que ver con el crédito.
 > Es obligatorio sólo si algún pago usa `metodo_pago="monedero"`.
 
+> **`codigo_cupon`** (opcional): habilita una promoción que exige cupón. **`motivo_descuento`**
+> (opcional): **obligatorio** si mandás `descuento_linea` o `descuento_total` > 0
+> (ver 2.13). Detalle completo de promos, cupones y descuento manual en
+> **`docs/guia-promociones.md`**.
+
 ### 2.2 Cómo se calcula el total
 
 ```
@@ -210,25 +215,27 @@ base**: si `cantidad ≥ cantidad_minima_mayoreo`, usa `precio_mayoreo` en vez d
 usan.
 
 **Promociones (módulo aparte, `/api/v1/promociones`).** Reglas configurables que
-apuntan a productos o a presentaciones concretas. Tipos: `nxm` (2x1, 3x2…),
-`porcentaje`, `precio_fijo` (con `cantidad_minima` = mayoreo de esa presentación).
-Al vender:
+apuntan a productos, presentaciones o **categorías**. Tipos: `nxm` (2x1, 3x2…),
+`porcentaje`, `precio_fijo`. Al vender:
 
-- El backend busca las promos **vigentes** de la sucursal (activas, dentro de su
-  ventana de fechas) y calcula el descuento por línea; lo congela como
-  `promo_descuento` + `promo_etiqueta` (el nombre de la promo) en `detalle_venta`.
-- **Una promo por línea.** Si varias podrían aplicar, gana la de `prioridad`
-  menor.
-- **NxM** junta las unidades de todas las líneas del mismo objetivo (2 renglones
-  del mismo refresco cuentan juntos) y regala las más baratas. Ignora cantidades
-  con decimales.
-- Corre **después** del mayoreo simple: `precio_mayoreo` fija el `precio_unitario`
-  y la promo se calcula encima. Pueden convivir.
-- El motor es **defensivo**: una promo mal configurada simplemente no aplica, no
-  rompe la venta. No hay errores nuevos de venta por promociones.
+- El backend filtra las promos **vigentes** para la venta —activas, ventana de
+  fechas, **día de la semana y hora local**, sucursal, **monto mínimo de
+  compra**, **método de pago** presente en los pagos, **segmento del cliente**, y
+  cupón si la promo lo exige— y calcula el descuento por línea. Lo congela en
+  `detalle_venta.promo_descuento` (+ el desglose en `promos_aplicadas`).
+- **Apilado:** por defecto una promo es **exclusiva** (una por línea, gana la de
+  `prioridad` menor). Si la promo es `combinable`, se apila **sobre el precio ya
+  descontado** junto a otras combinables, respetando su `tope_descuento`.
+- **Cupón:** las promos `requiere_cupon` sólo aplican si la venta manda un
+  `codigo_cupon` válido (vigencia + límite de usos; ver 2.12).
+- **NxM** junta las unidades enteras de todas las líneas del mismo objetivo y
+  regala las más baratas. Ignora cantidades con decimales.
+- Corre **después** del mayoreo simple (`precio_mayoreo` fija el precio, la promo
+  se calcula encima). El motor es **defensivo**: una promo mal configurada
+  simplemente no aplica.
 
-El detalle de cómo se dan de alta las promos está en
-`docs/guia-alta-de-productos.md` (sección "Promociones").
+Cómo se dan de alta las promos, los cupones y el descuento manual del POS:
+**`docs/guia-promociones.md`**.
 
 ### 2.4 Previsualizar el total antes de cobrar (cotizar)
 
@@ -459,6 +466,21 @@ POST /api/v1/ventas/
   `monto_devuelto` al monedero del teléfono de la venta. (No prorratea ni quita
   la acumulación que generó esa línea.)
 
+### 2.13 Descuento manual (`descuento_linea` / `descuento_total`)
+
+El descuento libre que teclea el cajero (por línea o sobre el total) es **aparte**
+de las promociones. Al mandarlo en la venta:
+
+- Requiere el permiso **`ventas.descuento_manual`** (por defecto `admin` /
+  `gerente`). Sin él → 403 `DescuentoManualNoAutorizado`.
+- Requiere **`motivo_descuento`** en el cuerpo → si no, 400
+  `MotivoDescuentoRequerido`. Se congela en `venta.motivo_descuento`.
+- Respeta un **tope de % por rol** (tabla `descuento_manual_limite`; `NULL` = sin
+  tope). Si el % supera el tope → 400 `DescuentoManualExcedeTope`.
+- Queda **auditado** (`GET /api/v1/auditoria`, acción `descuento_manual`).
+
+Detalle y ejemplos: **`docs/guia-promociones.md`** (Parte 4).
+
 ---
 
 ## Parte 3 — Cosas a considerar al implementar
@@ -570,7 +592,13 @@ El POS no configura nada: la promo "2x1 X" ya existe y está vigente para la suc
 | 400 | `DevolucionInvalida` | Línea que no es de la venta, cantidad ≤ 0, o sin líneas; o devolución al monedero de una venta sin `telefono` |
 | 400 | `SaldoMonederoInsuficiente` | El monedero del teléfono no cubre el pago (venta revertida entera) |
 | 400 | `MovimientoMonederoInvalido` | Pago con `metodo_pago="monedero"` sin `telefono`, o ajuste de monedero en 0 |
+| 400 | `MotivoDescuentoRequerido` | Hay descuento manual (`descuento_linea`/`descuento_total`) sin `motivo_descuento` |
+| 400 | `DescuentoManualExcedeTope` | El % de descuento manual supera el tope del rol |
+| 400 | `CuponVencido` | El `codigo_cupon` está fuera de vigencia o desactivado (venta no creada) |
+| 403 | `DescuentoManualNoAutorizado` | Venta con descuento manual y el usuario no tiene `ventas.descuento_manual` |
 | 403 | `AnulacionNoPermitida` | Cajero anulando/devolviendo una venta ajena o de un turno cerrado; o anulando una venta **con devoluciones** |
+| 404 | `CuponNoEncontrado` | El `codigo_cupon` no existe |
+| 409 | `CuponAgotado` | El cupón llegó a su límite de usos (total o por persona) — venta no creada |
 | 403 | `CierreTurnoNoPermitido` | Cerrando un turno de otro sin ser rol global |
 | 403 | "Fuera del alcance de su sucursal" | Consultando/anulando datos de otra sucursal |
 | 409 | `TurnoYaAbierto` | El cajero ya tiene un turno abierto (chequeo + índice único) |

@@ -44,6 +44,7 @@ class ActualizarClienteInput:
     email: str | None = None
     telefono: str | None = None
     rfc_identificacion: str | None = None
+    segmento: str | None = None
     cambiar_email: bool = False
 
 
@@ -81,6 +82,7 @@ class ActualizarClienteUseCase:
             email=data.email,
             telefono=data.telefono,
             rfc_identificacion=data.rfc_identificacion,
+            segmento=data.segmento,
             cambiar_email=data.cambiar_email,
         )
         try:

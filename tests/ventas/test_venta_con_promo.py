@@ -60,7 +60,7 @@ class _PromosPort:
         self._d = descuento
         self.promo_id = uuid.uuid4()
 
-    async def evaluar(self, sucursal_id, lineas):
+    async def evaluar(self, sucursal_id, lineas, **kw):
         return [
             LineaPromoResult(
                 indice=l.indice, promo_id=self.promo_id,

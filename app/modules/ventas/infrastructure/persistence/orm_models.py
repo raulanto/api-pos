@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import (
-    Column, String, Text, ForeignKey, Numeric, DateTime, CheckConstraint,
+    Column, String, Text, ForeignKey, Numeric, DateTime, CheckConstraint, Index,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
@@ -27,6 +27,9 @@ class VentaORM(Base, TimestampMixin):
     cliente_id = Column(PGUUID(as_uuid=True), ForeignKey("cliente.id"), nullable=True)
     estado = Column(String(30), nullable=False)
     descuento_total = Column(Numeric(12, 2), nullable=False, default=0)
+    # Motivo del descuento manual (`descuento_linea`/`descuento_total`); obligatorio
+    # cuando hay descuento manual, se congela acá.
+    motivo_descuento = Column(Text, nullable=True)
     idempotency_key = Column(String(80), nullable=True, unique=True)
     # Monedero: teléfono opcional del comprador (historial + cashback) y saldo de
     # monedero que la venta generó (congelado).
@@ -64,6 +67,35 @@ class DetalleVentaORM(Base):
     promo_etiqueta = Column(String(120), nullable=True)
     # Cantidad de esta línea ya devuelta (acumulado). Sube con cada devolución.
     cantidad_devuelta = Column(Numeric(14, 4), nullable=False, default=0)
+
+    promos = relationship(
+        "DetalleVentaPromoORM", backref="detalle", cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+
+class DescuentoManualLimiteORM(Base):
+    """Tope de % de descuento manual por rol. `pct_max` NULL (o sin fila) = sin
+    tope. El permiso `ventas.descuento_manual` es el gate; esto sólo restringe."""
+    __tablename__ = "descuento_manual_limite"
+    rol_id = Column(PGUUID(as_uuid=True), ForeignKey("rol.id"), primary_key=True)
+    pct_max = Column(Numeric(5, 2), nullable=True)
+
+
+class DetalleVentaPromoORM(Base):
+    """Desglose congelado de las promociones aplicadas a una línea (append-only).
+    `detalle_venta.promo_descuento` es la Σ de estos montos."""
+    __tablename__ = "detalle_venta_promo"
+    __table_args__ = (Index("ix_detalle_venta_promo_detalle", "detalle_venta_id"),)
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    detalle_venta_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("detalle_venta.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    promo_id = Column(PGUUID(as_uuid=True), ForeignKey("promocion.id"), nullable=True)
+    promo_etiqueta = Column(String(120), nullable=True)
+    monto = Column(Numeric(12, 2), nullable=False)
+
 
 class PagoORM(Base, TimestampMixin):
     __tablename__ = "pago"

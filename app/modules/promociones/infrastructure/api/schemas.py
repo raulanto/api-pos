@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -12,20 +12,41 @@ class ObjetivoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     producto_id: Optional[UUID] = None
     producto_unidad_id: Optional[UUID] = None
+    categoria_id: Optional[UUID] = None
 
     @model_validator(mode="after")
-    def _uno_u_otro(self):
-        if (self.producto_id is None) == (self.producto_unidad_id is None):
-            raise ValueError("Indicá exactamente uno de `producto_id` o `producto_unidad_id`.")
+    def _uno_de_tres(self):
+        puestos = sum(
+            x is not None for x in (self.producto_id, self.producto_unidad_id, self.categoria_id)
+        )
+        if puestos != 1:
+            raise ValueError(
+                "Indicá exactamente uno de `producto_id`, `producto_unidad_id` o `categoria_id`."
+            )
         return self
 
 
 class _PromocionParams(BaseModel):
     prioridad: int = Field(default=100, ge=0)
     activo: bool = True
-    sucursal_id: Optional[UUID] = None
+    # Apilado: False (default) = exclusiva por línea; True = se apila sobre el residual.
+    combinable: bool = False
+    tope_descuento: Optional[Decimal] = Field(default=None, ge=0)
+    monto_minimo_compra: Optional[Decimal] = Field(default=None, ge=0)
+    # Condiciones: sólo aplica con ese método de pago / segmento de cliente,
+    # o sólo con un cupón válido.
+    metodo_pago_requerido: Optional[str] = Field(default=None, max_length=20)
+    cliente_segmento: Optional[str] = Field(default=None, max_length=30)
+    requiere_cupon: bool = False
+    # Sucursales donde aplica; lista vacía = todas.
+    sucursales: list[UUID] = []
     vigente_desde: Optional[datetime] = None
     vigente_hasta: Optional[datetime] = None
+    # Ventana horaria (hora local, `APP_TIMEZONE`) y días. `dias_semana` = bitmask
+    # lun..dom = bit 0..6 (ej. lun+mié+vie = 1|4|16 = 21).
+    hora_desde: Optional[time] = None
+    hora_hasta: Optional[time] = None
+    dias_semana: Optional[int] = Field(default=None, ge=1, le=127)
     nxm_lleva: Optional[int] = Field(default=None, ge=1)
     nxm_paga: Optional[int] = Field(default=None, ge=1)
     descuento_pct: Optional[Decimal] = Field(default=None, gt=0, le=100)
@@ -58,11 +79,24 @@ class ActualizarPromocionRequest(BaseModel):
     prioridad: Optional[int] = Field(default=None, ge=0)
     activo: Optional[bool] = None
     tipo: Optional[TipoPromocion] = None
-    sucursal_id: Optional[UUID] = None
-    cambiar_sucursal: bool = False
+    combinable: Optional[bool] = None
+    tope_descuento: Optional[Decimal] = Field(default=None, ge=0)
+    monto_minimo_compra: Optional[Decimal] = Field(default=None, ge=0)
+    # Mandar `cambiar_topes=true` para fijar/limpiar `tope_descuento` + `monto_minimo_compra`.
+    cambiar_topes: bool = False
+    metodo_pago_requerido: Optional[str] = Field(default=None, max_length=20)
+    cliente_segmento: Optional[str] = Field(default=None, max_length=30)
+    requiere_cupon: Optional[bool] = None
+    cambiar_condiciones: bool = False
+    sucursales: Optional[list[UUID]] = None
+    cambiar_sucursales: bool = False
     vigente_desde: Optional[datetime] = None
     vigente_hasta: Optional[datetime] = None
     cambiar_vigencia: bool = False
+    hora_desde: Optional[time] = None
+    hora_hasta: Optional[time] = None
+    dias_semana: Optional[int] = Field(default=None, ge=1, le=127)
+    cambiar_horario: bool = False
     nxm_lleva: Optional[int] = Field(default=None, ge=1)
     nxm_paga: Optional[int] = Field(default=None, ge=1)
     descuento_pct: Optional[Decimal] = Field(default=None, gt=0, le=100)
@@ -77,6 +111,7 @@ class ObjetivoResponse(BaseModel):
     id: UUID
     producto_id: Optional[UUID] = None
     producto_unidad_id: Optional[UUID] = None
+    categoria_id: Optional[UUID] = None
 
 
 class PromocionResponse(BaseModel):
@@ -86,9 +121,18 @@ class PromocionResponse(BaseModel):
     tipo: TipoPromocion
     activo: bool
     prioridad: int
-    sucursal_id: Optional[UUID] = None
+    combinable: bool
+    tope_descuento: Optional[Decimal] = None
+    monto_minimo_compra: Optional[Decimal] = None
+    metodo_pago_requerido: Optional[str] = None
+    cliente_segmento: Optional[str] = None
+    requiere_cupon: bool = False
+    sucursales: list[UUID] = []
     vigente_desde: Optional[datetime] = None
     vigente_hasta: Optional[datetime] = None
+    hora_desde: Optional[time] = None
+    hora_hasta: Optional[time] = None
+    dias_semana: Optional[int] = None
     nxm_lleva: Optional[int] = None
     nxm_paga: Optional[int] = None
     descuento_pct: Optional[Decimal] = None
