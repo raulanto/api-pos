@@ -32,23 +32,28 @@ if [ ! -f "$ZIP" ]; then
   exit 0
 fi
 
-echo "[init] lambda $FN"
-awslocal lambda create-function \
-  --function-name "$FN" \
-  --runtime python3.12 \
-  --handler handler.handler \
-  --timeout 60 \
-  --memory-size 512 \
-  --role "arn:aws:iam::${ACCOUNT}:role/lambda-role" \
-  --zip-file "fileb://$ZIP" >/dev/null
-awslocal lambda wait function-active-v2 --function-name "$FN"
+# Idempotente: con PERSISTENCE=1 la función ya existe en el 2º arranque.
+if awslocal lambda get-function --function-name "$FN" >/dev/null 2>&1; then
+  echo "[init] lambda $FN ya existe (estado persistido); no se recrea."
+else
+  echo "[init] lambda $FN"
+  awslocal lambda create-function \
+    --function-name "$FN" \
+    --runtime python3.12 \
+    --handler handler.handler \
+    --timeout 60 \
+    --memory-size 512 \
+    --role "arn:aws:iam::${ACCOUNT}:role/lambda-role" \
+    --zip-file "fileb://$ZIP" >/dev/null
+  awslocal lambda wait function-active-v2 --function-name "$FN"
 
-awslocal lambda add-permission \
-  --function-name "$FN" \
-  --statement-id s3invoke \
-  --action lambda:InvokeFunction \
-  --principal s3.amazonaws.com \
-  --source-arn "arn:aws:s3:::$BUCKET" >/dev/null
+  awslocal lambda add-permission \
+    --function-name "$FN" \
+    --statement-id s3invoke \
+    --action lambda:InvokeFunction \
+    --principal s3.amazonaws.com \
+    --source-arn "arn:aws:s3:::$BUCKET" >/dev/null
+fi
 
 echo "[init] notificación S3 ObjectCreated (originales/) -> $FN"
 awslocal s3api put-bucket-notification-configuration \

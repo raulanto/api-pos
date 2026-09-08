@@ -10,6 +10,10 @@ wheels/
 .venv
 data/uploads
 .env
+
+# Datos persistidos de los servicios de Docker (bind-mounts de docker-compose)
+docker/pgdata/
+docker/localstack/data/
 .agents
 AGENTS.md
 alembic/__pycache__

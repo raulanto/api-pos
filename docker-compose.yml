@@ -43,7 +43,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Ruta física en el repo (ignorada por git). Sobrevive a restart/reboot;
+      # `docker compose down -v` NO la borra (a diferencia de un named volume).
+      - ./docker/pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-pos_db}"]
       interval: 5s
@@ -81,6 +83,9 @@ services:
       SERVICES: s3,lambda
       LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: "60"
       S3_BUCKET_IMAGENES: ${S3_BUCKET_IMAGENES:-pos-imagenes}
+      # Guarda y restaura el estado de S3 en /var/lib/localstack/state entre
+      # reinicios. Sin esto el bucket arranca vacío en cada `restart`.
+      PERSISTENCE: "1"
       DEBUG: "1"
     volumes:
       # Scripts de bootstrap (ready.d) + zip de la Lambda.
@@ -88,7 +93,9 @@ services:
       - lambda_dist:/opt/code/lambda-dist:ro
       # La Lambda de LocalStack arranca contenedores: necesita el socket de Docker.
       - /var/run/docker.sock:/var/run/docker.sock
-      - localstack_data:/var/lib/localstack
+      # Ruta física en el repo (ignorada por git): acá vive el estado persistido
+      # de S3 (las imágenes subidas). Sobrevive a restart/reboot y a `down -v`.
+      - ./docker/localstack/data:/var/lib/localstack
     depends_on:
       lambda_build:
         condition: service_completed_successfully
@@ -101,6 +108,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-  localstack_data:
+  # `postgres_data` y `localstack_data` pasaron a bind-mounts físicos
+  # (./docker/pgdata y ./docker/localstack/data). Sólo queda el scratch del
+  # build de la Lambda, que es descartable.
   lambda_dist:
