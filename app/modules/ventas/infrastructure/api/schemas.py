@@ -5,7 +5,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.ventas.domain.value_objects import MetodoPago, EstadoVenta, MetodoDevolucion
+from app.modules.ventas.domain.value_objects import (
+    MetodoPago, EstadoVenta, MetodoDevolucion, TipoMovimientoCaja,
+)
 from app.shared.responses import EmbeddableModel
 from app.shared.schemas.embeds import ClienteEmbed, UsuarioEmbed, CajaTurnoEmbed
 
@@ -218,22 +220,81 @@ class VentaListItem(EmbeddableModel):
 
 
 # --------------------------------------------------------------------------- #
-# Caja
+# Caja física (terminal)
 # --------------------------------------------------------------------------- #
+class CajaCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nombre: str = Field(min_length=1, max_length=60)
+
+
+class CajaRenameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nombre: str = Field(min_length=1, max_length=60)
+
+
+class CajaResponse(BaseModel):
+    model_config = _ORM
+    id: UUID
+    sucursal_id: UUID
+    nombre: str
+    activa: bool
+    created_at: datetime
+
+
+# --------------------------------------------------------------------------- #
+# Caja: turnos, movimientos, arqueo
+# --------------------------------------------------------------------------- #
+class DenominacionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    valor: Decimal = Field(gt=0)      # valor de la pieza (ej. 500, 0.50)
+    cantidad: int = Field(ge=0)
+
+
 class AbrirCajaTurnoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    caja_id: UUID
     saldo_inicial: Decimal = Field(ge=0)
+    # Opcional: desglose por denominación; su suma debe cuadrar con saldo_inicial.
+    denominaciones: List[DenominacionInput] = []
 
 
 class CerrarCajaTurnoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     saldo_final_declarado: Decimal = Field(ge=0)
+    # Obligatoria si |diferencia| >= umbral (si no, el cierre da 400).
+    nota_cierre: Optional[str] = Field(default=None, max_length=500)
+    denominaciones: List[DenominacionInput] = []
+
+
+class MovimientoCajaRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tipo: TipoMovimientoCaja
+    monto: Decimal = Field(gt=0)
+    # Obligatorio para `retiro` y `gasto`.
+    motivo: Optional[str] = Field(default=None, max_length=255)
+
+
+class MovimientoCajaResponse(BaseModel):
+    model_config = _ORM
+    id: UUID
+    caja_turno_id: UUID
+    tipo: TipoMovimientoCaja
+    monto: Decimal
+    motivo: Optional[str] = None
+    usuario_id: UUID
+    created_at: datetime
+
+
+class ConciliarTurnoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    nota: Optional[str] = Field(default=None, max_length=500)
 
 
 class CajaTurnoResponse(BaseModel):
     model_config = _ORM
     id: UUID
     sucursal_id: UUID
+    caja_id: UUID
     usuario_id: UUID
     saldo_inicial: Decimal
     estado: str
@@ -241,6 +302,15 @@ class CajaTurnoResponse(BaseModel):
     cerrado_en: Optional[datetime]
     saldo_final_declarado: Optional[Decimal]
     diferencia: Optional[Decimal]
+    nota_cierre: Optional[str] = None
+    conciliado_por: Optional[UUID] = None
+    conciliado_en: Optional[datetime] = None
+
+
+class DenominacionResponse(BaseModel):
+    model_config = _ORM
+    valor: Decimal
+    cantidad: int
 
 
 class ResumenTurnoResponse(BaseModel):
@@ -248,4 +318,30 @@ class ResumenTurnoResponse(BaseModel):
     total_efectivo: Decimal
     total_devoluciones_efectivo: Decimal
     cantidad_ventas: int
-    saldo_esperado: Decimal   # saldo_inicial + total_efectivo - total_devoluciones_efectivo
+    total_ingresos: Decimal
+    total_retiros: Decimal
+    total_gastos: Decimal
+    movimientos_neto: Decimal
+    # saldo_esperado = saldo_inicial + total_efectivo - total_devoluciones_efectivo + movimientos_neto
+    saldo_esperado: Decimal
+    denominaciones_apertura: List[DenominacionResponse] = []
+    denominaciones_cierre: List[DenominacionResponse] = []
+
+
+class TurnoListItem(BaseModel):
+    model_config = _ORM
+    id: UUID
+    sucursal_id: UUID
+    caja_id: UUID
+    usuario_id: UUID
+    estado: str
+    saldo_inicial: Decimal
+    saldo_final_declarado: Optional[Decimal] = None
+    diferencia: Optional[Decimal] = None
+    abierto_en: datetime
+    cerrado_en: Optional[datetime] = None
+
+
+class EfectivoSucursalResponse(BaseModel):
+    sucursal_id: UUID
+    efectivo_esperado: Decimal

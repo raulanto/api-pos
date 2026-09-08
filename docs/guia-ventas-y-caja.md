@@ -2,7 +2,8 @@
 
 > Cómo implementar la pantalla de punto de venta (POS) y el arqueo de caja, con
 > los llamados a la API y lo que hay que tener en cuenta.
-> Ventas cuelgan de `/api/v1/ventas`, la caja de `/api/v1/caja-turnos`.
+> Ventas cuelgan de `/api/v1/ventas`, los turnos de `/api/v1/caja-turnos` y las
+> cajas físicas (terminales) de `/api/v1/cajas`.
 
 ---
 
@@ -10,9 +11,14 @@
 
 - Para **vender** hay que tener un **turno de caja abierto**. Sin turno, la API
   rechaza la venta.
-- El **turno** es "esta caja, este cajero, desde que abrió hasta que cierra".
-  Al abrir se declara el **efectivo inicial**; al cerrar, el **efectivo contado**.
-  El sistema calcula la **diferencia** (sobrante / faltante).
+- Una **caja** (terminal física) pertenece a una sucursal. El **turno** es "esta
+  caja, este cajero, desde que abrió hasta que cierra". Al abrir se declara el
+  **efectivo inicial**; al cerrar, el **efectivo contado**. El sistema calcula la
+  **diferencia** (sobrante / faltante); si supera un umbral, el turno queda
+  `cerrado_con_diferencia` y necesita que un gerente lo **concilie**.
+- Durante el turno se pueden registrar **movimientos de caja**: `retiro` (sale
+  efectivo a caja fuerte), `ingreso` (refuerzo de fondo) y `gasto` (se paga algo
+  del cajón). Cambian el efectivo esperado del arqueo.
 - Una **venta** son líneas (producto + cantidad + precio) + pagos (efectivo,
   tarjeta, transferencia, crédito). Si lo pagado no cubre el total, el resto
   queda como **crédito** del cliente (y hace falta un `cliente_id`).
@@ -29,25 +35,49 @@
 
 ---
 
-## Parte 1 — Caja (turnos)
+## Parte 1 — Caja (terminales, turnos, movimientos, arqueo)
+
+### 1.0 Cajas físicas (terminales)
+
+Una **caja** es una terminal de la sucursal. Toda sucursal arranca con una
+`Caja 1` (la crea la migración). Sólo hace falta gestionarlas si la sucursal
+tiene más de una terminal simultánea.
+
+```
+POST   /api/v1/cajas            { "nombre": "Caja 2" }        # crear   (caja.administrar)
+GET    /api/v1/cajas?incluir_inactivas=false                  # listar  (caja.operar)
+PATCH  /api/v1/cajas/{caja_id}  { "nombre": "Caja mostrador" }# renombrar (caja.administrar)
+DELETE /api/v1/cajas/{caja_id}                                # desactivar (caja.administrar)
+PATCH  /api/v1/cajas/{caja_id}/reactivar                      # reactivar  (caja.administrar)
+```
+
+El `nombre` es único **entre cajas activas** de la sucursal (409 `NombreCajaEnUso`).
 
 ### 1.1 Abrir turno
 
-Al iniciar el día / la jornada del cajero:
+Al iniciar la jornada del cajero, sobre una terminal:
 
 ```
 POST /api/v1/caja-turnos/abrir
-{ "saldo_inicial": 1500.00 }
+{
+  "caja_id": "…",
+  "saldo_inicial": 1500.00,
+  "denominaciones": [                 // opcional; si viene, su suma debe = saldo_inicial
+    { "valor": 500, "cantidad": 2 },
+    { "valor": 100, "cantidad": 5 }
+  ]
+}
 ```
 
-- La **sucursal** sale del usuario autenticado (el usuario tiene que tener una
-  sucursal asignada; si no → 400).
+- La **sucursal** sale del usuario autenticado (si no tiene sucursal → 400).
+- `caja_id` debe ser una caja **activa** de esa sucursal (si no → 404
+  `CajaNoEncontrada` / 409 `CajaInactiva`).
 - Permiso: `caja.operar` (o `ventas.crear`, que lo sigue habilitando).
-- Un cajero sólo puede tener **un turno abierto por sucursal**. Si ya tiene uno →
-  409 `TurnoYaAbierto`. Lo garantiza un índice único en la BD, así que dos
-  "abrir" simultáneos no crean dos turnos.
-- Si la sucursal está inactiva o tiene `permite_ventas = false` → 409
-  `SucursalNoOperativa`.
+- **Un turno abierto por terminal** y **un turno abierto por cajero**: si la caja
+  ya tiene turno, o el cajero ya tiene uno (en cualquier terminal) → 409
+  `TurnoYaAbierto`. Lo garantizan índices únicos en la BD.
+- Si `denominaciones` no suma `saldo_inicial` → 400 `DenominacionNoCuadra`.
+- Sucursal inactiva o `permite_ventas = false` → 409 `SucursalNoOperativa`.
 
 Respuesta: el turno con su `id`. Guardalo: va en **cada venta** (`caja_turno_id`).
 
@@ -60,7 +90,28 @@ GET /api/v1/caja-turnos/actual
 Devuelve el turno abierto del cajero en su sucursal, o **404** si no hay ninguno
 (la app usa esto al entrar al POS: sin turno → mostrar "Abrir caja").
 
-### 1.3 Arqueo / resumen del turno
+### 1.3 Movimientos de caja (retiro / ingreso / gasto)
+
+Durante el turno, cuando entra o sale efectivo por algo que **no** es una venta:
+
+```
+POST /api/v1/caja-turnos/{turno_id}/movimientos
+{ "tipo": "retiro", "monto": 2000.00, "motivo": "traslado a caja fuerte" }
+```
+
+```
+GET  /api/v1/caja-turnos/{turno_id}/movimientos    # lista los del turno
+```
+
+- `tipo`: `retiro` (sale del cajón), `ingreso` (entra sin ser venta), `gasto`
+  (se paga algo del cajón). `retiro` y `gasto` exigen `motivo` (400
+  `MotivoMovimientoRequerido`); `monto` > 0.
+- Sólo sobre un turno **abierto** (409 `MovimientoTurnoCerrado`). Permiso
+  `caja.operar`; para operar un turno ajeno hace falta `caja.forzar_cierre`.
+- Son **inmutables** (no se editan ni borran) y quedan en auditoría.
+- Efecto en el arqueo: `+ ingresos − retiros − gastos`.
+
+### 1.4 Arqueo / resumen del turno
 
 ```
 GET /api/v1/caja-turnos/{turno_id}
@@ -69,39 +120,81 @@ GET /api/v1/caja-turnos/{turno_id}
 ```json
 {
   "turno": { "…": "…" },
-  "total_efectivo": 4200.00,             // pagos en EFECTIVO de las ventas NO canceladas del turno
-  "total_devoluciones_efectivo": 150.00, // devoluciones en efectivo hechas EN este turno
+  "total_efectivo": 4200.00,
+  "total_devoluciones_efectivo": 150.00,
   "cantidad_ventas": 37,
-  "saldo_esperado": 5550.00              // saldo_inicial + total_efectivo − total_devoluciones_efectivo
+  "total_ingresos": 300.00,
+  "total_retiros": 2000.00,
+  "total_gastos": 120.00,
+  "movimientos_neto": -1820.00,          // ingresos − retiros − gastos
+  "saldo_esperado": 3730.00,             // saldo_inicial + total_efectivo − total_devoluciones_efectivo + movimientos_neto
+  "denominaciones_apertura": [ … ],
+  "denominaciones_cierre": [ … ]
 }
 ```
 
 Sirve tanto para un turno abierto (ver cómo va) como cerrado (revisar el cierre).
 
-> El arqueo **sólo mira el efectivo**. Tarjeta, transferencia y crédito **no**
-> entran en `saldo_esperado` — esos montos no están físicamente en el cajón. Las
-> **devoluciones en efectivo** sí lo bajan (salió plata del cajón).
+> El arqueo **sólo mira el efectivo**. Tarjeta, transferencia, crédito y monedero
+> **no** entran en `saldo_esperado`. Las **devoluciones en efectivo** y los
+> **retiros/gastos** lo bajan; los **ingresos** lo suben.
 
-Para el **corte completo** del turno (desglose por método de pago —incl.
-`total_monedero`— + `total_descuento_promo` de las promociones +
-`total_devoluciones_efectivo`):
-`GET /api/v1/reportes/corte-caja/{turno_id}` (permiso `reportes.leer`).
+Para el **corte completo** (desglose por método de pago —incl. `total_monedero`—,
+más `total_descuento_promo`, `total_devoluciones_efectivo`, `total_ingresos`,
+`total_retiros` y `total_gastos`): `GET /api/v1/reportes/corte-caja/{turno_id}`
+(permiso `reportes.leer`).
 
-### 1.4 Cerrar turno
+### 1.5 Cerrar turno
 
 Al terminar la jornada, el cajero cuenta el efectivo del cajón y lo declara:
 
 ```
 POST /api/v1/caja-turnos/{turno_id}/cerrar
-{ "saldo_final_declarado": 5680.00 }
+{
+  "saldo_final_declarado": 3680.00,
+  "nota_cierre": "faltante de 50, se avisó a gerencia",   // obligatoria si |diferencia| >= umbral
+  "denominaciones": [ … ]                                 // opcional; su suma debe = saldo_final_declarado
+}
 ```
 
-- `saldo_esperado = saldo_inicial + efectivo_de_ventas − devoluciones_en_efectivo`.
+- `saldo_esperado = saldo_inicial + efectivo_de_ventas − devoluciones_en_efectivo`
+  `+ ingresos − retiros − gastos` (movimientos de caja incluidos).
 - `diferencia = saldo_final_declarado − saldo_esperado`
-  (**positivo = sobrante**, **negativo = faltante**). Queda guardada en el turno.
-- Sólo el **dueño del turno** puede cerrarlo. `admin` / `gerente` (roles
-  globales) pueden cerrar turnos de otros cajeros.
+  (**positivo = sobrante**, **negativo = faltante**). Siempre queda guardada.
+- Si `|diferencia|` supera el umbral (`CAJA_DIFERENCIA_UMBRAL`, por defecto
+  `20.00`): hace falta `nota_cierre` (si no → 400 `NotaCierreRequerida`) y el
+  turno queda en estado **`cerrado_con_diferencia`** (pendiente de conciliar). Si
+  no lo supera, queda `cerrado`.
+- Sólo el **dueño del turno** puede cerrarlo; con permiso `caja.forzar_cierre` se
+  puede cerrar el de otro cajero (turno abandonado).
 - Si ya está cerrado → 409 `TurnoYaCerrado`.
+
+### 1.6 Conciliar un turno con diferencia
+
+Un gerente/admin revisa y autoriza el turno `cerrado_con_diferencia`:
+
+```
+POST /api/v1/caja-turnos/{turno_id}/conciliar
+{ "nota": "autorizado, se descuenta de caja chica" }
+```
+
+- Permiso `caja.autorizar_diferencia` (si no → 403 `ConciliacionNoPermitida`).
+- El turno pasa a **`conciliado`** y guarda `conciliado_por` / `conciliado_en`.
+- Si el turno no está `cerrado_con_diferencia` → 409 `TurnoNoRequiereConciliacion`.
+
+### 1.7 Histórico y efectivo en tiempo real
+
+```
+GET /api/v1/caja-turnos/historico?sucursal_id=&caja_id=&usuario_id=&estado=&desde=&hasta=
+    &page=1&page_size=20&sort=abierto_en:desc
+GET /api/v1/caja-turnos/efectivo-actual?sucursal_id=
+```
+
+- `historico`: lista de turnos con su `diferencia` (filtrar por `usuario_id` da
+  las diferencias por cajero). Permiso `caja.ver_historico`.
+- `efectivo-actual`: suma del `saldo_esperado` de los turnos **abiertos** de la
+  sucursal (efectivo que debería haber en los cajones ahora). Permiso
+  `caja.ver_historico`.
 
 ---
 
@@ -491,8 +584,10 @@ Detalle y ejemplos: **`docs/guia-promociones.md`** (Parte 4).
 | **Impuesto** | El backend **no** lo suma al total. Factura con IVA desglosado = cálculo del front (o pedir esa lógica al backend). |
 | **Sin edición** | No hay "editar venta". Corrección = anular + volver a cobrar. La UI no debería ofrecer "modificar". |
 | **Idempotencia** | Generá `Idempotency-Key` por operación de cobro y reusala en los reintentos. Nunca reintentar un POST de venta sin ella. |
-| **Un turno por cajero** | Si el cajero cambia de caja física o de sucursal, cerrar y abrir. La app no debería permitir "abrir otro" sin cerrar. |
-| **Arqueo = sólo efectivo** | Mostrar en el cierre: efectivo esperado (inicial + ventas efectivo), efectivo contado, diferencia. Tarjeta/transferencia se concilian aparte. |
+| **Un turno por cajero y por caja** | El cajero abre sobre una `caja_id`. No puede tener dos turnos abiertos (ni en distintas terminales), ni abrir en una caja que ya tiene turno. Cambiar de terminal/sucursal = cerrar y abrir. |
+| **Arqueo = sólo efectivo** | En el cierre: efectivo esperado (inicial + ventas efectivo + ingresos − retiros − gastos − devoluciones efectivo), efectivo contado, diferencia. Tarjeta/transferencia/monedero se concilian aparte. |
+| **Movimientos de caja** | Retiro a caja fuerte, ingreso de fondo o gasto del cajón: `POST /caja-turnos/{id}/movimientos`. Son inmutables y ajustan el efectivo esperado. |
+| **Diferencia grande = conciliación** | Si el cierre pasa el umbral (`CAJA_DIFERENCIA_UMBRAL`), el turno queda `cerrado_con_diferencia` con `nota_cierre` obligatoria y un gerente debe `POST /caja-turnos/{id}/conciliar` (`caja.autorizar_diferencia`). |
 | **Crédito atómico** | Venta a crédito que excede el límite → falla completa, no parcial. Mostrar el error `LimiteCreditoExcedido` con claridad. |
 | **Stock atómico** | Si una línea no tiene stock, **toda** la venta se cae con `StockInsuficiente`. `POST /ventas/cotizar` devuelve `stock_disponible` / `hay_stock` por línea para avisar antes de cobrar (no reserva). Manejar el error del POST sin vaciar el carrito. |
 | **Presentaciones** | Vender "1 reja" = `producto_unidad_id` de la reja + `cantidad: 1`. El backend convierte a unidad base para el stock. El `precio_unitario` es el de **la reja**. |
@@ -502,7 +597,7 @@ Detalle y ejemplos: **`docs/guia-promociones.md`** (Parte 4).
 | **Concurrencia** | Al descontar stock el backend bloquea la fila (`SELECT … FOR UPDATE` sobre `existencia` / `existencia_lote`), así que dos ventas simultáneas del último ítem se serializan: una pasa, la otra da `StockInsuficiente`. Lo mismo el límite de crédito y "un turno abierto por cajero" (índice único). No hace falta que el front haga nada especial. |
 | **Devoluciones** | `POST /ventas/{id}/devolucion` (parcial o total): repone stock, ajusta cajón/crédito, deja la venta `devuelta_parcial` / `devuelta_total`. Una venta con devoluciones ya **no** se puede anular. |
 | **Monedero** | `telefono` en la venta habilita el cashback (config por producto/presentación) y el historial por teléfono; no exige `cliente` ni toca el crédito. Pagar con `metodo_pago:"monedero"` descuenta el saldo (bloqueado `FOR UPDATE`); no es efectivo → fuera del arqueo, va como `total_monedero` en el corte. Consulta/ajuste en `/api/v1/clientes/monedero/{telefono}`. |
-| **Permisos** | `caja.operar` para abrir/cerrar turno y arqueo (o `ventas.crear`, que lo sigue habilitando). `ventas.crear` para vender, `ventas.leer` para consultas, `ventas.anular` para anular, `ventas.devolver` para devoluciones, `monedero.ajustar` para ajustar saldos de monedero. |
+| **Permisos** | `caja.operar` para abrir/cerrar turno, movimientos y arqueo (o `ventas.crear`, que lo sigue habilitando); `caja.administrar` para alta/baja de terminales; `caja.forzar_cierre` para cerrar/operar el turno de otro cajero; `caja.autorizar_diferencia` para conciliar; `caja.ver_historico` para el histórico y el efectivo en tiempo real. `ventas.crear` para vender, `ventas.leer` para consultas, `ventas.anular` para anular, `ventas.devolver` para devoluciones, `monedero.ajustar` para ajustar saldos de monedero. |
 
 ---
 
@@ -511,12 +606,15 @@ Detalle y ejemplos: **`docs/guia-promociones.md`** (Parte 4).
 ### 4.1 Jornada de un cajero
 
 1. Login → `GET /caja-turnos/actual`.
-2. Si 404 → `POST /caja-turnos/abrir` con el efectivo del cajón.
+2. Si 404 → elegir terminal (`GET /cajas`) → `POST /caja-turnos/abrir`
+   (`caja_id` + efectivo del cajón).
 3. Armar carrito → (cada cambio) `POST /ventas/cotizar` para mostrar promos y total.
 4. Cobrar: `POST /ventas/` (con `caja_turno_id` y su `Idempotency-Key`).
-5. Durante el turno, para revisar: `GET /caja-turnos/{id}`.
-6. Fin de jornada → contar efectivo → `POST /caja-turnos/{id}/cerrar`.
-7. Mostrar la `diferencia` del cierre.
+5. Retiro a caja fuerte / gasto del cajón → `POST /caja-turnos/{id}/movimientos`.
+6. Durante el turno, para revisar: `GET /caja-turnos/{id}`.
+7. Fin de jornada → contar efectivo → `POST /caja-turnos/{id}/cerrar` (con
+   `nota_cierre` si la diferencia es grande).
+8. Si quedó `cerrado_con_diferencia` → un gerente `POST /caja-turnos/{id}/conciliar`.
 
 ### 4.2 Venta al contado (efectivo)
 
@@ -595,14 +693,23 @@ El POS no configura nada: la promo "2x1 X" ya existe y está vigente para la suc
 | 400 | `MotivoDescuentoRequerido` | Hay descuento manual (`descuento_linea`/`descuento_total`) sin `motivo_descuento` |
 | 400 | `DescuentoManualExcedeTope` | El % de descuento manual supera el tope del rol |
 | 400 | `CuponVencido` | El `codigo_cupon` está fuera de vigencia o desactivado (venta no creada) |
+| 400 | `NotaCierreRequerida` | La diferencia del cierre (en valor absoluto) llega al umbral y no vino `nota_cierre` |
+| 400 | `MotivoMovimientoRequerido` | Movimiento de caja `retiro` / `gasto` sin `motivo` |
+| 400 | `DenominacionNoCuadra` | La suma del desglose por denominación ≠ saldo declarado |
 | 403 | `DescuentoManualNoAutorizado` | Venta con descuento manual y el usuario no tiene `ventas.descuento_manual` |
 | 403 | `AnulacionNoPermitida` | Cajero anulando/devolviendo una venta ajena o de un turno cerrado; o anulando una venta **con devoluciones** |
+| 403 | `ConciliacionNoPermitida` | Conciliando un turno sin el permiso `caja.autorizar_diferencia` |
 | 404 | `CuponNoEncontrado` | El `codigo_cupon` no existe |
+| 404 | `CajaNoEncontrada` | La `caja_id` no existe o no es de la sucursal |
 | 409 | `CuponAgotado` | El cupón llegó a su límite de usos (total o por persona) — venta no creada |
-| 403 | `CierreTurnoNoPermitido` | Cerrando un turno de otro sin ser rol global |
+| 403 | `CierreTurnoNoPermitido` | Cerrando/operando un turno de otro sin `caja.forzar_cierre` |
 | 403 | "Fuera del alcance de su sucursal" | Consultando/anulando datos de otra sucursal |
-| 409 | `TurnoYaAbierto` | El cajero ya tiene un turno abierto (chequeo + índice único) |
+| 409 | `TurnoYaAbierto` | El cajero, o la caja, ya tiene un turno abierto (chequeo + índice único) |
 | 409 | `TurnoYaCerrado` | Cerrando/operando un turno ya cerrado |
+| 409 | `MovimientoTurnoCerrado` | Registrando un movimiento de caja en un turno no abierto |
+| 409 | `TurnoNoRequiereConciliacion` | Conciliando un turno que no está `cerrado_con_diferencia` |
+| 409 | `CajaInactiva` | Abriendo turno en una caja/terminal desactivada |
+| 409 | `NombreCajaEnUso` | Alta/rename de caja con un nombre que ya usa otra caja activa |
 | 409 | `VentaYaCancelada` | Anulando una venta que ya estaba cancelada |
 | 409 | `SucursalNoOperativa` | Sucursal inactiva o `permite_ventas = false` |
 | 404 | `TurnoNoEncontrado` / `VentaNoEncontrada` | El `id` no existe |

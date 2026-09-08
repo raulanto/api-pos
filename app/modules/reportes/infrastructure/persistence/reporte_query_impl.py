@@ -15,7 +15,7 @@ from app.modules.reportes.application.ports.reporte_query_port import (
 )
 # Lecturas directas de los modelos ORM de otros módulos (patrón CQRS de solo lectura).
 from app.modules.ventas.infrastructure.persistence.orm_models import (
-    VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM, DevolucionORM,
+    VentaORM, DetalleVentaORM, PagoORM, CajaTurnoORM, CajaMovimientoORM, DevolucionORM,
 )
 from app.modules.ventas.domain.value_objects import MetodoPago, EstadoVenta
 from app.modules.inventario.infrastructure.persistence.orm_models import (
@@ -111,6 +111,16 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
         )
         dev_efectivo = Decimal(dev_efectivo or 0)
 
+        mov_filas = (await self._db.execute(
+            select(CajaMovimientoORM.tipo, func.coalesce(func.sum(CajaMovimientoORM.monto), 0))
+            .where(CajaMovimientoORM.caja_turno_id == caja_turno_id)
+            .group_by(CajaMovimientoORM.tipo)
+        )).all()
+        mov = {tipo: Decimal(total) for tipo, total in mov_filas}
+        ingresos = mov.get("ingreso", _CERO)
+        retiros = mov.get("retiro", _CERO)
+        gastos = mov.get("gasto", _CERO)
+
         return CorteDeCajaOutput(
             caja_turno_id=caja_turno_id,
             monto_inicial=turno.saldo_inicial,
@@ -119,9 +129,15 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             total_transferencia=transferencia,
             total_credito=credito,
             total_monedero=monedero,
-            monto_final_esperado=turno.saldo_inicial + efectivo - dev_efectivo,
+            monto_final_esperado=(
+                turno.saldo_inicial + efectivo - dev_efectivo
+                + ingresos - retiros - gastos
+            ),
             total_descuento_promo=Decimal(promo or 0),
             total_devoluciones_efectivo=dev_efectivo,
+            total_ingresos=ingresos,
+            total_retiros=retiros,
+            total_gastos=gastos,
         )
 
     # ------------------------------------------------------------------ #

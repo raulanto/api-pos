@@ -1,22 +1,93 @@
 import uuid
 from sqlalchemy import (
-    Column, String, Text, ForeignKey, Numeric, DateTime, CheckConstraint, Index,
+    Column, String, Text, Boolean, Integer, ForeignKey, Numeric, DateTime,
+    CheckConstraint, Index, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.shared.infrastructure.orm_base import Base, TimestampMixin
+
+
+class CajaORM(Base, TimestampMixin):
+    """Caja física / terminal de una sucursal."""
+    __tablename__ = "caja"
+    __table_args__ = (
+        # Nombre único entre cajas activas de la sucursal (case-insensitive lo
+        # valida el repo con func.lower, igual que producto/lote).
+        Index(
+            "uq_caja_nombre_activa", "sucursal_id", "nombre",
+            unique=True, postgresql_where=Column("activa"),
+        ),
+    )
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sucursal_id = Column(PGUUID(as_uuid=True), ForeignKey("sucursal.id"), nullable=False)
+    nombre = Column(String(60), nullable=False)
+    activa = Column(Boolean, nullable=False, default=True)
+
 
 class CajaTurnoORM(Base):
     __tablename__ = "caja_turno"
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sucursal_id = Column(PGUUID(as_uuid=True), ForeignKey("sucursal.id"), nullable=False)
+    caja_id = Column(PGUUID(as_uuid=True), ForeignKey("caja.id"), nullable=False)
     usuario_id = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=False)
     saldo_inicial = Column(Numeric(12, 2), nullable=False)
-    estado = Column(String(20), nullable=False, default="abierto")
+    estado = Column(String(30), nullable=False, default="abierto")
     abierto_en = Column(DateTime(timezone=True), nullable=False)
     cerrado_en = Column(DateTime(timezone=True), nullable=True)
     saldo_final_declarado = Column(Numeric(12, 2), nullable=True)
     diferencia = Column(Numeric(12, 2), nullable=True)
+    # Justificación de la diferencia (obligatoria si |diferencia| >= umbral).
+    nota_cierre = Column(Text, nullable=True)
+    # Conciliación de un turno cerrado con diferencia (gerente/admin).
+    conciliado_por = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=True)
+    conciliado_en = Column(DateTime(timezone=True), nullable=True)
+
+
+class CajaMovimientoORM(Base):
+    """Retiro / ingreso / gasto de efectivo durante un turno. Append-only."""
+    __tablename__ = "caja_movimiento"
+    __table_args__ = (
+        CheckConstraint(
+            "tipo IN ('retiro', 'ingreso', 'gasto')", name="ck_caja_movimiento_tipo",
+        ),
+        CheckConstraint("monto > 0", name="ck_caja_movimiento_monto_pos"),
+        Index("ix_caja_movimiento_turno", "caja_turno_id"),
+    )
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    caja_turno_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("caja_turno.id"), nullable=False,
+    )
+    tipo = Column(String(20), nullable=False)
+    monto = Column(Numeric(12, 2), nullable=False)
+    motivo = Column(Text, nullable=True)
+    usuario_id = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+
+
+class CajaDenominacionORM(Base):
+    """Desglose por denominación (valor de la pieza × cantidad) en apertura/cierre."""
+    __tablename__ = "caja_denominacion"
+    __table_args__ = (
+        CheckConstraint(
+            "momento IN ('apertura', 'cierre')", name="ck_caja_denominacion_momento",
+        ),
+        CheckConstraint("cantidad >= 0", name="ck_caja_denominacion_cantidad"),
+        UniqueConstraint(
+            "caja_turno_id", "momento", "valor", name="uq_caja_denominacion",
+        ),
+        Index("ix_caja_denominacion_turno", "caja_turno_id"),
+    )
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    caja_turno_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("caja_turno.id"), nullable=False,
+    )
+    momento = Column(String(10), nullable=False)
+    valor = Column(Numeric(12, 2), nullable=False)
+    cantidad = Column(Integer, nullable=False)
 
 class VentaORM(Base, TimestampMixin):
     __tablename__ = "venta"

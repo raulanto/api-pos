@@ -20,3 +20,8 @@ class MetodoDevolucion(str, Enum):
     TARJETA = "tarjeta"        # reverso a la tarjeta (no toca el cajón)
     CREDITO = "credito"        # baja la deuda del cliente
     MONEDERO = "monedero"      # reintegra al monedero del teléfono
+
+class TipoMovimientoCaja(str, Enum):
+    RETIRO = "retiro"          # efectivo que sale del cajón (a caja fuerte/gerencia)
+    INGRESO = "ingreso"        # efectivo que entra sin ser venta (refuerzo de fondo)
+    GASTO = "gasto"            # efectivo gastado desde el cajón (papelería, etc.)

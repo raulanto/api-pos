@@ -6,19 +6,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.ventas.application.ports.venta_repository import VentaRepository
-from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
+from app.modules.ventas.application.ports.caja_repository import (
+    CajaRepository, CajaTurnoRepository,
+)
 from app.modules.ventas.application.ports.devolucion_repository import DevolucionRepository
-from app.modules.ventas.application.dtos import FiltroVentas
+from app.modules.ventas.application.dtos import FiltroVentas, FiltroTurnos
 from app.shared.responses import Page, PageParams, Sort
 from app.modules.ventas.domain.entities import (
-    Venta, CajaTurno, Devolucion, ESTADO_TURNO_ABIERTO,
+    Venta, Caja, CajaTurno, CajaMovimiento, DenominacionConteo, Devolucion,
+    ESTADO_TURNO_ABIERTO,
 )
 from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago
 from app.modules.ventas.infrastructure.persistence.orm_models import (
-    VentaORM, CajaTurnoORM, PagoORM, DetalleVentaORM, DevolucionORM,
+    VentaORM, CajaORM, CajaTurnoORM, CajaMovimientoORM, CajaDenominacionORM,
+    PagoORM, DetalleVentaORM, DevolucionORM,
 )
 from app.modules.ventas.infrastructure.persistence.mappers import (
-    to_domain_venta, to_orm_venta, to_domain_caja_turno, to_orm_caja_turno,
+    to_domain_venta, to_orm_venta, to_domain_caja, to_orm_caja,
+    to_domain_caja_turno, to_orm_caja_turno, to_domain_movimiento_caja,
+    to_orm_movimiento_caja, to_orm_denominacion, to_domain_denominacion,
     to_orm_devolucion, to_domain_devolucion,
 )
 
@@ -183,6 +189,9 @@ class SqlAlchemyCajaTurnoRepository(CajaTurnoRepository):
                 cerrado_en=turno.cerrado_en,
                 saldo_final_declarado=turno.saldo_final_declarado,
                 diferencia=turno.diferencia,
+                nota_cierre=turno.nota_cierre,
+                conciliado_por=turno.conciliado_por,
+                conciliado_en=turno.conciliado_en,
             )
         )
         await self._db.flush()
@@ -234,3 +243,150 @@ class SqlAlchemyCajaTurnoRepository(CajaTurnoRepository):
             )
         )
         return int(total or 0)
+
+    # --- Movimientos de caja ---
+    async def registrar_movimiento(self, mov: CajaMovimiento) -> None:
+        self._db.add(to_orm_movimiento_caja(mov))
+        await self._db.flush()
+
+    async def listar_movimientos(self, turno_id: UUID) -> list[CajaMovimiento]:
+        filas = (await self._db.execute(
+            select(CajaMovimientoORM)
+            .where(CajaMovimientoORM.caja_turno_id == turno_id)
+            .order_by(CajaMovimientoORM.created_at.asc())
+        )).scalars().all()
+        return [to_domain_movimiento_caja(o) for o in filas]
+
+    async def movimientos_por_tipo(self, turno_id: UUID) -> dict[str, Decimal]:
+        filas = (await self._db.execute(
+            select(CajaMovimientoORM.tipo, func.coalesce(func.sum(CajaMovimientoORM.monto), 0))
+            .where(CajaMovimientoORM.caja_turno_id == turno_id)
+            .group_by(CajaMovimientoORM.tipo)
+        )).all()
+        return {tipo: Decimal(total) for tipo, total in filas}
+
+    async def movimientos_neto_del_turno(self, turno_id: UUID) -> Decimal:
+        por_tipo = await self.movimientos_por_tipo(turno_id)
+        return (
+            por_tipo.get("ingreso", Decimal("0"))
+            - por_tipo.get("retiro", Decimal("0"))
+            - por_tipo.get("gasto", Decimal("0"))
+        )
+
+    # --- Desglose por denominación ---
+    async def guardar_denominaciones(
+        self, turno_id: UUID, momento: str, conteos: list[DenominacionConteo]
+    ) -> None:
+        for c in conteos:
+            self._db.add(to_orm_denominacion(turno_id, momento, c))
+        await self._db.flush()
+
+    async def listar_denominaciones(
+        self, turno_id: UUID, momento: str | None = None
+    ) -> list[DenominacionConteo]:
+        cond = [CajaDenominacionORM.caja_turno_id == turno_id]
+        if momento is not None:
+            cond.append(CajaDenominacionORM.momento == momento)
+        filas = (await self._db.execute(
+            select(CajaDenominacionORM).where(*cond)
+            .order_by(CajaDenominacionORM.valor.desc())
+        )).scalars().all()
+        return [to_domain_denominacion(o) for o in filas]
+
+    # --- Histórico / dashboard ---
+    async def listar_turnos(
+        self, filtro: FiltroTurnos, paginacion: PageParams, orden: Sort
+    ) -> Page:
+        cond = []
+        if filtro.sucursal_id is not None:
+            cond.append(CajaTurnoORM.sucursal_id == filtro.sucursal_id)
+        if filtro.caja_id is not None:
+            cond.append(CajaTurnoORM.caja_id == filtro.caja_id)
+        if filtro.usuario_id is not None:
+            cond.append(CajaTurnoORM.usuario_id == filtro.usuario_id)
+        if filtro.estado is not None:
+            cond.append(CajaTurnoORM.estado == filtro.estado)
+        if filtro.desde is not None:
+            cond.append(CajaTurnoORM.abierto_en >= filtro.desde)
+        if filtro.hasta is not None:
+            cond.append(CajaTurnoORM.abierto_en <= filtro.hasta)
+
+        col = {"abierto_en": CajaTurnoORM.abierto_en, "cerrado_en": CajaTurnoORM.cerrado_en}.get(
+            orden.field, CajaTurnoORM.abierto_en
+        )
+        orden_expr = col.desc() if orden.descending else col.asc()
+
+        total = await self._db.scalar(
+            select(func.count()).select_from(CajaTurnoORM).where(*cond)
+        )
+        filas = (await self._db.execute(
+            select(CajaTurnoORM).where(*cond)
+            .order_by(orden_expr)
+            .limit(paginacion.limit).offset(paginacion.offset)
+        )).scalars().all()
+        return Page(
+            items=[to_domain_caja_turno(o) for o in filas], total=int(total or 0),
+        )
+
+    async def efectivo_en_sucursal(self, sucursal_id: UUID) -> Decimal:
+        turnos = (await self._db.execute(
+            select(CajaTurnoORM.id, CajaTurnoORM.saldo_inicial)
+            .where(
+                CajaTurnoORM.sucursal_id == sucursal_id,
+                CajaTurnoORM.estado == ESTADO_TURNO_ABIERTO,
+            )
+        )).all()
+        total = Decimal("0")
+        for turno_id, saldo_inicial in turnos:
+            efectivo = await self.total_efectivo_del_turno(turno_id)
+            dev = await self.total_devoluciones_efectivo_del_turno(turno_id)
+            neto = await self.movimientos_neto_del_turno(turno_id)
+            total += Decimal(saldo_inicial) + efectivo - dev + neto
+        return total
+
+
+class SqlAlchemyCajaRepository(CajaRepository):
+    def __init__(self, db: AsyncSession):
+        self._db = db
+
+    async def obtener_por_id(self, caja_id: UUID) -> Caja | None:
+        orm = (await self._db.execute(
+            select(CajaORM).where(CajaORM.id == caja_id)
+        )).scalar_one_or_none()
+        return to_domain_caja(orm) if orm else None
+
+    async def listar(
+        self, sucursal_id: UUID, incluir_inactivas: bool = False
+    ) -> list[Caja]:
+        cond = [CajaORM.sucursal_id == sucursal_id]
+        if not incluir_inactivas:
+            cond.append(CajaORM.activa.is_(True))
+        filas = (await self._db.execute(
+            select(CajaORM).where(*cond).order_by(CajaORM.nombre.asc())
+        )).scalars().all()
+        return [to_domain_caja(o) for o in filas]
+
+    async def guardar(self, caja: Caja) -> None:
+        self._db.add(to_orm_caja(caja))
+        await self._db.flush()
+
+    async def actualizar(self, caja: Caja) -> None:
+        await self._db.execute(
+            update(CajaORM).where(CajaORM.id == caja.id)
+            .values(nombre=caja.nombre, activa=caja.activa)
+        )
+        await self._db.flush()
+
+    async def nombre_en_uso(
+        self, sucursal_id: UUID, nombre: str, excluir_id: UUID | None = None
+    ) -> bool:
+        cond = [
+            CajaORM.sucursal_id == sucursal_id,
+            func.lower(CajaORM.nombre) == nombre.strip().lower(),
+            CajaORM.activa.is_(True),
+        ]
+        if excluir_id is not None:
+            cond.append(CajaORM.id != excluir_id)
+        return (await self._db.scalar(
+            select(func.count()).select_from(CajaORM).where(*cond)
+        )) > 0

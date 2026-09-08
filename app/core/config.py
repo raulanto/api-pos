@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 
@@ -18,6 +20,11 @@ class Settings(BaseSettings):
     # Zona horaria local del negocio: interpreta `hora_desde`/`hora_hasta` y
     # `dias_semana` de las promociones (los `momento` en BD son UTC).
     app_timezone: str = "America/Mexico_City"
+
+    # Caja: si |diferencia| del cierre >= este monto, el turno queda
+    # `cerrado_con_diferencia` y exige `nota_cierre` + conciliación de un gerente.
+    # ponytail: umbral global, no por sucursal/caja.
+    caja_diferencia_umbral: Decimal = Decimal("20.00")
 
     # --- Seed del administrador inicial (usado por la migración-seeder) ---
     seed_admin_email: str | None = None

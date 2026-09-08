@@ -40,7 +40,7 @@ async def test_abrir_turno_sucursal_inactiva():
     uc = AbrirCajaTurnoUseCase(_CajaRepo(), None, _SucRepo(_suc(activo=False)))
     with pytest.raises(SucursalNoOperativa):
         await uc.ejecutar(AbrirCajaTurnoInput(
-            sucursal_id=uuid.uuid4(), usuario_id=uuid.uuid4(),
+            sucursal_id=uuid.uuid4(), caja_id=uuid.uuid4(), usuario_id=uuid.uuid4(),
             saldo_inicial=Decimal("0"),
         ))
 
@@ -49,7 +49,7 @@ async def test_abrir_turno_permite_ventas_false():
     uc = AbrirCajaTurnoUseCase(_CajaRepo(), None, _SucRepo(_suc(permite_ventas=False)))
     with pytest.raises(SucursalNoOperativa):
         await uc.ejecutar(AbrirCajaTurnoInput(
-            sucursal_id=uuid.uuid4(), usuario_id=uuid.uuid4(),
+            sucursal_id=uuid.uuid4(), caja_id=uuid.uuid4(), usuario_id=uuid.uuid4(),
             saldo_inicial=Decimal("0"),
         ))
 
@@ -57,7 +57,7 @@ async def test_abrir_turno_permite_ventas_false():
 async def test_abrir_turno_ok_si_operativa():
     uc = AbrirCajaTurnoUseCase(_CajaRepo(), None, _SucRepo(_suc()))
     turno = await uc.ejecutar(AbrirCajaTurnoInput(
-        sucursal_id=uuid.uuid4(), usuario_id=uuid.uuid4(), saldo_inicial=Decimal("0"),
+        sucursal_id=uuid.uuid4(), caja_id=uuid.uuid4(), usuario_id=uuid.uuid4(), saldo_inicial=Decimal("0"),
     ))
     assert turno.esta_abierto
 
@@ -65,6 +65,6 @@ async def test_abrir_turno_ok_si_operativa():
 async def test_sin_sucursal_repo_no_valida():
     uc = AbrirCajaTurnoUseCase(_CajaRepo(), None, None)
     turno = await uc.ejecutar(AbrirCajaTurnoInput(
-        sucursal_id=uuid.uuid4(), usuario_id=uuid.uuid4(), saldo_inicial=Decimal("0"),
+        sucursal_id=uuid.uuid4(), caja_id=uuid.uuid4(), usuario_id=uuid.uuid4(), saldo_inicial=Decimal("0"),
     ))
     assert turno.esta_abierto

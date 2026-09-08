@@ -2,9 +2,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
-from app.modules.ventas.domain.value_objects import EstadoVenta, MetodoPago, MetodoDevolucion
+from app.modules.ventas.domain.value_objects import (
+    EstadoVenta, MetodoPago, MetodoDevolucion, TipoMovimientoCaja,
+)
 from app.modules.ventas.domain.exceptions import (
     VentaSinLineas, VentaYaCancelada, TurnoYaCerrado, DevolucionInvalida,
+    NotaCierreRequerida, MotivoMovimientoRequerido, TurnoNoRequiereConciliacion,
 )
 
 @dataclass
@@ -274,29 +277,109 @@ class Venta:
 
 ESTADO_TURNO_ABIERTO = "abierto"
 ESTADO_TURNO_CERRADO = "cerrado"
+ESTADO_TURNO_CERRADO_CON_DIFERENCIA = "cerrado_con_diferencia"
+ESTADO_TURNO_CONCILIADO = "conciliado"
+
+
+@dataclass
+class Caja:
+    """Caja física / terminal de una sucursal. Un turno se abre sobre una caja."""
+    id: UUID
+    sucursal_id: UUID
+    nombre: str
+    activa: bool = True
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @staticmethod
+    def crear(sucursal_id: UUID, nombre: str) -> "Caja":
+        nombre = (nombre or "").strip()
+        if not nombre:
+            raise ValueError("La caja necesita un nombre")
+        return Caja(id=uuid4(), sucursal_id=sucursal_id, nombre=nombre)
+
+    def renombrar(self, nombre: str) -> None:
+        nombre = (nombre or "").strip()
+        if not nombre:
+            raise ValueError("La caja necesita un nombre")
+        self.nombre = nombre
+
+    def desactivar(self) -> None:
+        self.activa = False
+
+    def reactivar(self) -> None:
+        self.activa = True
+
+
+@dataclass
+class DenominacionConteo:
+    """Un renglón del desglose por denominación (valor de la pieza × cantidad)."""
+    valor: Decimal
+    cantidad: int
+
+    @property
+    def subtotal(self) -> Decimal:
+        return self.valor * self.cantidad
+
+
+@dataclass
+class CajaMovimiento:
+    """Retiro / ingreso / gasto de efectivo durante un turno. Inmutable."""
+    id: UUID
+    caja_turno_id: UUID
+    tipo: TipoMovimientoCaja
+    monto: Decimal
+    usuario_id: UUID
+    motivo: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @staticmethod
+    def crear(caja_turno_id: UUID, tipo: TipoMovimientoCaja, monto: Decimal,
+              usuario_id: UUID, motivo: str | None = None) -> "CajaMovimiento":
+        if monto <= 0:
+            raise ValueError("El monto del movimiento debe ser mayor a 0")
+        motivo = motivo.strip() if motivo and motivo.strip() else None
+        if tipo in (TipoMovimientoCaja.RETIRO, TipoMovimientoCaja.GASTO) and not motivo:
+            raise MotivoMovimientoRequerido(
+                f"Un movimiento de tipo '{tipo.value}' necesita `motivo`."
+            )
+        return CajaMovimiento(
+            id=uuid4(), caja_turno_id=caja_turno_id, tipo=tipo, monto=monto,
+            usuario_id=usuario_id, motivo=motivo,
+        )
+
+    @property
+    def efecto(self) -> Decimal:
+        """Signo con el que impacta el efectivo esperado del turno."""
+        return self.monto if self.tipo == TipoMovimientoCaja.INGRESO else -self.monto
 
 
 @dataclass
 class CajaTurno:
     id: UUID
     sucursal_id: UUID
+    caja_id: UUID
     usuario_id: UUID
     saldo_inicial: Decimal
-    estado: str  # "abierto" | "cerrado"
+    estado: str  # "abierto" | "cerrado" | "cerrado_con_diferencia" | "conciliado"
     abierto_en: datetime
     cerrado_en: datetime | None = None
     saldo_final_declarado: Decimal | None = None
     # diferencia = saldo_final_declarado - saldo_esperado
     # (positivo => sobrante, negativo => faltante)
     diferencia: Decimal | None = None
+    nota_cierre: str | None = None
+    conciliado_por: UUID | None = None
+    conciliado_en: datetime | None = None
 
     @staticmethod
-    def abrir(sucursal_id: UUID, usuario_id: UUID, saldo_inicial: Decimal) -> "CajaTurno":
+    def abrir(sucursal_id: UUID, caja_id: UUID, usuario_id: UUID,
+              saldo_inicial: Decimal) -> "CajaTurno":
         if saldo_inicial < 0:
             raise ValueError("El saldo inicial no puede ser negativo")
         return CajaTurno(
             id=uuid4(),
             sucursal_id=sucursal_id,
+            caja_id=caja_id,
             usuario_id=usuario_id,
             saldo_inicial=saldo_inicial,
             estado=ESTADO_TURNO_ABIERTO,
@@ -307,10 +390,37 @@ class CajaTurno:
     def esta_abierto(self) -> bool:
         return self.estado == ESTADO_TURNO_ABIERTO
 
-    def cerrar(self, saldo_final_declarado: Decimal, saldo_esperado: Decimal) -> None:
+    @property
+    def requiere_conciliacion(self) -> bool:
+        return self.estado == ESTADO_TURNO_CERRADO_CON_DIFERENCIA
+
+    def cerrar(self, saldo_final_declarado: Decimal, saldo_esperado: Decimal,
+               umbral: Decimal | None = None, nota_cierre: str | None = None) -> None:
         if not self.esta_abierto:
             raise TurnoYaCerrado(f"El turno {self.id} ya está cerrado")
         self.saldo_final_declarado = saldo_final_declarado
         self.diferencia = saldo_final_declarado - saldo_esperado
-        self.estado = ESTADO_TURNO_CERRADO
+        nota_cierre = nota_cierre.strip() if nota_cierre and nota_cierre.strip() else None
+        if umbral is not None and abs(self.diferencia) >= umbral:
+            if not nota_cierre:
+                raise NotaCierreRequerida(
+                    f"El cierre tiene una diferencia de {self.diferencia}; "
+                    "explicá el motivo en `nota_cierre`."
+                )
+            self.estado = ESTADO_TURNO_CERRADO_CON_DIFERENCIA
+        else:
+            self.estado = ESTADO_TURNO_CERRADO
+        self.nota_cierre = nota_cierre
         self.cerrado_en = datetime.utcnow()
+
+    def conciliar(self, usuario_id: UUID, nota: str | None = None) -> None:
+        if not self.requiere_conciliacion:
+            raise TurnoNoRequiereConciliacion(
+                f"El turno {self.id} está '{self.estado}': no requiere conciliación."
+            )
+        self.estado = ESTADO_TURNO_CONCILIADO
+        self.conciliado_por = usuario_id
+        self.conciliado_en = datetime.utcnow()
+        nota = nota.strip() if nota and nota.strip() else None
+        if nota:
+            self.nota_cierre = f"{self.nota_cierre}\n{nota}" if self.nota_cierre else nota

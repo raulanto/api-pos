@@ -20,6 +20,9 @@ class CorteDeCajaResponse(BaseModel):
     monto_final_esperado: Decimal
     total_descuento_promo: Decimal
     total_devoluciones_efectivo: Decimal
+    total_ingresos: Decimal = Decimal("0")
+    total_retiros: Decimal = Decimal("0")
+    total_gastos: Decimal = Decimal("0")
     nota: str
 
 

@@ -1,20 +1,37 @@
 from decimal import Decimal
 
 from app.modules.ventas.domain.entities import (
-    Venta, DetalleVenta, Pago, CajaTurno, Devolucion, DevolucionLinea, PromoAplicada,
+    Venta, DetalleVenta, Pago, Caja, CajaTurno, CajaMovimiento, DenominacionConteo,
+    Devolucion, DevolucionLinea, PromoAplicada,
 )
 from app.modules.ventas.domain.value_objects import (
-    EstadoVenta, MetodoPago, MetodoDevolucion,
+    EstadoVenta, MetodoPago, MetodoDevolucion, TipoMovimientoCaja,
 )
 from app.modules.ventas.infrastructure.persistence.orm_models import (
-    VentaORM, DetalleVentaORM, DetalleVentaPromoORM, PagoORM, CajaTurnoORM,
-    DevolucionORM, DevolucionLineaORM,
+    VentaORM, DetalleVentaORM, DetalleVentaPromoORM, PagoORM, CajaORM, CajaTurnoORM,
+    CajaMovimientoORM, CajaDenominacionORM, DevolucionORM, DevolucionLineaORM,
 )
+
+
+def to_domain_caja(orm: CajaORM) -> Caja:
+    return Caja(
+        id=orm.id, sucursal_id=orm.sucursal_id, nombre=orm.nombre,
+        activa=orm.activa, created_at=orm.created_at,
+    )
+
+
+def to_orm_caja(entidad: Caja) -> CajaORM:
+    return CajaORM(
+        id=entidad.id, sucursal_id=entidad.sucursal_id, nombre=entidad.nombre,
+        activa=entidad.activa,
+    )
+
 
 def to_domain_caja_turno(orm: CajaTurnoORM) -> CajaTurno:
     return CajaTurno(
         id=orm.id,
         sucursal_id=orm.sucursal_id,
+        caja_id=orm.caja_id,
         usuario_id=orm.usuario_id,
         saldo_inicial=orm.saldo_inicial,
         estado=orm.estado,
@@ -22,6 +39,9 @@ def to_domain_caja_turno(orm: CajaTurnoORM) -> CajaTurno:
         cerrado_en=orm.cerrado_en,
         saldo_final_declarado=orm.saldo_final_declarado,
         diferencia=orm.diferencia,
+        nota_cierre=orm.nota_cierre,
+        conciliado_por=orm.conciliado_por,
+        conciliado_en=orm.conciliado_en,
     )
 
 
@@ -29,6 +49,7 @@ def to_orm_caja_turno(entidad: CajaTurno) -> CajaTurnoORM:
     return CajaTurnoORM(
         id=entidad.id,
         sucursal_id=entidad.sucursal_id,
+        caja_id=entidad.caja_id,
         usuario_id=entidad.usuario_id,
         saldo_inicial=entidad.saldo_inicial,
         estado=entidad.estado,
@@ -36,7 +57,39 @@ def to_orm_caja_turno(entidad: CajaTurno) -> CajaTurnoORM:
         cerrado_en=entidad.cerrado_en,
         saldo_final_declarado=entidad.saldo_final_declarado,
         diferencia=entidad.diferencia,
+        nota_cierre=entidad.nota_cierre,
+        conciliado_por=entidad.conciliado_por,
+        conciliado_en=entidad.conciliado_en,
     )
+
+
+def to_domain_movimiento_caja(orm: CajaMovimientoORM) -> CajaMovimiento:
+    return CajaMovimiento(
+        id=orm.id, caja_turno_id=orm.caja_turno_id,
+        tipo=TipoMovimientoCaja(orm.tipo), monto=orm.monto,
+        usuario_id=orm.usuario_id, motivo=orm.motivo, created_at=orm.created_at,
+    )
+
+
+def to_orm_movimiento_caja(entidad: CajaMovimiento) -> CajaMovimientoORM:
+    return CajaMovimientoORM(
+        id=entidad.id, caja_turno_id=entidad.caja_turno_id,
+        tipo=entidad.tipo.value, monto=entidad.monto,
+        usuario_id=entidad.usuario_id, motivo=entidad.motivo,
+    )
+
+
+def to_orm_denominacion(
+    turno_id, momento: str, conteo: DenominacionConteo,
+) -> CajaDenominacionORM:
+    return CajaDenominacionORM(
+        caja_turno_id=turno_id, momento=momento,
+        valor=conteo.valor, cantidad=conteo.cantidad,
+    )
+
+
+def to_domain_denominacion(orm: CajaDenominacionORM) -> DenominacionConteo:
+    return DenominacionConteo(valor=orm.valor, cantidad=orm.cantidad)
 
 def to_orm_venta(entidad: Venta) -> VentaORM:
     orm = VentaORM(

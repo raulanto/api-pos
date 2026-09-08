@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import (
     require_permission, UsuarioAutenticado, sucursal_scope, verificar_alcance_sucursal,
@@ -13,7 +14,7 @@ from app.shared.responses import (
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
-from app.modules.ventas.application.dtos import FiltroVentas
+from app.modules.ventas.application.dtos import FiltroVentas, FiltroTurnos
 from app.modules.ventas.domain.value_objects import EstadoVenta
 from app.modules.ventas.domain import exceptions as vexc
 from app.modules.clientes.domain.exceptions import (
@@ -37,6 +38,9 @@ from app.modules.ventas.infrastructure.api.schemas import (
     DevolverVentaRequest, DevolucionResponse,
     CuponValidarRequest, CuponValidacionResponse,
     AbrirCajaTurnoRequest, CerrarCajaTurnoRequest, CajaTurnoResponse, ResumenTurnoResponse,
+    CajaCreateRequest, CajaRenameRequest, CajaResponse,
+    MovimientoCajaRequest, MovimientoCajaResponse, ConciliarTurnoRequest,
+    DenominacionResponse, TurnoListItem, EfectivoSucursalResponse,
 )
 from app.modules.ventas.application.use_cases.crear_venta import (
     CrearVentaUseCase, CrearVentaInput, CotizarVentaInput, LineaInput, PagoInput,
@@ -51,14 +55,24 @@ from app.modules.ventas.application.use_cases.gestionar_caja import (
     AbrirCajaTurnoUseCase, AbrirCajaTurnoInput,
     CerrarCajaTurnoUseCase, CerrarCajaTurnoInput,
     ObtenerTurnoActualUseCase, ObtenerResumenTurnoUseCase,
+    RegistrarMovimientoCajaUseCase, RegistrarMovimientoCajaInput,
+    ListarMovimientosCajaUseCase, ConciliarTurnoUseCase, ConciliarTurnoInput,
+    ListarTurnosUseCase, EfectivoEnSucursalUseCase,
 )
+from app.modules.ventas.application.use_cases.gestionar_terminales import (
+    CrearCajaUseCase, CrearCajaInput, ListarCajasUseCase,
+    RenombrarCajaUseCase, DesactivarCajaUseCase, ReactivarCajaUseCase,
+    NombreCajaEnUso,
+)
+from app.modules.ventas.domain.entities import DenominacionConteo
 from app.modules.ventas.application.use_cases.listar_ventas import (
     ListarVentasUseCase, ObtenerVentaUseCase,
 )
 from app.modules.ventas.application.use_cases.generar_ticket import GenerarTicketUseCase
 from app.modules.ventas.infrastructure.pdf.ticket_pdf import render_ticket_pdf
 from app.modules.ventas.infrastructure.persistence.repositories_impl import (
-    SqlAlchemyVentaRepository, SqlAlchemyCajaTurnoRepository, SqlAlchemyDevolucionRepository,
+    SqlAlchemyVentaRepository, SqlAlchemyCajaTurnoRepository, SqlAlchemyCajaRepository,
+    SqlAlchemyDevolucionRepository,
 )
 from app.modules.clientes.infrastructure.persistence.cliente_repository_impl import (
     SqlAlchemyClienteRepository,
@@ -79,9 +93,11 @@ from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl 
 
 router = APIRouter(route_class=EnvelopeRoute)
 caja_router = APIRouter(route_class=EnvelopeRoute)
+cajas_router = APIRouter(route_class=EnvelopeRoute)
 
 _ORDEN_VENTAS = make_sort_dependency({"created_at"}, "created_at:desc")
 _INC_VENTAS = make_include_dependency({"cliente", "usuario", "caja_turno"})
+_ORDEN_TURNOS = make_sort_dependency({"abierto_en", "cerrado_en"}, "abierto_en:desc")
 
 
 # --------------------------------------------------------------------------- #
@@ -89,15 +105,16 @@ _INC_VENTAS = make_include_dependency({"cliente", "usuario", "caja_turno"})
 # --------------------------------------------------------------------------- #
 _NOT_FOUND = (
     vexc.VentaNoEncontrada, vexc.TurnoNoEncontrado, ClienteNoEncontrado,
-    ProductoNoEncontrado, CuponNoEncontrado,
+    ProductoNoEncontrado, CuponNoEncontrado, vexc.CajaNoEncontrada,
 )
 _CONFLICT = (
     vexc.VentaYaCancelada, vexc.TurnoYaAbierto, vexc.TurnoYaCerrado,
-    vexc.SucursalNoOperativa, CuponAgotado,
+    vexc.SucursalNoOperativa, CuponAgotado, vexc.CajaInactiva,
+    vexc.TurnoNoRequiereConciliacion, vexc.MovimientoTurnoCerrado, NombreCajaEnUso,
 )
 _FORBIDDEN = (
     vexc.AnulacionNoPermitida, vexc.CierreTurnoNoPermitido,
-    vexc.DescuentoManualNoAutorizado,
+    vexc.DescuentoManualNoAutorizado, vexc.ConciliacionNoPermitida,
 )
 _BAD_REQUEST = (
     vexc.CajaNoAbierta, vexc.VentaCreditoSinCliente, vexc.VentaSinLineas,
@@ -106,6 +123,7 @@ _BAD_REQUEST = (
     vexc.VentaNoDevolvible, vexc.CantidadDevolucionExcedida, vexc.DevolucionInvalida,
     SaldoMonederoInsuficiente, MovimientoMonederoInvalido, CuponVencido,
     vexc.DescuentoManualExcedeTope, vexc.MotivoDescuentoRequerido,
+    vexc.NotaCierreRequerida, vexc.MotivoMovimientoRequerido, vexc.DenominacionNoCuadra,
 )
 
 
@@ -137,6 +155,10 @@ def _exige_sucursal(actual: UsuarioAutenticado) -> UUID:
             status.HTTP_400_BAD_REQUEST, detail="El usuario no tiene una sucursal asignada"
         )
     return actual.sucursal_id
+
+
+def _denominacion(d) -> DenominacionConteo:
+    return DenominacionConteo(valor=d.valor, cantidad=d.cantidad)
 
 
 def _venta_use_case(db: AsyncSession) -> CrearVentaUseCase:
@@ -414,7 +436,93 @@ async def ticket_pdf(
 
 
 # ========================================================================== #
-# CAJA
+# CAJAS FÍSICAS (terminales) — /api/v1/cajas
+# ========================================================================== #
+@cajas_router.post(
+    "/", response_model=ApiResponse[CajaResponse], status_code=status.HTTP_201_CREATED,
+)
+async def crear_caja(
+    body: CajaCreateRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.administrar")),
+):
+    sucursal_id = _exige_sucursal(actual)
+    try:
+        caja = await CrearCajaUseCase(SqlAlchemyCajaRepository(db)).ejecutar(
+            CrearCajaInput(sucursal_id=sucursal_id, nombre=body.nombre)
+        )
+    except Exception as e:
+        raise _traducir(e)
+    return ok(caja)
+
+
+@cajas_router.get("/", response_model=ApiResponse[list[CajaResponse]])
+async def listar_cajas(
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "caja.administrar")),
+    sucursal_id: UUID | None = Query(default=None),
+    incluir_inactivas: bool = Query(default=False),
+):
+    efectiva = _sucursal_efectiva(actual, sucursal_id) or _exige_sucursal(actual)
+    cajas = await ListarCajasUseCase(SqlAlchemyCajaRepository(db)).ejecutar(
+        efectiva, incluir_inactivas,
+    )
+    return ok(cajas)
+
+
+@cajas_router.patch("/{caja_id}", response_model=ApiResponse[CajaResponse])
+async def renombrar_caja(
+    caja_id: UUID,
+    body: CajaRenameRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.administrar")),
+):
+    try:
+        caja = await RenombrarCajaUseCase(SqlAlchemyCajaRepository(db)).ejecutar(
+            caja_id, body.nombre,
+        )
+        verificar_alcance_sucursal(actual, caja.sucursal_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _traducir(e)
+    return ok(caja)
+
+
+@cajas_router.delete("/{caja_id}", response_model=ApiResponse[CajaResponse])
+async def desactivar_caja(
+    caja_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.administrar")),
+):
+    try:
+        caja = await DesactivarCajaUseCase(SqlAlchemyCajaRepository(db)).ejecutar(caja_id)
+        verificar_alcance_sucursal(actual, caja.sucursal_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _traducir(e)
+    return ok(caja)
+
+
+@cajas_router.patch("/{caja_id}/reactivar", response_model=ApiResponse[CajaResponse])
+async def reactivar_caja(
+    caja_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.administrar")),
+):
+    try:
+        caja = await ReactivarCajaUseCase(SqlAlchemyCajaRepository(db)).ejecutar(caja_id)
+        verificar_alcance_sucursal(actual, caja.sucursal_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _traducir(e)
+    return ok(caja)
+
+
+# ========================================================================== #
+# CAJA — turnos, movimientos, arqueo — /api/v1/caja-turnos
 # ========================================================================== #
 @caja_router.post(
     "/abrir", response_model=ApiResponse[CajaTurnoResponse], status_code=status.HTTP_201_CREATED,
@@ -428,30 +536,13 @@ async def abrir_turno(
     try:
         turno = await AbrirCajaTurnoUseCase(
             SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db),
-            SqlAlchemySucursalRepository(db),
+            SqlAlchemySucursalRepository(db), SqlAlchemyCajaRepository(db),
         ).ejecutar(AbrirCajaTurnoInput(
-            sucursal_id=sucursal_id, usuario_id=actual.id, saldo_inicial=body.saldo_inicial,
-        ))
-    except Exception as e:
-        raise _traducir(e)
-    return ok(turno)
-
-
-@caja_router.post("/{turno_id}/cerrar", response_model=ApiResponse[CajaTurnoResponse])
-async def cerrar_turno(
-    turno_id: UUID,
-    body: CerrarCajaTurnoRequest,
-    db: AsyncSession = Depends(get_db),
-    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "ventas.crear")),
-):
-    try:
-        turno = await CerrarCajaTurnoUseCase(
-            SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db)
-        ).ejecutar(CerrarCajaTurnoInput(
-            caja_turno_id=turno_id,
-            usuario_id=actual.id,
-            saldo_final_declarado=body.saldo_final_declarado,
-            puede_cerrar_ajeno=actual.ve_todas_las_sucursales,
+            sucursal_id=sucursal_id, caja_id=body.caja_id, usuario_id=actual.id,
+            saldo_inicial=body.saldo_inicial,
+            denominaciones=[
+                _denominacion(d) for d in body.denominaciones
+            ] or None,
         ))
     except Exception as e:
         raise _traducir(e)
@@ -473,6 +564,134 @@ async def turno_actual(
     return ok(turno)
 
 
+@caja_router.get("/historico", response_model=ApiResponse[list[TurnoListItem]])
+async def historico_turnos(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.ver_historico")),
+    sucursal_id: UUID | None = Query(default=None),
+    caja_id: UUID | None = Query(default=None),
+    usuario_id: UUID | None = Query(default=None, description="Diferencias por cajero"),
+    estado: str | None = Query(default=None),
+    desde: datetime | None = Query(default=None),
+    hasta: datetime | None = Query(default=None),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_TURNOS),
+):
+    efectiva = _sucursal_efectiva(actual, sucursal_id)
+    filtro = FiltroTurnos(
+        sucursal_id=efectiva, caja_id=caja_id, usuario_id=usuario_id,
+        estado=estado, desde=desde, hasta=hasta,
+    )
+    pagina = await ListarTurnosUseCase(SqlAlchemyCajaTurnoRepository(db)).ejecutar(
+        filtro, paginacion, orden,
+    )
+    pagina.items = [TurnoListItem.model_validate(t) for t in pagina.items]
+    return page_response(
+        request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
+    )
+
+
+@caja_router.get("/efectivo-actual", response_model=ApiResponse[EfectivoSucursalResponse])
+async def efectivo_actual(
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.ver_historico")),
+    sucursal_id: UUID | None = Query(default=None),
+):
+    efectiva = _sucursal_efectiva(actual, sucursal_id) or _exige_sucursal(actual)
+    total = await EfectivoEnSucursalUseCase(SqlAlchemyCajaTurnoRepository(db)).ejecutar(efectiva)
+    return ok(EfectivoSucursalResponse(sucursal_id=efectiva, efectivo_esperado=total))
+
+
+@caja_router.post("/{turno_id}/cerrar", response_model=ApiResponse[CajaTurnoResponse])
+async def cerrar_turno(
+    turno_id: UUID,
+    body: CerrarCajaTurnoRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "ventas.crear")),
+):
+    try:
+        turno = await CerrarCajaTurnoUseCase(
+            SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db),
+            umbral=settings.caja_diferencia_umbral,
+        ).ejecutar(CerrarCajaTurnoInput(
+            caja_turno_id=turno_id,
+            usuario_id=actual.id,
+            saldo_final_declarado=body.saldo_final_declarado,
+            nota_cierre=body.nota_cierre,
+            denominaciones=[_denominacion(d) for d in body.denominaciones] or None,
+            puede_cerrar_ajeno=actual.tiene_permiso("caja.forzar_cierre"),
+        ))
+    except Exception as e:
+        raise _traducir(e)
+    return ok(turno)
+
+
+@caja_router.post(
+    "/{turno_id}/movimientos", response_model=ApiResponse[MovimientoCajaResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def registrar_movimiento(
+    turno_id: UUID,
+    body: MovimientoCajaRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar")),
+):
+    try:
+        mov = await RegistrarMovimientoCajaUseCase(
+            SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db),
+        ).ejecutar(RegistrarMovimientoCajaInput(
+            caja_turno_id=turno_id,
+            usuario_id=actual.id,
+            tipo=body.tipo,
+            monto=body.monto,
+            motivo=body.motivo,
+            puede_operar_ajeno=actual.tiene_permiso("caja.forzar_cierre"),
+        ))
+    except Exception as e:
+        raise _traducir(e)
+    return ok(mov)
+
+
+@caja_router.get(
+    "/{turno_id}/movimientos", response_model=ApiResponse[list[MovimientoCajaResponse]],
+)
+async def listar_movimientos(
+    turno_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "ventas.leer")),
+):
+    try:
+        movs = await ListarMovimientosCajaUseCase(SqlAlchemyCajaTurnoRepository(db)).ejecutar(turno_id)
+    except Exception as e:
+        raise _traducir(e)
+    return ok(movs)
+
+
+@caja_router.post("/{turno_id}/conciliar", response_model=ApiResponse[CajaTurnoResponse])
+async def conciliar_turno(
+    turno_id: UUID,
+    body: ConciliarTurnoRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("caja.autorizar_diferencia")),
+):
+    try:
+        turno = await ConciliarTurnoUseCase(
+            SqlAlchemyCajaTurnoRepository(db), EventPortImpl(db),
+        ).ejecutar(ConciliarTurnoInput(
+            caja_turno_id=turno_id,
+            usuario_id=actual.id,
+            puede_conciliar=actual.tiene_permiso("caja.autorizar_diferencia"),
+            nota=body.nota,
+        ))
+        verificar_alcance_sucursal(actual, turno.sucursal_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _traducir(e)
+    return ok(turno)
+
+
 @caja_router.get("/{turno_id}", response_model=ApiResponse[ResumenTurnoResponse])
 async def resumen_turno(
     turno_id: UUID,
@@ -489,5 +708,17 @@ async def resumen_turno(
         total_efectivo=resumen.total_efectivo,
         total_devoluciones_efectivo=resumen.total_devoluciones_efectivo,
         cantidad_ventas=resumen.cantidad_ventas,
+        total_ingresos=resumen.total_ingresos,
+        total_retiros=resumen.total_retiros,
+        total_gastos=resumen.total_gastos,
+        movimientos_neto=resumen.movimientos_neto,
         saldo_esperado=resumen.saldo_esperado,
+        denominaciones_apertura=[
+            DenominacionResponse(valor=d.valor, cantidad=d.cantidad)
+            for d in resumen.denominaciones_apertura
+        ],
+        denominaciones_cierre=[
+            DenominacionResponse(valor=d.valor, cantidad=d.cantidad)
+            for d in resumen.denominaciones_cierre
+        ],
     ))

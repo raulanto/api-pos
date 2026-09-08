@@ -25,7 +25,7 @@ from app.modules.clientes.infrastructure.persistence.orm_models import (
     ClienteORM, MonederoCuentaORM, MonederoMovimientoORM,
 )
 from app.modules.promociones.infrastructure.persistence.orm_models import PromocionORM, PromocionObjetivoORM, PromocionSucursalORM, CuponORM, CuponUsoORM
-from app.modules.ventas.infrastructure.persistence.orm_models import VentaORM, DetalleVentaORM, DetalleVentaPromoORM, PagoORM, CajaTurnoORM, DevolucionORM, DevolucionLineaORM, DescuentoManualLimiteORM
+from app.modules.ventas.infrastructure.persistence.orm_models import VentaORM, DetalleVentaORM, DetalleVentaPromoORM, PagoORM, CajaORM, CajaTurnoORM, CajaMovimientoORM, CajaDenominacionORM, DevolucionORM, DevolucionLineaORM, DescuentoManualLimiteORM
 from app.modules.auditoria.infrastructure.persistence.orm_models import LogAuditoriaORM
 
 target_metadata = Base.metadata

@@ -18,10 +18,15 @@ class CorteDeCajaOutput:
     total_tarjeta: Decimal
     total_transferencia: Decimal
     total_credito: Decimal
-    monto_final_esperado: Decimal  # = monto_inicial + total_efectivo - total_devoluciones_efectivo
+    # = monto_inicial + total_efectivo - total_devoluciones_efectivo
+    #   + total_ingresos - total_retiros - total_gastos
+    monto_final_esperado: Decimal
     total_monedero: Decimal = Decimal("0")  # pagos con monedero del turno (no es efectivo)
     total_descuento_promo: Decimal = Decimal("0")  # descuentos por promoción del turno
     total_devoluciones_efectivo: Decimal = Decimal("0")  # devoluciones en efectivo del turno
+    total_ingresos: Decimal = Decimal("0")   # movimientos de caja tipo ingreso
+    total_retiros: Decimal = Decimal("0")    # movimientos de caja tipo retiro
+    total_gastos: Decimal = Decimal("0")     # movimientos de caja tipo gasto
     nota: str = NOTA_ARQUEO
 
 

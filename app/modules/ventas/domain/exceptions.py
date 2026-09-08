@@ -18,12 +18,21 @@ class SucursalNoOperativa(Exception):
     abrir turno de caja ni registrar ventas ahí."""
     pass
 
+# --- Caja física (terminal) ---
+class CajaNoEncontrada(Exception):
+    """No existe la caja/terminal, o no pertenece a la sucursal."""
+    pass
+
+class CajaInactiva(Exception):
+    """La caja/terminal está desactivada: no se puede abrir un turno ahí."""
+    pass
+
 # --- Turno de caja ---
 class TurnoNoEncontrado(Exception):
     pass
 
 class TurnoYaAbierto(Exception):
-    """El usuario ya tiene un turno de caja abierto."""
+    """El usuario (o la terminal) ya tiene un turno de caja abierto."""
     pass
 
 class TurnoYaCerrado(Exception):
@@ -34,7 +43,31 @@ class TurnoDeOtraSucursal(Exception):
     pass
 
 class CierreTurnoNoPermitido(Exception):
-    """Sólo el dueño del turno (o un rol global) puede cerrarlo."""
+    """Sólo el dueño del turno (o `caja.forzar_cierre`) puede cerrarlo."""
+    pass
+
+class NotaCierreRequerida(Exception):
+    """El cierre dejó |diferencia| >= umbral y no vino `nota_cierre`."""
+    pass
+
+class MovimientoTurnoCerrado(Exception):
+    """Se intentó registrar un retiro/ingreso/gasto en un turno no abierto."""
+    pass
+
+class MotivoMovimientoRequerido(Exception):
+    """Un retiro o gasto necesita `motivo`."""
+    pass
+
+class DenominacionNoCuadra(Exception):
+    """La suma del desglose por denominación no coincide con el saldo declarado."""
+    pass
+
+class TurnoNoRequiereConciliacion(Exception):
+    """Se pidió conciliar un turno que no está `cerrado_con_diferencia`."""
+    pass
+
+class ConciliacionNoPermitida(Exception):
+    """Falta el permiso `caja.autorizar_diferencia`."""
     pass
 
 # --- Anulación ---

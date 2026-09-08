@@ -23,7 +23,7 @@ TEL = "5550001111"
 class _CajaRepo:
     async def obtener_por_id(self, tid):
         return CajaTurno(
-            id=tid, sucursal_id=SUC, usuario_id=uuid.uuid4(),
+            id=tid, sucursal_id=SUC, caja_id=uuid.uuid4(), usuario_id=uuid.uuid4(),
             saldo_inicial=Decimal("0"), estado=ESTADO_TURNO_ABIERTO,
             abierto_en=datetime.now(timezone.utc),
         )
