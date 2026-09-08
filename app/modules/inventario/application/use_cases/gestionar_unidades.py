@@ -96,6 +96,8 @@ class AgregarUnidadInput:
     factor: Decimal | None = None
     unidades_por_base: Decimal | None = None
     codigo_barras: str | None = None
+    monedero_pct: Decimal | None = None
+    monedero_monto: Decimal | None = None
 
 
 class AgregarUnidadUseCase:
@@ -122,6 +124,8 @@ class AgregarUnidadUseCase:
             factor=factor,
             precio_venta=data.precio_venta,
             codigo_barras=codigo,
+            monedero_pct=data.monedero_pct,
+            monedero_monto=data.monedero_monto,
         )
         await self._repo.crear(unidad)
         return unidad
@@ -139,6 +143,9 @@ class ActualizarUnidadInput:
     precio_venta: Decimal | None = None
     codigo_barras: str | None = None
     cambiar_codigo_barras: bool = False
+    monedero_pct: Decimal | None = None
+    monedero_monto: Decimal | None = None
+    cambiar_monedero: bool = False
 
 
 class ActualizarUnidadUseCase:
@@ -178,6 +185,9 @@ class ActualizarUnidadUseCase:
             precio_venta=data.precio_venta,
             codigo_barras=data.codigo_barras.strip() if data.codigo_barras else None,
             cambiar_codigo_barras=data.cambiar_codigo_barras,
+            monedero_pct=data.monedero_pct,
+            monedero_monto=data.monedero_monto,
+            cambiar_monedero=data.cambiar_monedero,
         )
         await self._repo.actualizar(unidad)
         return unidad

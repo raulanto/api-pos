@@ -74,6 +74,12 @@ class SqlAlchemyVentaRepository(VentaRepository):
         )
         await self._db.flush()
 
+    async def registrar_monedero_generado(self, venta_id: UUID, monto) -> None:
+        await self._db.execute(
+            update(VentaORM).where(VentaORM.id == venta_id).values(monedero_generado=monto)
+        )
+        await self._db.flush()
+
     async def registrar_devolucion(self, venta: Venta) -> None:
         await self._db.execute(
             update(VentaORM).where(VentaORM.id == venta.id).values(estado=venta.estado.value)
@@ -100,6 +106,8 @@ class SqlAlchemyVentaRepository(VentaRepository):
             condiciones.append(VentaORM.caja_turno_id == filtro.caja_turno_id)
         if filtro.cliente_id is not None:
             condiciones.append(VentaORM.cliente_id == filtro.cliente_id)
+        if filtro.telefono is not None:
+            condiciones.append(VentaORM.telefono == filtro.telefono.strip())
         if filtro.estado is not None:
             condiciones.append(VentaORM.estado == filtro.estado.value)
         if filtro.desde is not None:

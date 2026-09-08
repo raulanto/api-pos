@@ -79,6 +79,8 @@ async def agregar_unidad(
                 factor=body.factor,
                 unidades_por_base=body.unidades_por_base,
                 codigo_barras=body.codigo_barras,
+                monedero_pct=body.monedero_pct,
+                monedero_monto=body.monedero_monto,
             )
         )
     except Exception as e:
@@ -109,6 +111,9 @@ async def actualizar_unidad(
                 precio_venta=body.precio_venta,
                 codigo_barras=body.codigo_barras,
                 cambiar_codigo_barras=body.cambiar_codigo_barras,
+                monedero_pct=body.monedero_pct,
+                monedero_monto=body.monedero_monto,
+                cambiar_monedero=body.cambiar_monedero,
             )
         )
     except Exception as e:

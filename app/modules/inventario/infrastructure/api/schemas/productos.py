@@ -39,6 +39,10 @@ class CrearProductoRequest(BaseModel):
     precio_mayoreo: Optional[Decimal] = Field(default=None, ge=0)
     cantidad_minima_mayoreo: Optional[Decimal] = Field(default=None, gt=0)
     es_sobre_pedido: bool = False
+    # Monedero (cashback): si `monedero_pct` (0-100) se genera % del subtotal de
+    # la línea; si no, `monedero_monto` fijo por unidad. Nulos = no genera.
+    monedero_pct: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    monedero_monto: Optional[Decimal] = Field(default=None, ge=0)
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     descripcion: Optional[str] = None
 
@@ -75,6 +79,10 @@ class ActualizarProductoRequest(BaseModel):
     cantidad_minima_mayoreo: Optional[Decimal] = Field(default=None, gt=0)
     # Mandar `cambiar_mayoreo=true` para fijar/limpiar el par mayoreo (ambos a NULL si no vienen).
     cambiar_mayoreo: bool = False
+    monedero_pct: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    monedero_monto: Optional[Decimal] = Field(default=None, ge=0)
+    # Mandar `cambiar_monedero=true` para fijar/limpiar la config de monedero.
+    cambiar_monedero: bool = False
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     cambiar_codigo_barras: bool = False
     # Para dejar `descripcion` en NULL hay que mandarlo explícitamente.
@@ -136,6 +144,8 @@ class ProductoResponse(EmbeddableModel):
     precio_mayoreo: Optional[Decimal] = None
     cantidad_minima_mayoreo: Optional[Decimal] = None
     es_sobre_pedido: bool = False
+    monedero_pct: Optional[Decimal] = None
+    monedero_monto: Optional[Decimal] = None
     activo: bool
     # Siempre presente (no depende de `?include=`): la imagen de portada del
     # producto, o null si no tiene ninguna marcada como principal.
@@ -194,6 +204,9 @@ class AgregarUnidadRequest(BaseModel):
     factor: Optional[Decimal] = Field(default=None, gt=0)
     unidades_por_base: Optional[Decimal] = Field(default=None, gt=0)
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
+    # Monedero propio de la presentación (sobreescribe el del producto).
+    monedero_pct: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    monedero_monto: Optional[Decimal] = Field(default=None, ge=0)
 
 
 class ActualizarUnidadRequest(BaseModel):
@@ -205,6 +218,10 @@ class ActualizarUnidadRequest(BaseModel):
     precio_venta: Optional[Decimal] = Field(default=None, ge=0)
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     cambiar_codigo_barras: bool = False
+    monedero_pct: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    monedero_monto: Optional[Decimal] = Field(default=None, ge=0)
+    # Mandar `cambiar_monedero=true` para fijar/limpiar la config de monedero.
+    cambiar_monedero: bool = False
 
 
 class UnidadResponse(BaseModel):
@@ -217,6 +234,8 @@ class UnidadResponse(BaseModel):
     unidades_por_base: Optional[Decimal] = None
     precio_venta: Decimal
     codigo_barras: Optional[str]
+    monedero_pct: Optional[Decimal] = None
+    monedero_monto: Optional[Decimal] = None
     activo: bool
 
 

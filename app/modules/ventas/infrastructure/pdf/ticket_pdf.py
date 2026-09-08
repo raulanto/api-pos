@@ -75,6 +75,14 @@ def render_ticket_pdf(data: TicketData) -> bytes:
     if data.total_devuelto > 0:
         filas.append(("Devuelto", _money(data.total_devuelto), _F))
 
+    if data.telefono:
+        sep()
+        filas.append((f"Monedero {data.telefono}", "", _FS))
+        if data.monedero_usado > 0:
+            filas.append(("  Usado", f"-{_money(data.monedero_usado)}", _FS))
+        if data.monedero_generado > 0:
+            filas.append(("  Acumulado", f"+{_money(data.monedero_generado)}", _FS))
+
     sep()
     filas.append(("Gracias por su compra", "", _FS))
 

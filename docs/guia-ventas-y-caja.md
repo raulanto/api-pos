@@ -82,8 +82,9 @@ Sirve tanto para un turno abierto (ver cómo va) como cerrado (revisar el cierre
 > entran en `saldo_esperado` — esos montos no están físicamente en el cajón. Las
 > **devoluciones en efectivo** sí lo bajan (salió plata del cajón).
 
-Para el **corte completo** del turno (desglose por método de pago +
-`total_descuento_promo` de las promociones + `total_devoluciones_efectivo`):
+Para el **corte completo** del turno (desglose por método de pago —incl.
+`total_monedero`— + `total_descuento_promo` de las promociones +
+`total_devoluciones_efectivo`):
 `GET /api/v1/reportes/corte-caja/{turno_id}` (permiso `reportes.leer`).
 
 ### 1.4 Cerrar turno
@@ -105,6 +106,40 @@ POST /api/v1/caja-turnos/{turno_id}/cerrar
 ---
 
 ## Parte 2 — Ventas
+
+### 2.0 Catálogo de productos para el POS
+
+No hay endpoint propio de "productos para vender": el buscador del POS usa el de
+inventario con este preset.
+
+```
+GET /api/v1/inventario/productos
+    ?activo=true
+    &sucursal_id=<suc del cajero>        // sólo productos con existencia ahí
+    &q=<texto>                           // busca en nombre, sku y código de barras
+    &include=unidades,existencias
+    &page=1&page_size=50
+```
+
+Permiso `inventario.leer` (el rol `cajero` ya lo tiene). Devuelve cada producto
+con:
+
+- `precio_venta`, `impuesto_tasa`, `precio_incluye_impuesto`, `tipo`,
+  `permite_venta_fraccionada`, `incremento_minimo_venta`, `precio_mayoreo` /
+  `cantidad_minima_mayoreo`.
+- `imagen_principal` (portada del producto, prefirmada).
+- `unidades[]`: las presentaciones (reja, six-pack…), cada una con su `id`
+  (`producto_unidad_id` para la línea de venta), `factor`, `precio_venta`,
+  `codigo_barras` y su propia `imagen_principal`.
+- `existencias[]`: stock por sucursal (acotado a `sucursal_id`).
+
+**Escaneo de código de barras:** `GET /api/v1/inventario/productos/buscar?codigo_barras=…`
+(producto) y `GET /api/v1/inventario/productos/resolver-codigo?codigo_barras=…`
+(resuelve si el código es de una presentación y te da `unidad_id` + `factor` +
+`precio_venta`). Ambos con permiso `inventario.leer`.
+
+**Precio final** (con mayoreo y promociones aplicados según la cantidad): no lo
+da el catálogo, lo da `POST /ventas/cotizar` (ver 2.4).
 
 ### 2.1 Registrar una venta
 
@@ -140,7 +175,12 @@ Permiso: `ventas.crear`. La **sucursal** sale del usuario autenticado.
 > cambia (el cambio vuelve al cliente, no queda en el cajón → el arqueo no se toca).
 
 **Métodos de pago:** `efectivo`, `tarjeta_credito`, `tarjeta_debito`,
-`transferencia`, `credito`.
+`transferencia`, `credito`, `monedero` (ver 2.12).
+
+> **`telefono`** (opcional, string): registra la compra para el **historial por
+> teléfono** (`GET /ventas/?telefono=…`) y habilita el **monedero** (cashback).
+> **No** obliga a registrar un `cliente` ni tiene nada que ver con el crédito.
+> Es obligatorio sólo si algún pago usa `metodo_pago="monedero"`.
 
 ### 2.2 Cómo se calcula el total
 
@@ -275,7 +315,8 @@ GET /api/v1/ventas/{venta_id}?include=cliente,usuario,caja_turno
 ```
 
 Permiso: `ventas.leer`. Un usuario con rol **de sucursal** sólo ve las de su
-sucursal (aunque pida otra). `estado` ∈ `pagada` · `pendiente_pago` · `cancelada`.
+sucursal (aunque pida otra). `estado` ∈ `pagada` · `pendiente_pago` · `cancelada`
+· `devuelta_parcial` · `devuelta_total`.
 
 Cada venta trae `total_promociones` (suma de `promo_descuento` de sus líneas) y
 cada línea `promo_descuento` + `promo_etiqueta`, para el ticket ("Ahorraste $X").
@@ -364,7 +405,59 @@ La app lo puede pintar directo (visor de PDF / `<embed>` / imprimir).
 Incluye: sucursal (nombre, dirección, teléfono), folio + fecha, estado, cliente
 (si es a crédito), líneas con cantidad × precio − descuento (y la etiqueta de la
 promo), subtotal / promociones / total, y por cada pago el método, el **recibido**
-y el **cambio**. Si la venta tiene saldo pendiente o devoluciones, también.
+y el **cambio**. Si la venta tiene saldo pendiente o devoluciones, también. Si hay
+`telefono`, muestra el monedero **usado** y **acumulado**.
+
+### 2.12 Monedero electrónico (cashback por teléfono)
+
+Un **monedero** es un saldo asociado a un **teléfono** (tabla propia, no es un
+`cliente`). Se llena solo con las compras y se puede gastar en compras futuras.
+
+**Cómo se genera.** Cada producto / presentación puede configurar (en el módulo
+de inventario) `monedero_pct` (% del subtotal de la línea) o `monedero_monto`
+(fijo por unidad). Al vender **con `telefono`**, el backend suma lo que generó
+cada línea y lo acredita al monedero de ese teléfono; lo congela en
+`venta.monedero_generado`. La presentación, si tiene alguno de los dos, manda
+sobre el del producto. `POST /ventas/cotizar` devuelve `monedero_a_generar` para
+mostrarlo antes de cobrar. (Una venta a **crédito** también acumula al momento.)
+
+**Cómo se gasta.** Un pago más en `pagos[]` con `metodo_pago:"monedero"`:
+
+```
+POST /api/v1/ventas/
+{
+  "caja_turno_id": "…",
+  "telefono": "5550001234",            // obligatorio si se paga con monedero
+  "lineas": [ … ],
+  "pagos": [
+    { "monto": 20.00, "metodo_pago": "monedero" },
+    { "monto": 80.00, "metodo_pago": "efectivo" }
+  ]
+}
+```
+
+- El saldo se bloquea (`FOR UPDATE`) y se descuenta en la misma transacción. Si
+  no alcanza → 400 `SaldoMonederoInsuficiente` y **la venta no se crea**.
+- Sin `telefono` → 400 `MovimientoMonederoInvalido`.
+- No es efectivo: **no** entra en el arqueo (`saldo_esperado`). En el corte de
+  caja aparece como `total_monedero` aparte.
+- En la venta quedan `monedero_usado` (Σ pagos monedero) y `monedero_generado`.
+
+**Consultar / ajustar** (`/api/v1/clientes/monedero/...`):
+
+| Método | Ruta | Permiso | Qué hace |
+|---|---|---|---|
+| GET | `/monedero/{telefono}` | `clientes.leer` | Saldo actual (404 si el teléfono no tiene monedero) |
+| GET | `/monedero/{telefono}/movimientos` | `clientes.leer` | Ledger paginado (historial: acumulación / consumo / reversos / ajuste) |
+| POST | `/monedero/{telefono}/ajustar` | `monedero.ajustar` | `{ monto: ±N, motivo }` — carga saldo inicial o corrige (crea la cuenta si no existe; no deja saldo negativo) |
+
+**Anular / devolver.**
+
+- **Anular** una venta con monedero revierte todo: quita lo acumulado (con tope
+  al saldo actual, por si ya se gastó) y reintegra lo que se pagó con monedero.
+- **Devolución** (2.10) acepta `metodo_devolucion:"monedero"` → reintegra
+  `monto_devuelto` al monedero del teléfono de la venta. (No prorratea ni quita
+  la acumulación que generó esa línea.)
 
 ---
 
@@ -386,7 +479,8 @@ y el **cambio**. Si la venta tiene saldo pendiente o devoluciones, también.
 | **Cotizar ≠ reservar** | `POST /ventas/cotizar` informa `stock_disponible` pero **no lo reserva**. Entre cotizar y cobrar, otro puede llevarse la última unidad. |
 | **Concurrencia** | Al descontar stock el backend bloquea la fila (`SELECT … FOR UPDATE` sobre `existencia` / `existencia_lote`), así que dos ventas simultáneas del último ítem se serializan: una pasa, la otra da `StockInsuficiente`. Lo mismo el límite de crédito y "un turno abierto por cajero" (índice único). No hace falta que el front haga nada especial. |
 | **Devoluciones** | `POST /ventas/{id}/devolucion` (parcial o total): repone stock, ajusta cajón/crédito, deja la venta `devuelta_parcial` / `devuelta_total`. Una venta con devoluciones ya **no** se puede anular. |
-| **Permisos** | `caja.operar` para abrir/cerrar turno y arqueo (o `ventas.crear`, que lo sigue habilitando). `ventas.crear` para vender, `ventas.leer` para consultas, `ventas.anular` para anular, `ventas.devolver` para devoluciones. |
+| **Monedero** | `telefono` en la venta habilita el cashback (config por producto/presentación) y el historial por teléfono; no exige `cliente` ni toca el crédito. Pagar con `metodo_pago:"monedero"` descuenta el saldo (bloqueado `FOR UPDATE`); no es efectivo → fuera del arqueo, va como `total_monedero` en el corte. Consulta/ajuste en `/api/v1/clientes/monedero/{telefono}`. |
+| **Permisos** | `caja.operar` para abrir/cerrar turno y arqueo (o `ventas.crear`, que lo sigue habilitando). `ventas.crear` para vender, `ventas.leer` para consultas, `ventas.anular` para anular, `ventas.devolver` para devoluciones, `monedero.ajustar` para ajustar saldos de monedero. |
 
 ---
 
@@ -473,7 +567,9 @@ El POS no configura nada: la promo "2x1 X" ya existe y está vigente para la suc
 | 400 | "El usuario no tiene una sucursal asignada" | El cajero no tiene `sucursal_id` |
 | 400 | `VentaNoDevolvible` | Devolución sobre una venta cancelada o ya `devuelta_total` |
 | 400 | `CantidadDevolucionExcedida` | Pediste devolver más de lo que queda por devolver en esa línea |
-| 400 | `DevolucionInvalida` | Línea que no es de la venta, cantidad ≤ 0, o sin líneas |
+| 400 | `DevolucionInvalida` | Línea que no es de la venta, cantidad ≤ 0, o sin líneas; o devolución al monedero de una venta sin `telefono` |
+| 400 | `SaldoMonederoInsuficiente` | El monedero del teléfono no cubre el pago (venta revertida entera) |
+| 400 | `MovimientoMonederoInvalido` | Pago con `metodo_pago="monedero"` sin `telefono`, o ajuste de monedero en 0 |
 | 403 | `AnulacionNoPermitida` | Cajero anulando/devolviendo una venta ajena o de un turno cerrado; o anulando una venta **con devoluciones** |
 | 403 | `CierreTurnoNoPermitido` | Cerrando un turno de otro sin ser rol global |
 | 403 | "Fuera del alcance de su sucursal" | Consultando/anulando datos de otra sucursal |
@@ -490,9 +586,11 @@ El POS no configura nada: la promo "2x1 X" ya existe y está vigente para la suc
 
 - [ ] Al entrar: `GET /caja-turnos/actual`; sin turno → bloquear venta, ofrecer "Abrir caja"
 - [ ] **Abrir caja**: input `saldo_inicial`
-- [ ] **Vender**: buscador de productos (por código de barras usa
-      `GET /inventario/productos/resolver-codigo`), carrito con cantidad y precio,
-      descuento por línea y total, selección de presentación
+- [ ] **Vender**: buscador de productos con el preset de 2.0
+      (`GET /inventario/productos?activo=true&sucursal_id=…&include=unidades,existencias`;
+      por código de barras usa `GET /inventario/productos/resolver-codigo`),
+      carrito con cantidad y precio, descuento por línea y total, selección de
+      presentación (mostrar `unidades[].imagen_principal`)
 - [ ] **Cotizar en vivo**: en cada cambio del carrito, `POST /ventas/cotizar`;
       mostrar `promo_etiqueta` por línea, `promo_descuento`, `total_promociones` y
       el `total` real
@@ -506,9 +604,13 @@ El POS no configura nada: la promo "2x1 X" ya existe y está vigente para la suc
       uno propio con los campos de la venta: líneas, `total_promociones`,
       `efectivo_recibido`, `cambio`)
 - [ ] En cada línea del carrito, si `hay_stock` es `false` en la cotización, marcarla
-- [ ] **Historial**: lista de ventas del turno (`?caja_turno_id=`), acción "Anular" (con `motivo`)
+- [ ] **Monedero** (opcional): campo `telefono`; si viene, `GET /clientes/monedero/{telefono}`
+      para mostrar el saldo y ofrecer "pagar con monedero" (`metodo_pago:"monedero"`, ≤ saldo);
+      mostrar `monedero_a_generar` (de `cotizar`) y, tras cobrar, `monedero_generado` en el ticket
+- [ ] **Historial**: lista de ventas del turno (`?caja_turno_id=`) o por teléfono (`?telefono=`),
+      acción "Anular" (con `motivo`)
 - [ ] **Devolución**: desde una venta, elegir líneas + cantidades (≤ `cantidad − cantidad_devuelta`),
-      método (`efectivo`/`tarjeta`/`credito`), `POST /ventas/{id}/devolucion` con `Idempotency-Key`;
+      método (`efectivo`/`tarjeta`/`credito`/`monedero`), `POST /ventas/{id}/devolucion` con `Idempotency-Key`;
       mostrar el nuevo estado (`devuelta_parcial`/`devuelta_total`) y `total_devuelto`
 - [ ] **Cerrar caja**: mostrar `saldo_esperado` (ya descuenta devoluciones en efectivo),
       input `saldo_final_declarado`, mostrar `diferencia`; corte completo →

@@ -126,6 +126,9 @@ class UnidadEmbed(BaseModel):
     precio_venta: Decimal
     codigo_barras: Optional[str] = None
     activo: bool
+    # Monedero (cashback) propio de la presentación; null = usa el del producto.
+    monedero_pct: Optional[Decimal] = None
+    monedero_monto: Optional[Decimal] = None
     # Portada de la presentación (prefirmada si vive en S3); null si no tiene una
     # imagen marcada como principal.
     imagen_principal: Optional[ImagenEmbed] = None

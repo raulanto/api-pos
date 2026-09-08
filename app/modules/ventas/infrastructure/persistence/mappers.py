@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from app.modules.ventas.domain.entities import (
     Venta, DetalleVenta, Pago, CajaTurno, Devolucion, DevolucionLinea,
 )
@@ -45,6 +47,8 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
         estado=entidad.estado.value,
         descuento_total=entidad.descuento_total,
         idempotency_key=entidad.idempotency_key,
+        telefono=entidad.telefono,
+        monedero_generado=entidad.monedero_generado,
         created_at=entidad.created_at
     )
     orm.lineas = [
@@ -86,6 +90,8 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
         estado=EstadoVenta(orm.estado),
         descuento_total=orm.descuento_total,
         idempotency_key=orm.idempotency_key,
+        telefono=orm.telefono,
+        monedero_generado=orm.monedero_generado if orm.monedero_generado is not None else Decimal("0"),
         created_at=orm.created_at,
         lineas=[
             DetalleVenta(

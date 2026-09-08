@@ -58,6 +58,8 @@ class SqlAlchemyProductoUnidadRepository(ProductoUnidadRepository):
             precio_venta=unidad.precio_venta,
             codigo_barras=unidad.codigo_barras,
             activo=unidad.activo,
+            monedero_pct=unidad.monedero_pct,
+            monedero_monto=unidad.monedero_monto,
         ))
         await self._db.flush()
 
@@ -72,6 +74,8 @@ class SqlAlchemyProductoUnidadRepository(ProductoUnidadRepository):
                 precio_venta=unidad.precio_venta,
                 codigo_barras=unidad.codigo_barras,
                 activo=unidad.activo,
+                monedero_pct=unidad.monedero_pct,
+                monedero_monto=unidad.monedero_monto,
             )
         )
         await self._db.flush()

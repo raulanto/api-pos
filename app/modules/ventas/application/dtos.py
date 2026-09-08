@@ -13,6 +13,7 @@ class FiltroVentas:
     sucursal_id: UUID | None = None
     caja_turno_id: UUID | None = None
     cliente_id: UUID | None = None
+    telefono: str | None = None            # historial de compras por teléfono (monedero)
     estado: EstadoVenta | None = None
     desde: datetime | None = None
     hasta: datetime | None = None

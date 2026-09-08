@@ -39,6 +39,33 @@ class CambiarLimiteCreditoRequest(BaseModel):
     limite_credito: Decimal = Field(ge=0)
 
 
+class AjustarMonederoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # + carga saldo / - corrección. No puede ser 0.
+    monto: Decimal
+    motivo: Optional[str] = Field(default=None, max_length=255)
+
+
+class MonederoResponse(BaseModel):
+    model_config = _ORM
+    id: UUID
+    telefono: str
+    saldo: Decimal
+    activo: bool
+    created_at: datetime
+
+
+class MovimientoMonederoResponse(BaseModel):
+    model_config = _ORM
+    id: UUID
+    tipo: str
+    monto: Decimal
+    saldo_resultante: Decimal
+    venta_id: Optional[UUID] = None
+    motivo: Optional[str] = None
+    created_at: datetime
+
+
 class ClienteResponse(EmbeddableModel):
     _embed_fields: ClassVar[tuple[str, ...]] = ("sucursal",)
     id: UUID

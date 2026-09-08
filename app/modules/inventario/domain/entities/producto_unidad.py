@@ -30,6 +30,11 @@ class ProductoUnidad:
     codigo_barras: str | None = None
     activo: bool = True
     created_at: datetime = None  # type: ignore[assignment]
+    # Monedero (cashback) propio de la presentación. Si alguno de los dos está
+    # seteado, reemplaza la config del producto para las líneas de esta
+    # presentación. `pct` = % del subtotal; `monto` = fijo por unidad.
+    monedero_pct: Decimal | None = None
+    monedero_monto: Decimal | None = None
     # Imagen de portada de la presentación (`?include=unidades`); sólo se llena
     # cuando el repo la trae cargada. Mismo criterio que `Producto.imagen_principal`.
     imagen_principal: object | None = None
@@ -45,6 +50,7 @@ class ProductoUnidad:
     def crear(
         producto_id: UUID, nombre: str, unidad_medida: str, factor: Decimal,
         precio_venta: Decimal, codigo_barras: str | None = None,
+        monedero_pct: Decimal | None = None, monedero_monto: Decimal | None = None,
     ) -> "ProductoUnidad":
         return ProductoUnidad(
             id=uuid4(),
@@ -56,6 +62,8 @@ class ProductoUnidad:
             codigo_barras=codigo_barras,
             activo=True,
             created_at=datetime.now(timezone.utc),
+            monedero_pct=monedero_pct,
+            monedero_monto=monedero_monto,
         )
 
     def actualizar(
@@ -66,6 +74,9 @@ class ProductoUnidad:
         precio_venta: Decimal | None = None,
         codigo_barras: str | None = None,
         cambiar_codigo_barras: bool = False,
+        monedero_pct: Decimal | None = None,
+        monedero_monto: Decimal | None = None,
+        cambiar_monedero: bool = False,
     ) -> None:
         if nombre is not None:
             self.nombre = nombre
@@ -77,6 +88,9 @@ class ProductoUnidad:
             self.precio_venta = precio_venta
         if cambiar_codigo_barras:
             self.codigo_barras = codigo_barras
+        if cambiar_monedero:
+            self.monedero_pct = monedero_pct
+            self.monedero_monto = monedero_monto
 
     def desactivar(self) -> None:
         self.activo = False

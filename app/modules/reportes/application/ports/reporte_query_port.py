@@ -19,6 +19,7 @@ class CorteDeCajaOutput:
     total_transferencia: Decimal
     total_credito: Decimal
     monto_final_esperado: Decimal  # = monto_inicial + total_efectivo - total_devoluciones_efectivo
+    total_monedero: Decimal = Decimal("0")  # pagos con monedero del turno (no es efectivo)
     total_descuento_promo: Decimal = Decimal("0")  # descuentos por promoción del turno
     total_devoluciones_efectivo: Decimal = Decimal("0")  # devoluciones en efectivo del turno
     nota: str = NOTA_ARQUEO
@@ -65,6 +66,7 @@ class VentasPorMetodoOutput:
     total_transferencia: Decimal
     total_credito: Decimal
     total_general: Decimal
+    total_monedero: Decimal = Decimal("0")
     detalle: list[MetodoPagoTotalOutput] = field(default_factory=list)
 
 

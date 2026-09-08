@@ -16,8 +16,13 @@ from app.modules.ventas.application.ports.promociones_port import (
     PromocionesPort, LineaPromoInput,
 )
 from app.modules.ventas.application.ports.event_port import EventPort
+from app.modules.ventas.application.ports.monedero_port import (
+    MonederoPort, LineaAcumulacion,
+)
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
-from app.modules.clientes.domain.exceptions import ClienteNoEncontrado
+from app.modules.clientes.domain.exceptions import (
+    ClienteNoEncontrado, MovimientoMonederoInvalido,
+)
 
 @dataclass
 class LineaInput:
@@ -44,6 +49,7 @@ class CrearVentaInput:
     lineas: List[LineaInput]
     pagos: List[PagoInput]
     idempotency_key: str | None = None
+    telefono: str | None = None            # monedero: comprador; NO exige cliente
 
 
 @dataclass
@@ -76,6 +82,7 @@ class CotizacionVenta:
     descuento_total: Decimal
     total_promociones: Decimal
     total: Decimal
+    monedero_a_generar: Decimal = Decimal("0")
 
 class CrearVentaUseCase:
     def __init__(
@@ -87,6 +94,7 @@ class CrearVentaUseCase:
         event_port: EventPort,
         sucursal_repo: SucursalRepository | None = None,
         promociones: PromocionesPort | None = None,
+        monedero: MonederoPort | None = None,
     ):
         self._venta_repo = venta_repo
         self._caja_repo = caja_repo
@@ -95,6 +103,7 @@ class CrearVentaUseCase:
         self._event_port = event_port
         self._sucursal_repo = sucursal_repo
         self._promociones = promociones
+        self._monedero = monedero
 
     async def ejecutar(self, data: CrearVentaInput) -> Venta:
         # Idempotencia: si ya se procesó esta clave, devolver la venta existente.
@@ -136,7 +145,18 @@ class CrearVentaUseCase:
             pagos=pagos,
             descuento_total=data.descuento_total,
             idempotency_key=data.idempotency_key,
+            telefono=data.telefono,
         )
+
+        # Pago con monedero: exige teléfono y puerto de monedero disponible.
+        monedero_a_pagar = venta.monedero_usado
+        if monedero_a_pagar > Decimal("0"):
+            if venta.telefono is None:
+                raise MovimientoMonederoInvalido(
+                    "Para pagar con monedero hay que registrar el teléfono."
+                )
+            if self._monedero is None:
+                raise MovimientoMonederoInvalido("El monedero no está disponible.")
 
         if venta.saldo_pendiente > Decimal("0"):
             if venta.cliente_id is None:
@@ -171,6 +191,29 @@ class CrearVentaUseCase:
                 usuario_id=data.usuario_id,
                 producto_unidad_id=linea.producto_unidad_id,
             )
+
+        # Monedero (misma transacción). Consumo primero: si no alcanza el saldo,
+        # SaldoMonederoInsuficiente sube y se revierte todo.
+        if monedero_a_pagar > Decimal("0"):
+            await self._monedero.consumir(
+                venta.telefono, monedero_a_pagar, venta.id, data.usuario_id,
+            )
+        if venta.telefono is not None and self._monedero is not None:
+            generado = await self._monedero.acumular(
+                venta.telefono,
+                [
+                    LineaAcumulacion(
+                        producto_id=l.producto_id,
+                        producto_unidad_id=l.producto_unidad_id,
+                        cantidad=l.cantidad, subtotal=l.subtotal,
+                    )
+                    for l in venta.lineas
+                ],
+                venta.id, data.usuario_id,
+            )
+            if generado > Decimal("0"):
+                venta.monedero_generado = generado
+                await self._venta_repo.registrar_monedero_generado(venta.id, generado)
 
         await self._event_port.publicar("VentaCreada", {
             "usuario_id": data.usuario_id,
@@ -218,11 +261,21 @@ class CrearVentaUseCase:
             ))
         total_promos = sum((l.promo_descuento for l in lineas), Decimal("0"))
         total = sum((l.subtotal for l in lineas), Decimal("0")) - data.descuento_total
+        monedero = Decimal("0")
+        if self._monedero is not None:
+            monedero = await self._monedero.calcular_acumulacion([
+                LineaAcumulacion(
+                    producto_id=l.producto_id, producto_unidad_id=l.producto_unidad_id,
+                    cantidad=l.cantidad, subtotal=l.subtotal,
+                )
+                for l in lineas
+            ])
         return CotizacionVenta(
             lineas=cot_lineas,
             descuento_total=data.descuento_total,
             total_promociones=total_promos,
             total=total,
+            monedero_a_generar=monedero,
         )
 
     # ------------------------------------------------------------------ #

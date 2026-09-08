@@ -19,3 +19,15 @@ class LimiteCreditoInvalido(Exception):
 class ClienteConDeuda(Exception):
     """No se puede desactivar un cliente con saldo_credito > 0."""
     pass
+
+class MonederoCuentaNoEncontrada(Exception):
+    """No hay cuenta de monedero para ese teléfono."""
+    pass
+
+class SaldoMonederoInsuficiente(Exception):
+    """El monedero no tiene saldo para cubrir el consumo/ajuste."""
+    pass
+
+class MovimientoMonederoInvalido(Exception):
+    """Monto no positivo, teléfono vacío, o ajuste cero."""
+    pass

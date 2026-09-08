@@ -155,6 +155,11 @@ class Venta:
 
     idempotency_key: str | None = None
 
+    # Monedero: teléfono opcional del comprador (NO exige registrar cliente) y
+    # saldo de monedero que esta venta generó (congelado; lo llena el use case).
+    telefono: str | None = None
+    monedero_generado: Decimal = Decimal("0")
+
     # Relaciones embebidas opcionales (`?include=`); las puebla el mapper.
     cliente: object | None = field(default=None, compare=False, repr=False)
     usuario: object | None = field(default=None, compare=False, repr=False)
@@ -164,7 +169,8 @@ class Venta:
     def crear(sucursal_id: UUID, caja_turno_id: UUID, usuario_id: UUID,
               cliente_id: UUID | None, lineas: list[DetalleVenta], pagos: list[Pago],
               descuento_total: Decimal = Decimal("0"),
-              idempotency_key: str | None = None) -> "Venta":
+              idempotency_key: str | None = None,
+              telefono: str | None = None) -> "Venta":
         if not lineas:
             raise VentaSinLineas("Una venta debe tener al menos una línea")
 
@@ -174,11 +180,13 @@ class Venta:
         for pago in pagos:
             pago.venta_id = venta_id
 
+        tel = telefono.strip() if telefono and telefono.strip() else None
         return Venta(
             id=venta_id, sucursal_id=sucursal_id, caja_turno_id=caja_turno_id,
             usuario_id=usuario_id, cliente_id=cliente_id,
             estado=EstadoVenta.PENDIENTE_PAGO, lineas=lineas, pagos=pagos,
-            descuento_total=descuento_total, idempotency_key=idempotency_key
+            descuento_total=descuento_total, idempotency_key=idempotency_key,
+            telefono=tel,
         )
 
     @property
@@ -226,6 +234,14 @@ class Venta:
     @property
     def cambio(self) -> Decimal:
         return sum((p.cambio for p in self.pagos), Decimal("0"))
+
+    @property
+    def monedero_usado(self) -> Decimal:
+        """Total pagado con el saldo de monedero."""
+        return sum(
+            (p.monto for p in self.pagos if p.metodo_pago == MetodoPago.MONEDERO),
+            Decimal("0"),
+        )
 
     @property
     def saldo_pendiente(self) -> Decimal:

@@ -56,6 +56,9 @@ class ProductoUnidadORM(Base, TimestampMixin, SoftDeleteMixin):
     factor = Column(Numeric(12, 6), nullable=False)
     precio_venta = Column(Numeric(12, 2), nullable=False)
     codigo_barras = Column(String(50), nullable=True)
+    # Monedero propio de la presentación (sobreescribe la config del producto).
+    monedero_pct = Column(Numeric(5, 2), nullable=True)
+    monedero_monto = Column(Numeric(12, 2), nullable=True)
 
     producto = relationship("ProductoORM", viewonly=True, lazy="raise")
     # Galería de imágenes propias de esta presentación (`?include=imagenes`).

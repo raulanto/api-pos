@@ -109,6 +109,9 @@ class ActualizarProductoInput:
     precio_mayoreo: Decimal | None = None
     cantidad_minima_mayoreo: Decimal | None = None
     cambiar_mayoreo: bool = False
+    monedero_pct: Decimal | None = None
+    monedero_monto: Decimal | None = None
+    cambiar_monedero: bool = False
     codigo_barras: str | None = None
     cambiar_codigo_barras: bool = False
     cambiar_descripcion: bool = False
@@ -220,6 +223,9 @@ class ActualizarProductoUseCase:
             precio_mayoreo=data.precio_mayoreo,
             cantidad_minima_mayoreo=data.cantidad_minima_mayoreo,
             cambiar_mayoreo=data.cambiar_mayoreo,
+            monedero_pct=data.monedero_pct,
+            monedero_monto=data.monedero_monto,
+            cambiar_monedero=data.cambiar_monedero,
             codigo_barras=data.codigo_barras,
             cambiar_codigo_barras=data.cambiar_codigo_barras,
             cambiar_descripcion=data.cambiar_descripcion,

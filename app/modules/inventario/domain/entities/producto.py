@@ -66,6 +66,11 @@ class Producto:
     cantidad_minima_mayoreo: Decimal | None = None
     # Sobre pedido: no se mantiene en stock; se puede vender sin existencia.
     es_sobre_pedido: bool = False
+    # Monedero (cashback): al venderse, la línea genera saldo de monedero para el
+    # teléfono de la venta. Si hay `monedero_pct` se usa (% del subtotal); si no,
+    # `monedero_monto` (fijo por unidad). La presentación puede sobreescribirlo.
+    monedero_pct: Decimal | None = None
+    monedero_monto: Decimal | None = None
 
     # Relaciones embebidas opcionales
     # (`?include=categoria,existencias,componentes,unidades,imagenes`).
@@ -114,6 +119,8 @@ class Producto:
         precio_mayoreo: Decimal | None = None,
         cantidad_minima_mayoreo: Decimal | None = None,
         es_sobre_pedido: bool = False,
+        monedero_pct: Decimal | None = None,
+        monedero_monto: Decimal | None = None,
     ) -> "Producto":
         return Producto(
             id=uuid4(),
@@ -141,6 +148,8 @@ class Producto:
             precio_mayoreo=precio_mayoreo,
             cantidad_minima_mayoreo=cantidad_minima_mayoreo,
             es_sobre_pedido=es_sobre_pedido,
+            monedero_pct=monedero_pct,
+            monedero_monto=monedero_monto,
         )
 
     @property
@@ -212,6 +221,9 @@ class Producto:
         precio_mayoreo: Decimal | None = None,
         cantidad_minima_mayoreo: Decimal | None = None,
         cambiar_mayoreo: bool = False,
+        monedero_pct: Decimal | None = None,
+        monedero_monto: Decimal | None = None,
+        cambiar_monedero: bool = False,
     ) -> None:
         if sku is not None:
             self.sku = sku
@@ -250,6 +262,9 @@ class Producto:
         if cambiar_mayoreo:
             self.precio_mayoreo = precio_mayoreo
             self.cantidad_minima_mayoreo = cantidad_minima_mayoreo
+        if cambiar_monedero:
+            self.monedero_pct = monedero_pct
+            self.monedero_monto = monedero_monto
         if rastrea_instancia_abierta is not None:
             self.rastrea_instancia_abierta = rastrea_instancia_abierta
         if cambiar_instancia_capacidad_default:

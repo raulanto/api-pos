@@ -13,8 +13,10 @@ class MetodoPago(str, Enum):
     TARJETA_DEBITO = "tarjeta_debito"
     TRANSFERENCIA = "transferencia"
     CREDITO = "credito"
+    MONEDERO = "monedero"     # paga con el saldo de monedero del teléfono de la venta
 
 class MetodoDevolucion(str, Enum):
     EFECTIVO = "efectivo"      # sale plata del cajón (descuenta del arqueo)
     TARJETA = "tarjeta"        # reverso a la tarjeta (no toca el cajón)
     CREDITO = "credito"        # baja la deuda del cliente
+    MONEDERO = "monedero"      # reintegra al monedero del teléfono

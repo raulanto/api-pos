@@ -38,6 +38,10 @@ class CrearVentaRequest(BaseModel):
     descuento_total: Decimal = Field(default=Decimal("0"), ge=0)
     lineas: List[LineaVentaRequest]
     pagos: List[PagoRequest]
+    # Monedero: teléfono del comprador (opcional). Habilita el cashback y el
+    # historial por teléfono; NO obliga a registrar un cliente. Obligatorio sólo
+    # si algún pago es `metodo_pago="monedero"`.
+    telefono: Optional[str] = Field(default=None, max_length=50)
 
 
 class CotizarVentaRequest(BaseModel):
@@ -69,6 +73,7 @@ class CotizacionResponse(BaseModel):
     descuento_total: Decimal
     total_promociones: Decimal
     total: Decimal
+    monedero_a_generar: Decimal = Decimal("0")
 
 
 class AnularVentaRequest(BaseModel):
@@ -152,6 +157,9 @@ class VentaResponse(EmbeddableModel):
     efectivo_recibido: Decimal
     cambio: Decimal
     saldo_pendiente: Decimal
+    telefono: Optional[str] = None
+    monedero_generado: Decimal = Decimal("0")
+    monedero_usado: Decimal = Decimal("0")
     created_at: datetime
     lineas: List[LineaVentaResponse]
     pagos: List[PagoResponse]
@@ -172,6 +180,7 @@ class VentaListItem(EmbeddableModel):
     total_promociones: Decimal
     total: Decimal
     saldo_pendiente: Decimal
+    telefono: Optional[str] = None
     created_at: datetime
     cliente: Optional[ClienteEmbed] = None
     usuario: Optional[UsuarioEmbed] = None

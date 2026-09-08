@@ -82,6 +82,11 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     cantidad_minima_mayoreo = Column(Numeric(14, 4), nullable=True)
     # Sobre pedido: no se mantiene en stock; se puede vender sin existencia.
     es_sobre_pedido = Column(Boolean, default=False, nullable=False)
+    # Monedero (cashback): si hay `monedero_pct` genera % del subtotal de la
+    # línea; si no, `monedero_monto` fijo por unidad. La presentación lo puede
+    # sobreescribir.
+    monedero_pct = Column(Numeric(5, 2), nullable=True)
+    monedero_monto = Column(Numeric(12, 2), nullable=True)
 
     # Solo lectura, para `?include=categoria,existencias,componentes`.
     categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")

@@ -14,6 +14,7 @@ from app.modules.ventas.application.ports.devolucion_repository import Devolucio
 from app.modules.ventas.application.ports.caja_repository import CajaTurnoRepository
 from app.modules.ventas.application.ports.inventario_port import InventarioPort
 from app.modules.ventas.application.ports.event_port import EventPort
+from app.modules.ventas.application.ports.monedero_port import MonederoPort
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
 
 _CENT = Decimal("0.01")
@@ -51,6 +52,7 @@ class DevolverVentaUseCase:
         inventario: InventarioPort,
         cliente_repo: ClienteRepository,
         event_port: EventPort,
+        monedero: MonederoPort | None = None,
     ):
         self._venta_repo = venta_repo
         self._devolucion_repo = devolucion_repo
@@ -58,6 +60,7 @@ class DevolverVentaUseCase:
         self._inventario = inventario
         self._cliente_repo = cliente_repo
         self._event_port = event_port
+        self._monedero = monedero
 
     async def ejecutar(self, data: DevolverVentaInput) -> Devolucion:
         if data.idempotency_key:
@@ -136,12 +139,25 @@ class DevolverVentaUseCase:
                 usuario_id=data.usuario_id,
             )
 
-        # 2) Dinero: sólo el reverso a crédito toca la deuda del cliente.
+        # 2) Dinero según el método:
+        #   - credito  -> baja la deuda del cliente
+        #   - monedero -> reintegra al monedero del teléfono de la venta
+        #   - efectivo/tarjeta -> sólo queda registrado (el arqueo mira efectivo)
         credito_revertido = Decimal("0")
         if data.metodo_devolucion == MetodoDevolucion.CREDITO and venta.cliente_id is not None:
             credito_revertido = min(devolucion.monto_devuelto, venta.saldo_pendiente)
             if credito_revertido > 0:
                 await self._cliente_repo.decrementar_saldo(venta.cliente_id, credito_revertido)
+        elif data.metodo_devolucion == MetodoDevolucion.MONEDERO:
+            if not venta.telefono:
+                raise DevolucionInvalida(
+                    "La venta no tiene teléfono asociado; no se puede devolver al monedero."
+                )
+            if self._monedero is not None:
+                await self._monedero.reintegrar(
+                    venta.telefono, devolucion.monto_devuelto, venta.id,
+                    data.usuario_id, "devolución de venta",
+                )
 
         # 3) Persistir devolución + acumulado por línea + estado de la venta.
         await self._devolucion_repo.crear(devolucion)

@@ -112,6 +112,7 @@ Campos del formulario:
 | `precio_incluye_impuesto` | no (por defecto `false`) | `precio_venta` ya trae el IVA adentro (precio final al público). Es informativo para el front/reportes: el sistema no recalcula impuesto en la venta |
 | `precio_mayoreo` + `cantidad_minima_mayoreo` | no (van juntos) | Precio de **mayoreo**: al vender por unidad base una cantidad ≥ el mínimo, el sistema usa este precio en vez de `precio_venta` (menudeo). Ver "Mayoreo y sobre pedido" |
 | `es_sobre_pedido` | no (por defecto `false`) | El producto no se stockea: se puede vender sin existencia (como `permite_stock_negativo`) |
+| `monedero_pct` / `monedero_monto` | no | **Monedero** (cashback): al vender este producto con un `telefono`, la línea genera saldo de monedero. `monedero_pct` = % del subtotal (0–100); si no, `monedero_monto` = fijo por unidad. Nulos = no genera. La presentación lo puede sobreescribir. Ver `docs/guia-ventas-y-caja.md` §2.12 |
 | `rastrea_instancia_abierta` + `instancia_capacidad_default` | no | Rastrear cada **envase abierto** vendido en fracciones (aceite a granel, químicos). `instancia_capacidad_default` (> 0) es obligatorio si se activa. Flujo aparte: `docs/instancia-fisica-abierta.md` |
 
 **Ejemplo — producto normal (una lata de refresco):**
@@ -224,11 +225,15 @@ unidad base?"), mandás `unidades_por_base` en lugar de `factor`. Ejemplo: una
 reja tiene 6 refrescos grandes → `"unidades_por_base": 6`.
 
 Cada presentación puede tener su **propio código de barras** (`codigo_barras`),
-así el escáner del POS la reconoce sola.
+así el escáner del POS la reconoce sola. También su propio **monedero**
+(`monedero_pct` / `monedero_monto`): si mandás alguno de los dos, esa
+presentación usa esa config en vez de la del producto para el cashback.
 
 **Editar / dar de baja / reactivar una presentación:**
 
 - `PATCH /productos/{id}/unidades/{unidad_id}` — cambia nombre, factor, precio o código.
+  Para fijar/limpiar el monedero de la presentación: `cambiar_monedero: true`
+  (con o sin `monedero_pct` / `monedero_monto`; si no vienen, se limpian).
 - `DELETE /productos/{id}/unidades/{unidad_id}` — baja **lógica** (`activo = false`);
   las ventas históricas siguen apuntando a ella.
 - `PATCH /productos/{id}/unidades/{unidad_id}/reactivar` — la vuelve a activar.

@@ -16,6 +16,7 @@ class CorteDeCajaResponse(BaseModel):
     total_tarjeta: Decimal
     total_transferencia: Decimal
     total_credito: Decimal
+    total_monedero: Decimal = Decimal("0")
     monto_final_esperado: Decimal
     total_descuento_promo: Decimal
     total_devoluciones_efectivo: Decimal
@@ -56,6 +57,7 @@ class VentasPorMetodoResponse(BaseModel):
     total_tarjeta: Decimal
     total_transferencia: Decimal
     total_credito: Decimal
+    total_monedero: Decimal = Decimal("0")
     total_general: Decimal
     detalle: List[MetodoPagoTotalResponse]
 

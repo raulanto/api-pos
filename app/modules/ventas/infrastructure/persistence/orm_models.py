@@ -28,6 +28,10 @@ class VentaORM(Base, TimestampMixin):
     estado = Column(String(30), nullable=False)
     descuento_total = Column(Numeric(12, 2), nullable=False, default=0)
     idempotency_key = Column(String(80), nullable=True, unique=True)
+    # Monedero: teléfono opcional del comprador (historial + cashback) y saldo de
+    # monedero que la venta generó (congelado).
+    telefono = Column(String(50), nullable=True, index=True)
+    monedero_generado = Column(Numeric(12, 2), nullable=False, default=0)
 
     lineas = relationship("DetalleVentaORM", backref="venta", cascade="all, delete-orphan")
     pagos = relationship("PagoORM", backref="venta", cascade="all, delete-orphan")
@@ -75,7 +79,7 @@ class DevolucionORM(Base, TimestampMixin):
     __tablename__ = "devolucion"
     __table_args__ = (
         CheckConstraint(
-            "metodo_devolucion IN ('efectivo', 'tarjeta', 'credito')",
+            "metodo_devolucion IN ('efectivo', 'tarjeta', 'credito', 'monedero')",
             name="ck_devolucion_metodo",
         ),
     )

@@ -10,6 +10,7 @@ from app.modules.ventas.application.ports.caja_repository import CajaTurnoReposi
 from app.modules.ventas.application.ports.devolucion_repository import DevolucionRepository
 from app.modules.ventas.application.ports.inventario_port import InventarioPort
 from app.modules.ventas.application.ports.event_port import EventPort
+from app.modules.ventas.application.ports.monedero_port import MonederoPort
 from app.modules.clientes.application.ports.cliente_repository import ClienteRepository
 
 
@@ -35,6 +36,7 @@ class AnularVentaUseCase:
         cliente_repo: ClienteRepository,
         event_port: EventPort,
         devolucion_repo: DevolucionRepository | None = None,
+        monedero: MonederoPort | None = None,
     ):
         self._venta_repo = venta_repo
         self._caja_repo = caja_repo
@@ -42,6 +44,7 @@ class AnularVentaUseCase:
         self._cliente_repo = cliente_repo
         self._event_port = event_port
         self._devolucion_repo = devolucion_repo
+        self._monedero = monedero
 
     async def ejecutar(self, data: AnularVentaInput) -> Venta:
         venta = await self._venta_repo.obtener_por_id(data.venta_id)
@@ -83,6 +86,11 @@ class AnularVentaUseCase:
         if venta.cliente_id is not None and venta.saldo_pendiente > Decimal("0"):
             credito_revertido = venta.saldo_pendiente
             await self._cliente_repo.decrementar_saldo(venta.cliente_id, credito_revertido)
+
+        # 2b) Revertir el monedero: quita lo acumulado (con tope al saldo actual)
+        # y reintegra lo que se pagó con monedero.
+        if self._monedero is not None:
+            await self._monedero.revertir_venta(venta.telefono, venta.id, data.usuario_id)
 
         # 3) Persistir el nuevo estado.
         await self._venta_repo.actualizar_estado(venta.id, EstadoVenta.CANCELADA)

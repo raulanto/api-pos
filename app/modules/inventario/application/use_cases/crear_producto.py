@@ -39,6 +39,8 @@ class CrearProductoInput:
     precio_mayoreo: Decimal | None = None
     cantidad_minima_mayoreo: Decimal | None = None
     es_sobre_pedido: bool = False
+    monedero_pct: Decimal | None = None
+    monedero_monto: Decimal | None = None
 
 class CrearProductoUseCase:
     def __init__(
@@ -104,6 +106,8 @@ class CrearProductoUseCase:
             precio_mayoreo=data.precio_mayoreo,
             cantidad_minima_mayoreo=data.cantidad_minima_mayoreo,
             es_sobre_pedido=data.es_sobre_pedido,
+            monedero_pct=data.monedero_pct,
+            monedero_monto=data.monedero_monto,
         )
         try:
             await self._producto_repo.guardar(producto)

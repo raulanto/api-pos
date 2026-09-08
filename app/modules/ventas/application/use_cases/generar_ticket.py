@@ -49,6 +49,9 @@ class TicketData:
     total_pagado: Decimal = Decimal("0")
     cambio: Decimal = Decimal("0")
     saldo_pendiente: Decimal = Decimal("0")
+    telefono: str | None = None
+    monedero_generado: Decimal = Decimal("0")
+    monedero_usado: Decimal = Decimal("0")
 
 
 class GenerarTicketUseCase:
@@ -113,4 +116,7 @@ class GenerarTicketUseCase:
             total_pagado=venta.monto_pagado,
             cambio=venta.cambio,
             saldo_pendiente=venta.saldo_pendiente,
+            telefono=venta.telefono,
+            monedero_generado=venta.monedero_generado,
+            monedero_usado=venta.monedero_usado,
         )

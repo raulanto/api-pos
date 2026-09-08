@@ -82,7 +82,7 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             .group_by(PagoORM.metodo_pago)
         )).all()
 
-        efectivo = tarjeta = transferencia = credito = _CERO
+        efectivo = tarjeta = transferencia = credito = monedero = _CERO
         for metodo, total in filas:
             total = Decimal(total)
             if metodo == MetodoPago.EFECTIVO.value:
@@ -93,6 +93,8 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
                 transferencia += total
             elif metodo == MetodoPago.CREDITO.value:
                 credito += total
+            elif metodo == MetodoPago.MONEDERO.value:
+                monedero += total
 
         promo = await self._db.scalar(
             select(func.coalesce(func.sum(DetalleVentaORM.promo_descuento), 0))
@@ -116,6 +118,7 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             total_tarjeta=tarjeta,
             total_transferencia=transferencia,
             total_credito=credito,
+            total_monedero=monedero,
             monto_final_esperado=turno.saldo_inicial + efectivo - dev_efectivo,
             total_descuento_promo=Decimal(promo or 0),
             total_devoluciones_efectivo=dev_efectivo,
@@ -188,12 +191,14 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             por_metodo.get(MetodoPago.TARJETA_DEBITO.value, _CERO)
         transferencia = por_metodo.get(MetodoPago.TRANSFERENCIA.value, _CERO)
         credito = por_metodo.get(MetodoPago.CREDITO.value, _CERO)
+        monedero = por_metodo.get(MetodoPago.MONEDERO.value, _CERO)
 
         return VentasPorMetodoOutput(
             desde=desde, hasta=hasta, sucursal_id=sucursal_id,
             total_efectivo=efectivo, total_tarjeta=tarjeta,
             total_transferencia=transferencia, total_credito=credito,
-            total_general=efectivo + tarjeta + transferencia + credito,
+            total_monedero=monedero,
+            total_general=efectivo + tarjeta + transferencia + credito + monedero,
             detalle=detalle,
         )
 

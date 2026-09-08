@@ -78,6 +78,8 @@ async def crear_producto(
                 precio_mayoreo=body.precio_mayoreo,
                 cantidad_minima_mayoreo=body.cantidad_minima_mayoreo,
                 es_sobre_pedido=body.es_sobre_pedido,
+                monedero_pct=body.monedero_pct,
+                monedero_monto=body.monedero_monto,
                 codigo_barras=body.codigo_barras, descripcion=body.descripcion,
             )
         )
@@ -255,6 +257,9 @@ async def actualizar_producto(
                 precio_mayoreo=body.precio_mayoreo,
                 cantidad_minima_mayoreo=body.cantidad_minima_mayoreo,
                 cambiar_mayoreo=body.cambiar_mayoreo,
+                monedero_pct=body.monedero_pct,
+                monedero_monto=body.monedero_monto,
+                cambiar_monedero=body.cambiar_monedero,
                 codigo_barras=body.codigo_barras, cambiar_codigo_barras=body.cambiar_codigo_barras,
                 cambiar_descripcion=body.cambiar_descripcion,
             )

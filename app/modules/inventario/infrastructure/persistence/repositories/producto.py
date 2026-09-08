@@ -148,6 +148,8 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 precio_mayoreo=producto.precio_mayoreo,
                 cantidad_minima_mayoreo=producto.cantidad_minima_mayoreo,
                 es_sobre_pedido=producto.es_sobre_pedido,
+                monedero_pct=producto.monedero_pct,
+                monedero_monto=producto.monedero_monto,
                 codigo_barras=producto.codigo_barras,
                 activo=producto.activo,
             )

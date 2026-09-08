@@ -161,6 +161,8 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         precio_mayoreo=orm.precio_mayoreo,
         cantidad_minima_mayoreo=orm.cantidad_minima_mayoreo,
         es_sobre_pedido=orm.es_sobre_pedido,
+        monedero_pct=orm.monedero_pct,
+        monedero_monto=orm.monedero_monto,
         # Siempre presente: no depende de `includes` (ver `_opts_producto`,
         # que carga `imagen_principal` incondicionalmente).
         imagen_principal=to_domain_imagen(orm.imagen_principal) if orm.imagen_principal else None,
@@ -245,6 +247,8 @@ def to_domain_unidad(orm: ProductoUnidadORM) -> ProductoUnidad:
         codigo_barras=orm.codigo_barras,
         activo=orm.activo,
         created_at=orm.created_at,
+        monedero_pct=orm.monedero_pct,
+        monedero_monto=orm.monedero_monto,
         imagen_principal=img,
     )
 
@@ -300,6 +304,8 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         precio_mayoreo=entidad.precio_mayoreo,
         cantidad_minima_mayoreo=entidad.cantidad_minima_mayoreo,
         es_sobre_pedido=entidad.es_sobre_pedido,
+        monedero_pct=entidad.monedero_pct,
+        monedero_monto=entidad.monedero_monto,
         activo=entidad.activo
     )
 

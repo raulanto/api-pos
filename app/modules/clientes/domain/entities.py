@@ -1,10 +1,12 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 from app.modules.clientes.domain.exceptions import (
     LimiteCreditoExcedido, AbonoInvalido, LimiteCreditoInvalido,
+    SaldoMonederoInsuficiente, MovimientoMonederoInvalido,
 )
+from app.modules.clientes.domain.value_objects import TipoMovimientoMonedero
 
 
 """
@@ -154,3 +156,80 @@ class Cliente:
 
     def desactivar(self) -> None:
         self.activo = False
+
+
+# --------------------------------------------------------------------------- #
+# Monedero electrónico (cashback por teléfono)
+# --------------------------------------------------------------------------- #
+@dataclass
+class MonederoCuenta:
+    """Saldo de monedero de un teléfono. Independiente de `Cliente`: no exige
+    dar de alta cliente ni tiene sucursal (el saldo sirve en cualquiera)."""
+    id: UUID
+    telefono: str
+    saldo: Decimal
+    activo: bool = True
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @staticmethod
+    def crear(telefono: str) -> "MonederoCuenta":
+        tel = (telefono or "").strip()
+        if not tel:
+            raise MovimientoMonederoInvalido("El teléfono del monedero es obligatorio.")
+        return MonederoCuenta(id=uuid4(), telefono=tel, saldo=Decimal("0"), activo=True)
+
+    def acreditar(self, monto: Decimal) -> None:
+        if monto <= 0:
+            raise MovimientoMonederoInvalido("El monto a acreditar debe ser mayor a cero.")
+        self.saldo += monto
+
+    def debitar(self, monto: Decimal) -> None:
+        if monto <= 0:
+            raise MovimientoMonederoInvalido("El monto a debitar debe ser mayor a cero.")
+        if monto > self.saldo:
+            raise SaldoMonederoInsuficiente(
+                f"El monedero tiene {self.saldo} y se intentó usar {monto}."
+            )
+        self.saldo -= monto
+
+    def debitar_hasta(self, monto: Decimal) -> Decimal:
+        """Debita `min(monto, saldo)`. Devuelve lo efectivamente debitado. Para
+        revertir una acumulación cuando el saldo ya se gastó en parte."""
+        quita = min(monto, self.saldo) if monto > 0 else Decimal("0")
+        self.saldo -= quita
+        return quita
+
+    def ajustar(self, monto: Decimal) -> None:
+        """Ajuste manual (+/-). Nunca deja el saldo negativo."""
+        if monto == 0:
+            raise MovimientoMonederoInvalido("El ajuste no puede ser cero.")
+        nuevo = self.saldo + monto
+        if nuevo < 0:
+            raise SaldoMonederoInsuficiente(
+                f"El ajuste {monto} dejaría el saldo en {nuevo}."
+            )
+        self.saldo = nuevo
+
+
+@dataclass
+class MonederoMovimiento:
+    """Una línea del ledger. Es el historial del monedero."""
+    id: UUID
+    cuenta_id: UUID
+    tipo: TipoMovimientoMonedero
+    monto: Decimal                      # siempre positivo; el signo lo da `tipo`
+    saldo_resultante: Decimal
+    venta_id: UUID | None = None
+    usuario_id: UUID | None = None
+    motivo: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @staticmethod
+    def crear(cuenta_id: UUID, tipo: TipoMovimientoMonedero, monto: Decimal,
+              saldo_resultante: Decimal, venta_id: UUID | None = None,
+              usuario_id: UUID | None = None, motivo: str | None = None) -> "MonederoMovimiento":
+        return MonederoMovimiento(
+            id=uuid4(), cuenta_id=cuenta_id, tipo=tipo, monto=abs(monto),
+            saldo_resultante=saldo_resultante, venta_id=venta_id,
+            usuario_id=usuario_id, motivo=motivo,
+        )

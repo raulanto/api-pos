@@ -166,3 +166,33 @@ async def test_idempotencia_no_repone_dos_veces():
     d2 = await uc.ejecutar(_in(v, "2", key="abc"))
     assert d1.id == d2.id
     assert len(inv.repuesto) == 1
+
+
+class _MonederoPort:
+    def __init__(self):
+        self.reintegrado = None
+
+    async def reintegrar(self, telefono, monto, venta_id, usuario_id, motivo):
+        self.reintegrado = (telefono, monto)
+
+
+async def test_metodo_monedero_reintegra_al_monedero():
+    v = _venta(precio="20", cantidad="5")
+    v.telefono = "5550003333"
+    port = _MonederoPort()
+    uc = DevolverVentaUseCase(
+        _VentaRepo(v), _DevRepo(), _CajaRepo(), _Inv(), _ClienteRepo(), _Event(),
+        monedero=port,
+    )
+    await uc.ejecutar(_in(v, "2", metodo=MetodoDevolucion.MONEDERO))
+    assert port.reintegrado == ("5550003333", Decimal("40.00"))
+
+
+async def test_metodo_monedero_sin_telefono_falla():
+    v = _venta(cantidad="5")            # telefono None
+    uc = DevolverVentaUseCase(
+        _VentaRepo(v), _DevRepo(), _CajaRepo(), _Inv(), _ClienteRepo(), _Event(),
+        monedero=_MonederoPort(),
+    )
+    with pytest.raises(DevolucionInvalida):
+        await uc.ejecutar(_in(v, "2", metodo=MetodoDevolucion.MONEDERO))

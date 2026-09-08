@@ -16,7 +16,10 @@ from app.shared.filtering import active_filters
 from app.modules.ventas.application.dtos import FiltroVentas
 from app.modules.ventas.domain.value_objects import EstadoVenta
 from app.modules.ventas.domain import exceptions as vexc
-from app.modules.clientes.domain.exceptions import LimiteCreditoExcedido, ClienteNoEncontrado
+from app.modules.clientes.domain.exceptions import (
+    LimiteCreditoExcedido, ClienteNoEncontrado,
+    SaldoMonederoInsuficiente, MovimientoMonederoInvalido,
+)
 from app.modules.inventario.domain.exceptions import (
     StockInsuficiente, ProductoNoEncontrado, CantidadNoVendible,
     LoteRequerido, LoteInvalido,
@@ -57,6 +60,7 @@ from app.modules.inventario.infrastructure.persistence.repositories.producto imp
 )
 from app.modules.ventas.infrastructure.adapters.inventario_port_impl import InventarioPortImpl
 from app.modules.ventas.infrastructure.adapters.promociones_port_impl import PromocionesPortImpl
+from app.modules.ventas.infrastructure.adapters.monedero_port_impl import MonederoPortImpl
 from app.modules.ventas.infrastructure.adapters.event_port_impl import EventPortImpl
 from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
     SqlAlchemySucursalRepository,
@@ -83,6 +87,7 @@ _BAD_REQUEST = (
     vexc.TurnoDeOtraSucursal, LimiteCreditoExcedido, StockInsuficiente,
     CantidadNoVendible, LoteRequerido, LoteInvalido, ValueError,
     vexc.VentaNoDevolvible, vexc.CantidadDevolucionExcedida, vexc.DevolucionInvalida,
+    SaldoMonederoInsuficiente, MovimientoMonederoInvalido,
 )
 
 
@@ -125,6 +130,7 @@ def _venta_use_case(db: AsyncSession) -> CrearVentaUseCase:
         event_port=EventPortImpl(db),
         sucursal_repo=SqlAlchemySucursalRepository(db),
         promociones=PromocionesPortImpl(db),
+        monedero=MonederoPortImpl(db),
     )
 
 
@@ -136,6 +142,7 @@ def _anular_use_case(db: AsyncSession) -> AnularVentaUseCase:
         cliente_repo=SqlAlchemyClienteRepository(db),
         event_port=EventPortImpl(db),
         devolucion_repo=SqlAlchemyDevolucionRepository(db),
+        monedero=MonederoPortImpl(db),
     )
 
 
@@ -147,6 +154,7 @@ def _devolver_use_case(db: AsyncSession) -> DevolverVentaUseCase:
         inventario=InventarioPortImpl(db),
         cliente_repo=SqlAlchemyClienteRepository(db),
         event_port=EventPortImpl(db),
+        monedero=MonederoPortImpl(db),
     )
 
 
@@ -182,6 +190,7 @@ async def crear_venta(
             for p in body.pagos
         ],
         idempotency_key=idempotency_key,
+        telefono=body.telefono,
     )
     try:
         venta = await _venta_use_case(db).ejecutar(entrada)
@@ -225,6 +234,7 @@ async def listar_ventas(
     sucursal_id: UUID | None = Query(default=None),
     caja_turno_id: UUID | None = Query(default=None),
     cliente_id: UUID | None = Query(default=None),
+    telefono: str | None = Query(default=None, description="Historial de compras por teléfono"),
     estado: EstadoVenta | None = Query(default=None),
     desde: datetime | None = Query(default=None),
     hasta: datetime | None = Query(default=None),
@@ -235,7 +245,7 @@ async def listar_ventas(
     efectiva = _sucursal_efectiva(actual, sucursal_id)
     filtro = FiltroVentas(
         sucursal_id=efectiva, caja_turno_id=caja_turno_id, cliente_id=cliente_id,
-        estado=estado, desde=desde, hasta=hasta,
+        telefono=telefono, estado=estado, desde=desde, hasta=hasta,
     )
     pagina = await ListarVentasUseCase(SqlAlchemyVentaRepository(db)).ejecutar(
         filtro, paginacion, orden, include,

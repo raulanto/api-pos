@@ -17,9 +17,17 @@ from app.modules.clientes.application.dtos import FiltroClientes
 from app.modules.clientes.infrastructure.api.schemas import (
     CrearClienteRequest, ActualizarClienteRequest, AbonarClienteRequest,
     CambiarLimiteCreditoRequest, ClienteResponse,
+    AjustarMonederoRequest, MonederoResponse, MovimientoMonederoResponse,
 )
 from app.modules.clientes.infrastructure.persistence.cliente_repository_impl import (
     SqlAlchemyClienteRepository,
+)
+from app.modules.clientes.infrastructure.persistence.monedero_repository_impl import (
+    SqlAlchemyMonederoRepository,
+)
+from app.modules.clientes.application.use_cases.gestionar_monedero import (
+    ConsultarMonederoUseCase, ListarMovimientosMonederoUseCase,
+    AjustarMonederoUseCase, AjustarMonederoInput,
 )
 from app.modules.clientes.application.use_cases.crear_cliente import (
     CrearClienteUseCase, CrearClienteInput,
@@ -40,14 +48,16 @@ from app.modules.ventas.infrastructure.api.schemas import VentaListItem
 
 router = APIRouter(route_class=EnvelopeRoute)
 
-_NOT_FOUND = (cexc.ClienteNoEncontrado,)
+_NOT_FOUND = (cexc.ClienteNoEncontrado, cexc.MonederoCuentaNoEncontrada)
 _CONFLICT = (cexc.EmailClienteDuplicado, cexc.ClienteConDeuda)
 _BAD_REQUEST = (
-    cexc.AbonoInvalido, cexc.LimiteCreditoInvalido, cexc.LimiteCreditoExcedido, ValueError,
+    cexc.AbonoInvalido, cexc.LimiteCreditoInvalido, cexc.LimiteCreditoExcedido,
+    cexc.SaldoMonederoInsuficiente, cexc.MovimientoMonederoInvalido, ValueError,
 )
 
 _ORDEN_CLIENTES = make_sort_dependency({"created_at", "nombre", "saldo_credito"}, "nombre:asc")
 _ORDEN_VENTAS = make_sort_dependency({"created_at"}, "created_at:desc")
+_ORDEN_MOVIMIENTOS = make_sort_dependency({"created_at"}, "created_at:desc")
 _INC_CLIENTES = make_include_dependency({"sucursal"})
 _INC_VENTAS = make_include_dependency({"cliente", "usuario", "caja_turno"})
 
@@ -145,6 +155,66 @@ async def listar_clientes(
     return page_response(
         request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
     )
+
+
+# ------------------------------------------------------------------------- #
+# Monedero electrónico (por teléfono; NO requiere cliente registrado)
+# Declarado ANTES de /{cliente_id}: si no, el path converter UUID lo intercepta.
+# ------------------------------------------------------------------------- #
+def _monedero_repo(db: AsyncSession) -> SqlAlchemyMonederoRepository:
+    return SqlAlchemyMonederoRepository(db)
+
+
+@router.get("/monedero/{telefono}", response_model=ApiResponse[MonederoResponse])
+async def consultar_monedero(
+    telefono: str,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
+):
+    try:
+        cuenta = await ConsultarMonederoUseCase(_monedero_repo(db)).ejecutar(telefono)
+    except Exception as e:
+        raise _traducir(e)
+    return ok(cuenta)
+
+
+@router.get(
+    "/monedero/{telefono}/movimientos",
+    response_model=ApiResponse[list[MovimientoMonederoResponse]],
+)
+async def listar_movimientos_monedero(
+    telefono: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("clientes.leer")),
+    paginacion: PageParams = Depends(page_params),
+    orden: Sort = Depends(_ORDEN_MOVIMIENTOS),
+):
+    try:
+        pagina = await ListarMovimientosMonederoUseCase(_monedero_repo(db)).ejecutar(
+            telefono, paginacion, orden,
+        )
+    except Exception as e:
+        raise _traducir(e)
+    return page_response(
+        request, pagina, paginacion, sort=orden, filters={"telefono": telefono},
+    )
+
+
+@router.post("/monedero/{telefono}/ajustar", response_model=ApiResponse[MonederoResponse])
+async def ajustar_monedero(
+    telefono: str,
+    body: AjustarMonederoRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("monedero.ajustar")),
+):
+    try:
+        cuenta = await AjustarMonederoUseCase(_monedero_repo(db)).ejecutar(AjustarMonederoInput(
+            telefono=telefono, monto=body.monto, motivo=body.motivo, usuario_id=actual.id,
+        ))
+    except Exception as e:
+        raise _traducir(e)
+    return ok(cuenta)
 
 
 @router.get("/{cliente_id}", response_model=ApiResponse[ClienteResponse])
