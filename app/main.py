@@ -33,6 +33,7 @@ from app.modules.promociones.infrastructure.api.router import router as promocio
 from app.modules.ventas.infrastructure.api.router import (
     router as ventas_router, caja_router, cajas_router,
 )
+from app.modules.pedidos.infrastructure.api.router import router as pedidos_router
 from app.modules.reportes.infrastructure.api.router import router as reportes_router
 from app.modules.auditoria.infrastructure.api.router import router as auditoria_router
 
@@ -44,6 +45,7 @@ app.include_router(inventario_router, prefix="/api/v1/inventario", tags=["invent
 app.include_router(clientes_router, prefix="/api/v1/clientes", tags=["clientes"])
 app.include_router(promociones_router, prefix="/api/v1/promociones", tags=["promociones"])
 app.include_router(ventas_router, prefix="/api/v1/ventas", tags=["ventas"])
+app.include_router(pedidos_router, prefix="/api/v1/pedidos", tags=["pedidos"])
 app.include_router(cajas_router, prefix="/api/v1/cajas", tags=["caja"])
 app.include_router(caja_router, prefix="/api/v1/caja-turnos", tags=["caja"])
 app.include_router(reportes_router, prefix="/api/v1/reportes", tags=["reportes"])

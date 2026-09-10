@@ -59,6 +59,10 @@ class CrearVentaInput:
     puede_descuento_manual: bool = False
     rol_id: UUID | None = None
     codigo_cupon: str | None = None
+    # Líneas ya construidas y con precio congelado (mayoreo/promos/unidad base ya
+    # resueltos). Si viene, se usa tal cual y NO se corre `armar_lineas`. Lo usa
+    # la facturación de un pedido para respetar el precio cotizado.
+    lineas_congeladas: List[DetalleVenta] | None = None
 
 
 @dataclass
@@ -151,12 +155,15 @@ class CrearVentaUseCase:
             _c = await self._cliente_repo.obtener_por_id(data.cliente_id)
             cliente_segmento = getattr(_c, "segmento", None) if _c else None
 
-        lineas = await self._armar_lineas(
-            data.sucursal_id, data.lineas,
-            metodos_pago=metodos_pago, cliente_segmento=cliente_segmento,
-            codigo_cupon=data.codigo_cupon, telefono=data.telefono,
-            cliente_id=data.cliente_id,
-        )
+        if data.lineas_congeladas is not None:
+            lineas = data.lineas_congeladas
+        else:
+            lineas = await self.armar_lineas(
+                data.sucursal_id, data.lineas,
+                metodos_pago=metodos_pago, cliente_segmento=cliente_segmento,
+                codigo_cupon=data.codigo_cupon, telefono=data.telefono,
+                cliente_id=data.cliente_id,
+            )
         await self._validar_descuento_manual(data, lineas)
         pagos = [
             Pago.crear(monto=p.monto, metodo_pago=p.metodo_pago,
@@ -299,7 +306,7 @@ class CrearVentaUseCase:
         base + promociones + conversión a unidad base, que valida producto y
         presentación) pero NO toca stock, NO exige turno ni pagos y NO persiste.
         Para que el POS muestre el total con descuentos antes de cobrar."""
-        lineas = await self._armar_lineas(
+        lineas = await self.armar_lineas(
             data.sucursal_id, data.lineas,
             metodos_pago=frozenset(data.metodos_pago),
             cliente_segmento=data.cliente_segmento,
@@ -387,7 +394,7 @@ class CrearVentaUseCase:
             )
 
     # ------------------------------------------------------------------ #
-    async def _armar_lineas(
+    async def armar_lineas(
         self, sucursal_id: UUID, lineas_input: List[LineaInput],
         *, metodos_pago: frozenset = frozenset(), cliente_segmento: str | None = None,
         codigo_cupon: str | None = None, telefono: str | None = None,

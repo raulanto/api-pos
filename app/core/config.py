@@ -26,6 +26,13 @@ class Settings(BaseSettings):
     # ponytail: umbral global, no por sucursal/caja.
     caja_diferencia_umbral: Decimal = Decimal("20.00")
 
+    # --- Pedidos / órdenes ---
+    # Producto de tipo SERVICIO que representa el cargo de envío a domicilio. Al
+    # facturar un pedido con `costo_envio > 0` se agrega como una línea con ese
+    # producto (así el envío entra en ticket, reportes y arqueo sin tocar el
+    # esquema de `venta`). Si es None y hay `costo_envio`, la facturación falla.
+    pedidos_producto_envio_id: str | None = None
+
     # --- Seed del administrador inicial (usado por la migración-seeder) ---
     seed_admin_email: str | None = None
     seed_admin_password: str | None = None
