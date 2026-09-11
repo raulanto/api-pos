@@ -42,6 +42,10 @@ class DetalleVenta:
     promos_aplicadas: list[PromoAplicada] = field(default_factory=list)
     # Cantidad de esta línea ya devuelta (acumulado de todas las devoluciones).
     cantidad_devuelta: Decimal = Decimal("0")
+    # Vínculo trazable (desacoplado) con una cita del módulo `agenda`: se llena
+    # sólo cuando esta línea factura un servicio agendado. `ventas` no conoce el
+    # modelo de `agenda`, sólo guarda este id.
+    cita_id: UUID | None = None
 
     @staticmethod
     def crear(producto_id: UUID, cantidad: Decimal, precio_unitario: Decimal,
@@ -49,7 +53,8 @@ class DetalleVenta:
               producto_unidad_id: UUID | None = None,
               cantidad_en_unidad_base: Decimal | None = None,
               promo_id: UUID | None = None, promo_etiqueta: str | None = None,
-              promo_descuento: Decimal = Decimal("0")) -> "DetalleVenta":
+              promo_descuento: Decimal = Decimal("0"),
+              cita_id: UUID | None = None) -> "DetalleVenta":
         return DetalleVenta(
             id=uuid4(), venta_id=uuid4(), # venta_id is a placeholder until attached to Venta
             producto_id=producto_id, cantidad=cantidad, precio_unitario=precio_unitario,
@@ -57,7 +62,7 @@ class DetalleVenta:
             producto_unidad_id=producto_unidad_id,
             cantidad_en_unidad_base=cantidad_en_unidad_base,
             promo_id=promo_id, promo_etiqueta=promo_etiqueta,
-            promo_descuento=promo_descuento,
+            promo_descuento=promo_descuento, cita_id=cita_id,
         )
 
     @property

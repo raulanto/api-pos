@@ -43,6 +43,13 @@ class CrearProductoRequest(BaseModel):
     # la línea; si no, `monedero_monto` fijo por unidad. Nulos = no genera.
     monedero_pct: Optional[Decimal] = Field(default=None, ge=0, le=100)
     monedero_monto: Optional[Decimal] = Field(default=None, ge=0)
+    # Agenda: un servicio se puede citar en el módulo `agenda` si trae
+    # `duracion_minutos`. `requiere_recurso`/`disponibilidad_cruzada_activa`
+    # son flags explícitos para ese motor.
+    duracion_minutos: Optional[int] = Field(default=None, gt=0)
+    tiempo_buffer_minutos: int = Field(default=0, ge=0)
+    requiere_recurso: bool = False
+    disponibilidad_cruzada_activa: bool = False
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     descripcion: Optional[str] = None
 
@@ -83,6 +90,13 @@ class ActualizarProductoRequest(BaseModel):
     monedero_monto: Optional[Decimal] = Field(default=None, ge=0)
     # Mandar `cambiar_monedero=true` para fijar/limpiar la config de monedero.
     cambiar_monedero: bool = False
+    duracion_minutos: Optional[int] = Field(default=None, gt=0)
+    # Para dejar `duracion_minutos` en NULL (deja de ser agendable) hay que
+    # mandarlo explícitamente.
+    cambiar_duracion_minutos: bool = False
+    tiempo_buffer_minutos: Optional[int] = Field(default=None, ge=0)
+    requiere_recurso: Optional[bool] = None
+    disponibilidad_cruzada_activa: Optional[bool] = None
     codigo_barras: Optional[str] = Field(default=None, max_length=50)
     cambiar_codigo_barras: bool = False
     # Para dejar `descripcion` en NULL hay que mandarlo explícitamente.
@@ -146,6 +160,10 @@ class ProductoResponse(EmbeddableModel):
     es_sobre_pedido: bool = False
     monedero_pct: Optional[Decimal] = None
     monedero_monto: Optional[Decimal] = None
+    duracion_minutos: Optional[int] = None
+    tiempo_buffer_minutos: int = 0
+    requiere_recurso: bool = False
+    disponibilidad_cruzada_activa: bool = False
     activo: bool
     # Siempre presente (no depende de `?include=`): la imagen de portada del
     # producto, o null si no tiene ninguna marcada como principal.

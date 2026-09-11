@@ -71,6 +71,13 @@ class Producto:
     # `monedero_monto` (fijo por unidad). La presentación puede sobreescribirlo.
     monedero_pct: Decimal | None = None
     monedero_monto: Decimal | None = None
+    # Agenda: "servicio agendable" es tipo=servicio CON duracion_minutos seteado
+    # (no basta el tipo: un servicio como "flete" no se agenda). El módulo
+    # `agenda` lee estos campos vía `ProductoRepository`, no los usa acá.
+    duracion_minutos: int | None = None
+    tiempo_buffer_minutos: int = 0
+    requiere_recurso: bool = False
+    disponibilidad_cruzada_activa: bool = False
 
     # Relaciones embebidas opcionales
     # (`?include=categoria,existencias,componentes,unidades,imagenes`).
@@ -121,6 +128,10 @@ class Producto:
         es_sobre_pedido: bool = False,
         monedero_pct: Decimal | None = None,
         monedero_monto: Decimal | None = None,
+        duracion_minutos: int | None = None,
+        tiempo_buffer_minutos: int = 0,
+        requiere_recurso: bool = False,
+        disponibilidad_cruzada_activa: bool = False,
     ) -> "Producto":
         return Producto(
             id=uuid4(),
@@ -150,6 +161,10 @@ class Producto:
             es_sobre_pedido=es_sobre_pedido,
             monedero_pct=monedero_pct,
             monedero_monto=monedero_monto,
+            duracion_minutos=duracion_minutos,
+            tiempo_buffer_minutos=tiempo_buffer_minutos,
+            requiere_recurso=requiere_recurso,
+            disponibilidad_cruzada_activa=disponibilidad_cruzada_activa,
         )
 
     @property
@@ -157,6 +172,12 @@ class Producto:
         """SALIDA/transferencia no fallan por stock insuficiente si el producto
         admite negativo explícito o es sobre pedido."""
         return self.permite_stock_negativo or self.es_sobre_pedido
+
+    @property
+    def agendable(self) -> bool:
+        """Un servicio se puede citar en `agenda` si tiene duración configurada
+        (el tipo solo no basta: "flete" es servicio pero no se agenda)."""
+        return self.tipo == TipoProducto.SERVICIO and self.duracion_minutos is not None
 
     def precio_para_cantidad(self, cantidad: Decimal) -> Decimal:
         """Menudeo (`precio_venta`) o mayoreo si `cantidad` alcanza el mínimo."""
@@ -224,6 +245,11 @@ class Producto:
         monedero_pct: Decimal | None = None,
         monedero_monto: Decimal | None = None,
         cambiar_monedero: bool = False,
+        duracion_minutos: int | None = None,
+        cambiar_duracion_minutos: bool = False,
+        tiempo_buffer_minutos: int | None = None,
+        requiere_recurso: bool | None = None,
+        disponibilidad_cruzada_activa: bool | None = None,
     ) -> None:
         if sku is not None:
             self.sku = sku
@@ -279,6 +305,16 @@ class Producto:
             self.permite_stock_negativo = permite_stock_negativo
         if cambiar_codigo_barras:
             self.codigo_barras = codigo_barras
+        if cambiar_duracion_minutos:
+            self.duracion_minutos = duracion_minutos      # permite volver a NULL
+        elif duracion_minutos is not None:
+            self.duracion_minutos = duracion_minutos
+        if tiempo_buffer_minutos is not None:
+            self.tiempo_buffer_minutos = tiempo_buffer_minutos
+        if requiere_recurso is not None:
+            self.requiere_recurso = requiere_recurso
+        if disponibilidad_cruzada_activa is not None:
+            self.disponibilidad_cruzada_activa = disponibilidad_cruzada_activa
 
     """
     Valida que una cantidad a vender/mover respete las reglas de fraccionamiento.

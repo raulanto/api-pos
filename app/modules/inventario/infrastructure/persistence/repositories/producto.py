@@ -150,6 +150,10 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 es_sobre_pedido=producto.es_sobre_pedido,
                 monedero_pct=producto.monedero_pct,
                 monedero_monto=producto.monedero_monto,
+                duracion_minutos=producto.duracion_minutos,
+                tiempo_buffer_minutos=producto.tiempo_buffer_minutos,
+                requiere_recurso=producto.requiere_recurso,
+                disponibilidad_cruzada_activa=producto.disponibilidad_cruzada_activa,
                 codigo_barras=producto.codigo_barras,
                 activo=producto.activo,
             )

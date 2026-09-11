@@ -115,6 +115,11 @@ class ActualizarProductoInput:
     codigo_barras: str | None = None
     cambiar_codigo_barras: bool = False
     cambiar_descripcion: bool = False
+    duracion_minutos: int | None = None
+    cambiar_duracion_minutos: bool = False
+    tiempo_buffer_minutos: int | None = None
+    requiere_recurso: bool | None = None
+    disponibilidad_cruzada_activa: bool | None = None
 
 
 class ActualizarProductoUseCase:
@@ -229,6 +234,11 @@ class ActualizarProductoUseCase:
             codigo_barras=data.codigo_barras,
             cambiar_codigo_barras=data.cambiar_codigo_barras,
             cambiar_descripcion=data.cambiar_descripcion,
+            duracion_minutos=data.duracion_minutos,
+            cambiar_duracion_minutos=data.cambiar_duracion_minutos,
+            tiempo_buffer_minutos=data.tiempo_buffer_minutos,
+            requiere_recurso=data.requiere_recurso,
+            disponibilidad_cruzada_activa=data.disponibilidad_cruzada_activa,
         )
         if data.cambiar_mayoreo:
             _validar_mayoreo(producto.precio_mayoreo, producto.cantidad_minima_mayoreo)

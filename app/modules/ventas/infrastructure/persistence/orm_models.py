@@ -138,6 +138,9 @@ class DetalleVentaORM(Base):
     promo_etiqueta = Column(String(120), nullable=True)
     # Cantidad de esta línea ya devuelta (acumulado). Sube con cada devolución.
     cantidad_devuelta = Column(Numeric(14, 4), nullable=False, default=0)
+    # Vínculo trazable (desacoplado) con `agenda.cita`, si esta línea factura un
+    # servicio agendado. Nullable: la mayoría de las líneas no vienen de una cita.
+    cita_id = Column(PGUUID(as_uuid=True), ForeignKey("cita.id"), nullable=True)
 
     promos = relationship(
         "DetalleVentaPromoORM", backref="detalle", cascade="all, delete-orphan",

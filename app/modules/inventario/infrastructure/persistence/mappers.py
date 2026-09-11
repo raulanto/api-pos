@@ -163,6 +163,10 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         es_sobre_pedido=orm.es_sobre_pedido,
         monedero_pct=orm.monedero_pct,
         monedero_monto=orm.monedero_monto,
+        duracion_minutos=orm.duracion_minutos,
+        tiempo_buffer_minutos=orm.tiempo_buffer_minutos,
+        requiere_recurso=orm.requiere_recurso,
+        disponibilidad_cruzada_activa=orm.disponibilidad_cruzada_activa,
         # Siempre presente: no depende de `includes` (ver `_opts_producto`,
         # que carga `imagen_principal` incondicionalmente).
         imagen_principal=to_domain_imagen(orm.imagen_principal) if orm.imagen_principal else None,
@@ -306,6 +310,10 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         es_sobre_pedido=entidad.es_sobre_pedido,
         monedero_pct=entidad.monedero_pct,
         monedero_monto=entidad.monedero_monto,
+        duracion_minutos=entidad.duracion_minutos,
+        tiempo_buffer_minutos=entidad.tiempo_buffer_minutos,
+        requiere_recurso=entidad.requiere_recurso,
+        disponibilidad_cruzada_activa=entidad.disponibilidad_cruzada_activa,
         activo=entidad.activo
     )
 
