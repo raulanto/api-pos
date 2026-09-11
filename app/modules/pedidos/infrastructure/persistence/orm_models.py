@@ -43,7 +43,6 @@ class PedidoORM(Base, TimestampMixin):
     telefono = Column(String(50), nullable=True)
     descuento_total = Column(Numeric(12, 2), nullable=False, default=0)
     motivo_descuento = Column(Text, nullable=True)
-    costo_envio = Column(Numeric(12, 2), nullable=False, default=0)
     codigo_cupon = Column(String(40), nullable=True)
     cliente_segmento = Column(String(60), nullable=True)
     notas = Column(Text, nullable=True)
@@ -73,7 +72,10 @@ class PedidoORM(Base, TimestampMixin):
 
 class DetallePedidoORM(Base):
     __tablename__ = "detalle_pedido"
-    __table_args__ = (Index("ix_detalle_pedido_pedido", "pedido_id"),)
+    __table_args__ = (
+        Index("ix_detalle_pedido_pedido", "pedido_id"),
+        Index("ix_detalle_pedido_asignado", "asignado_a"),
+    )
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pedido_id = Column(
         PGUUID(as_uuid=True), ForeignKey("pedido.id", ondelete="CASCADE"), nullable=False,
@@ -90,6 +92,10 @@ class DetallePedidoORM(Base):
     promo_id = Column(PGUUID(as_uuid=True), ForeignKey("promocion.id"), nullable=True)
     promo_etiqueta = Column(String(120), nullable=True)
     promo_descuento = Column(Numeric(12, 2), nullable=False, default=0)
+    # Servicio (envío, instalación, …): lo marca el backend según el tipo del
+    # producto; `asignado_a` es la persona responsable (obligatoria para confirmar).
+    es_servicio = Column(Boolean, nullable=False, default=False)
+    asignado_a = Column(PGUUID(as_uuid=True), ForeignKey("usuario.id"), nullable=True)
 
 
 class PedidoPagoORM(Base):

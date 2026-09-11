@@ -24,8 +24,10 @@
   queda `facturado` con `venta_id`.
 - **No hay reserva de stock.** El stock se descuenta **al facturar**. Si en ese
   momento no alcanza → error y el pedido queda `confirmado` para reintentar.
-- El **costo de envío** se cobra como una línea más (un producto de tipo
-  servicio); no es un campo aparte en la venta.
+- El **envío / instalación / etc. son líneas normales** cuyo producto es de tipo
+  **`servicio`** (los creás en el catálogo). No hay campo `costo_envio` ni
+  producto mágico. Una línea de servicio se marca `es_servicio: true` y **necesita
+  un responsable** (`asignado_a`, un usuario) para poder **confirmar** el pedido.
 - Los **anticipos** (prepago, seña) se registran en el pedido y entran como
   **pagos de la venta** al facturar. El POS sólo cobra el `saldo_por_cobrar`.
 
@@ -71,6 +73,7 @@ POST   /api/v1/pedidos/{id}/confirmar           borrador→confirmado (pedidos.c
 POST   /api/v1/pedidos/{id}/reabrir             confirmado→borrador (pedidos.editar)
 POST   /api/v1/pedidos/{id}/cancelar            → cancelado       (pedidos.cancelar)
 PATCH  /api/v1/pedidos/{id}/entrega             repartidor + estado_entrega (pedidos.repartir)
+PATCH  /api/v1/pedidos/{id}/asignaciones        responsable de líneas de servicio (pedidos.editar)
 POST   /api/v1/pedidos/{id}/anticipos           registrar anticipo (pedidos.editar)
 POST   /api/v1/pedidos/{id}/facturar            emitir la venta   (pedidos.facturar)
 ```
@@ -88,14 +91,15 @@ Idempotency-Key: <uuid opcional>
   "tipo": "domicilio",                 // mostrador | domicilio | recoger
   "canal": "web",                      // pos | web | telefono   (default: pos)
   "lineas": [
-    { "producto_id": "…", "cantidad": 2, "precio_unitario": 200,
-      "descuento_linea": 0, "impuesto_tasa": 16, "producto_unidad_id": null }
+    { "producto_id": "<coca>", "cantidad": 2, "precio_unitario": 200,
+      "descuento_linea": 0, "impuesto_tasa": 16, "producto_unidad_id": null },
+    { "producto_id": "<servicio-entrega>", "cantidad": 1, "precio_unitario": 50,
+      "asignado_a": "<usuario-repartidor>" }   // línea de servicio: lleva responsable
   ],
   "cliente_id": null,                  // opcional
   "telefono": "5551234567",            // opcional (historial + monedero al facturar)
   "descuento_total": 0,                // descuento manual sobre el total
   "motivo_descuento": null,            // OBLIGATORIO si hay descuento manual (>0)
-  "costo_envio": 30,                   // 0 si no aplica
   "codigo_cupon": null,                // cupón que habilita una promo
   "cliente_segmento": null,            // hint para promos por segmento
   "notas": "Portón negro",
@@ -114,26 +118,32 @@ Idempotency-Key: <uuid opcional>
   necesitás mostrar "hay stock", usá `POST /ventas/cotizar` con las mismas líneas
   (devuelve `hay_stock` por línea) antes de crear.
 - `tipo = domicilio` sin `direccion_texto` → 400 `DireccionEnvioRequerida`.
+- **Servicios**: cualquier línea cuyo producto sea de tipo `servicio` (envío,
+  instalación, …) vuelve en el detalle con `es_servicio: true`. `asignado_a` (un
+  usuario) es el responsable; se puede mandar al crear o después (ver 1.8). Se
+  ignora en líneas que no son servicio.
 - Respuesta: el pedido completo (ver 1.4). Guardá el `id`.
 
 ### 1.2 Editar un pedido (sólo en `borrador`)
 
 ```
 PATCH /api/v1/pedidos/{id}
-{ "tipo": "mostrador", "lineas": [ … ], "costo_envio": 45, "direccion_texto": "…", "notas": "…" }
+{ "tipo": "mostrador", "lineas": [ … ], "direccion_texto": "…", "notas": "…" }
 ```
 
 - Sólo las claves presentes en el body se aplican (patch parcial).
 - Se puede editar cualquier campo del alta, **incluido `tipo` y `canal`**.
   Al cambiar `tipo`:
   - a **`mostrador`**: se limpian `estado_entrega`, `direccion_texto`,
-    `referencia_direccion`, `repartidor_id` y `costo_envio` (queda en 0). El
-    front puede mandar `direccion_texto: null` sin que falle.
+    `referencia_direccion` y `repartidor_id`. El front puede mandar
+    `direccion_texto: null` sin que falle. (Sacá la línea de envío del carrito.)
   - a **`domicilio`**: exige `direccion_texto` (mandalo en el mismo PATCH) →
     si falta, 400 `DireccionEnvioRequerida`. Arranca `estado_entrega:"pendiente"`.
   - a **`recoger`**: arranca `estado_entrega:"pendiente"`, sin dirección obligatoria.
 - Si mandás `lineas`, `descuento_total`, `codigo_cupon` o `cliente_segmento`, el
-  backend **vuelve a cotizar** y reemplaza las líneas.
+  backend **vuelve a cotizar** y reemplaza las líneas. Al mandar `lineas` incluí
+  el `asignado_a` de cada línea de servicio (si no, se pierde). Para tocar sólo el
+  responsable sin re-cotizar, usá `PATCH /{id}/asignaciones` (ver 1.8).
 - Si el pedido no está en `borrador` → 400 `PedidoNoEditable`. Para editar uno
   `confirmado`: primero `POST /{id}/reabrir`.
 
@@ -146,6 +156,9 @@ POST /api/v1/pedidos/{id}/cancelar      { "motivo": "el cliente se arrepintió" 
 ```
 
 - `confirmar` desde algo que no es `borrador` → 409 `TransicionPedidoInvalida`.
+- `confirmar` con una línea de servicio **sin `asignado_a`** → 400
+  `ServicioSinResponsable`. Asigná el responsable antes (en el PATCH de líneas o
+  en `PATCH /{id}/asignaciones`).
 - `cancelar` un pedido `facturado` → 409 `PedidoYaFacturado` (para revertir una
   venta ya emitida se usa anular/devolución de ventas).
 - `cancelar` con anticipos vivos: los marca `reembolsado` y dispara un evento
@@ -171,7 +184,6 @@ GET /api/v1/pedidos/{id}
   "telefono": "5551234567",
   "descuento_total": "0.00",
   "motivo_descuento": null,
-  "costo_envio": "30.00",
   "codigo_cupon": null,
   "cliente_segmento": null,
   "notas": "Portón negro",
@@ -185,18 +197,23 @@ GET /api/v1/pedidos/{id}
   "venta_id": null,                     // se llena al facturar
   "created_at": "2026-09-09T15:00:00Z",
 
-  "subtotal": "570.00",                 // Σ subtotal de líneas (ya con mayoreo/promo)
-  "total": "600.00",                    // subtotal − descuento_total + costo_envio
-  "total_promociones": "30.00",         // informativo, ya restado en subtotal
+  "subtotal": "620.00",                 // Σ subtotal de líneas (ya con mayoreo/promo)
+  "total": "620.00",                    // subtotal − descuento_total
+  "total_promociones": "0.00",          // informativo, ya restado en subtotal
   "total_anticipos": "100.00",          // anticipos no reembolsados
-  "saldo_por_cobrar": "500.00",         // total − total_anticipos  → esto cobra el POS
+  "saldo_por_cobrar": "520.00",         // total − total_anticipos  → esto cobra el POS
 
   "lineas": [
-    { "id": "…", "producto_id": "…", "producto_unidad_id": null,
+    { "id": "…", "producto_id": "<coca>", "producto_unidad_id": null,
       "cantidad": "3.0000", "cantidad_en_unidad_base": "3.0000",
-      "precio_unitario": "200.00", "descuento_linea": "0.00", "impuesto_tasa": "16.00",
-      "promo_id": "…", "promo_etiqueta": "Promo bebidas", "promo_descuento": "30.00",
-      "subtotal": "570.00" }                // 3×200 − 0 − 30
+      "precio_unitario": "190.00", "descuento_linea": "0.00", "impuesto_tasa": "16.00",
+      "promo_id": null, "promo_etiqueta": "Mayoreo x3", "promo_descuento": "0.00",
+      "subtotal": "570.00", "es_servicio": false, "asignado_a": null },
+    { "id": "…", "producto_id": "<servicio-entrega>", "producto_unidad_id": null,
+      "cantidad": "1.0000", "cantidad_en_unidad_base": "1.0000",
+      "precio_unitario": "50.00", "descuento_linea": "0.00", "impuesto_tasa": "0.00",
+      "promo_id": null, "promo_etiqueta": null, "promo_descuento": "0.00",
+      "subtotal": "50.00", "es_servicio": true, "asignado_a": "<usuario>" }
   ],
   "pagos": [
     { "id": "…", "monto": "100.00", "metodo_pago": "tarjeta_debito",
@@ -250,7 +267,23 @@ PATCH /api/v1/pedidos/{id}/entrega
   al pasar a `entregado`.
 - Sobre un pedido `mostrador` (sin entrega) → 409 `EntregaNoAplica`.
 
-### 1.8 Anticipos (prepago / seña)
+### 1.8 Asignar el responsable de un servicio
+
+```
+PATCH /api/v1/pedidos/{id}/asignaciones
+{ "asignaciones": [ { "detalle_id": "<id de la línea>", "asignado_a": "<usuario>" } ] }
+```
+
+- Fija/reasigna el responsable de líneas de **servicio** sin re-cotizar (no se
+  pierden ids ni el resto de asignaciones).
+- Vale en `borrador` **y** en `confirmado` (reasignar un repartidor/técnico
+  después de confirmar). En `facturado`/`cancelado` → 409.
+- `detalle_id` tiene que ser una línea `es_servicio: true` del pedido, si no →
+  400 `ResponsableInvalido`. `asignado_a` tiene que ser un usuario activo.
+- Alternativa: mandar el `asignado_a` dentro de cada línea en `PATCH /{id}`
+  (pero eso re-cotiza y regenera los ids de línea).
+
+### 1.9 Anticipos (prepago / seña)
 
 ```
 POST /api/v1/pedidos/{id}/anticipos
@@ -263,7 +296,7 @@ POST /api/v1/pedidos/{id}/anticipos
 - Baja el `saldo_por_cobrar` del pedido. Al facturar, cada anticipo se agrega
   como un pago de la venta.
 
-### 1.9 Facturar (emitir la venta)
+### 1.10 Facturar (emitir la venta)
 
 ```
 POST /api/v1/pedidos/{id}/facturar
@@ -289,10 +322,9 @@ Idempotency-Key: <uuid opcional>
     cotizaste es lo que se cobra.
   - `true`: se vuelven a correr mayoreo + promociones **vigentes al momento de
     facturar** (por si cambiaron desde que se confirmó).
-- **`costo_envio`**: si es > 0, se agrega automáticamente una línea con el
-  producto "Envío a domicilio" configurado en el backend. Si el backend no lo
-  tiene configurado → 400 `ProductoEnvioNoConfigurado` (avisar a soporte; se
-  resuelve con una variable de entorno).
+- **Servicios / envío**: no hay nada especial acá. Las líneas de servicio del
+  pedido (envío, instalación, …) se facturan como cualquier otra línea; el
+  `asignado_a` queda en el pedido (no se copia a la venta).
 - **Stock**: se descuenta acá. Si una línea deja stock negativo → 400
   `StockInsuficiente` y **no se factura** (el pedido sigue `confirmado`).
 - Respuesta: **la venta completa**, con el mismo formato que `GET /ventas/{id}`
@@ -317,7 +349,8 @@ Idempotency-Key: <uuid opcional>
 | 400 | `PedidoSinLineas` | Pedido sin líneas |
 | 400 | `MotivoDescuentoRequerido` | Hay descuento manual (`descuento_total`/`descuento_linea` > 0) sin `motivo_descuento` |
 | 400 | `AnticipoInvalido` | Anticipo ≤ 0 o con `metodo_pago = "credito"` |
-| 400 | `ProductoEnvioNoConfigurado` | `costo_envio > 0` y el backend no tiene el producto de envío configurado |
+| 400 | `ServicioSinResponsable` | `confirmar` con una línea `es_servicio` sin `asignado_a` |
+| 400 | `ResponsableInvalido` | `asignado_a` no es un usuario activo, o la línea de `PATCH /asignaciones` no es un servicio |
 | 422 | (formato) | Falta un campo o el tipo es inválido (`cantidad ≤ 0`, enum inválido, …) |
 
 Al **facturar**, además pueden salir todos los errores de una venta normal:
@@ -372,17 +405,26 @@ Cubre "ventas que se cotizan y se cobran después". Sin envío.
    en la edición mientras esté en `borrador`** (`PATCH` con `tipo`; al pasar a
    `domicilio` hay que mandar `direccion_texto` en el mismo request).
    Con `domicilio`: campos `direccion_texto` (obligatorio), `referencia_direccion`,
-   `fecha_promesa`, `costo_envio`. Mostrar `costo_envio` en el total.
+   `fecha_promesa`.
+8b. **Línea de servicio de envío**: selector de servicios del catálogo
+   (`GET /api/v1/inventario/productos/buscar?tipo=servicio&activo=true`); al
+   agregar la línea, **exigir elegir el responsable** (`asignado_a`, picker de
+   usuarios filtrado por rol repartidor). Si `tipo = domicilio` y no hay ninguna
+   línea de servicio, sugerir agregar "Entrega a domicilio". El precio de la
+   línea sale del catálogo o lo edita el operador (envío por zona).
 9. **Tablero de entregas** — `GET /pedidos/?tipo=domicilio&estado_entrega=…`.
    Columnas: `pendiente`, `en_preparacion`, `en_reparto`, `entregado`, `fallido`
    (contadores de `/resumen.por_estado_entrega`).
 10. **Acciones de entrega** — `PATCH /{id}/entrega`:
-    - Asignar repartidor (`repartidor_id`; lista de usuarios del rol repartidor).
+    - Asignar repartidor del pedido (`repartidor_id`; lista de usuarios del rol
+      repartidor). Es aparte del `asignado_a` de la línea de servicio: uno es
+      "quién lleva el pedido", el otro "quién ejecuta ese servicio".
     - Botón "Siguiente estado" respetando las transiciones del diagrama.
     - "Marcar entrega fallida" → pide `motivo`; después permite reintentar.
     - Mostrar `despachado_en` / `entregado_en`.
 11. En el detalle, sección "Entrega" con dirección, repartidor, timeline de
-    estados.
+    estados, y el `asignado_a` de cada servicio (editable vía
+    `PATCH /{id}/asignaciones`, también en `confirmado`).
 
 ### Fase C — Prepago y cierre fino
 
@@ -419,7 +461,9 @@ Cubre "ventas que se cotizan y se cobran después". Sin envío.
    `{ caja_turno_id, pagos:[{monto: total, metodo_pago:"efectivo"}] }` → venta.
 
 ### 4.2 Envío a domicilio, pago contra entrega
-1. `POST /pedidos/` `{ tipo:"domicilio", direccion_texto:"…", costo_envio:30, lineas:[…], confirmar:true }`.
+1. `POST /pedidos/` `{ tipo:"domicilio", direccion_texto:"…", confirmar:true,
+   lineas:[ <productos>, { producto_id:"<servicio-entrega>", cantidad:1,
+   precio_unitario:30, asignado_a:"<repartidor>" } ] }`.
 2. Cocina: `PATCH /{id}/entrega { estado_entrega:"en_preparacion" }`.
 3. Sale el repartidor: `PATCH /{id}/entrega { estado_entrega:"en_reparto", repartidor_id:"…" }`.
 4. Entregado y cobrado: `PATCH /{id}/entrega { estado_entrega:"entregado" }`.
@@ -427,7 +471,7 @@ Cubre "ventas que se cotizan y se cobran después". Sin envío.
    → venta con la línea de envío incluida.
 
 ### 4.3 Envío con prepago online
-1. `POST /pedidos/` `{ tipo:"domicilio", …, canal:"web" }`.
+1. `POST /pedidos/` `{ tipo:"domicilio", …, canal:"web", lineas:[…, línea de servicio] }`.
 2. `POST /{id}/anticipos { monto: total, metodo_pago:"tarjeta_credito", referencia:"…" }`
    → `saldo_por_cobrar` queda en 0.
 3. `POST /{id}/confirmar`.
@@ -449,7 +493,12 @@ Cubre "ventas que se cotizan y se cobran después". Sin envío.
       `canal`, fechas, `cliente`/`telefono`) + contadores de `/resumen`
 - [ ] Alta de pedido reusando el carrito del POS; preview con `POST /ventas/cotizar`
 - [ ] Selector de `tipo`; con `domicilio`: `direccion_texto` (obligatorio),
-      `referencia_direccion`, `fecha_promesa`, `costo_envio` (sumado al total)
+      `referencia_direccion`, `fecha_promesa`
+- [ ] Línea de servicio de envío desde el catálogo (`?tipo=servicio`); al agregarla,
+      exigir `asignado_a` (responsable). Bloquear "Confirmar" si algún servicio no
+      tiene responsable (evita el 400 `ServicioSinResponsable`)
+- [ ] Reasignar responsable de un servicio con `PATCH /{id}/asignaciones` (sirve en
+      `confirmado`)
 - [ ] `Idempotency-Key` en `POST /pedidos/` y en `POST /{id}/facturar`
 - [ ] Detalle con acciones condicionadas por `estado` (borrador / confirmado /
       facturado / cancelado) y por permisos

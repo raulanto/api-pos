@@ -86,6 +86,14 @@ services:
       # Guarda y restaura el estado de S3 en /var/lib/localstack/state entre
       # reinicios. Sin esto el bucket arranca vacío en cada `restart`.
       PERSISTENCE: "1"
+      # Por defecto LocalStack sólo escribe el snapshot al recibir un shutdown
+      # ordenado (SIGTERM con tiempo de sobra). Si apagás la compu / matás
+      # Docker sin `docker compose down` antes, ese guardado nunca ocurre y las
+      # imágenes subidas se pierden aunque el bind-mount esté bien. Con
+      # SCHEDULED guarda solo cada 15s, así que sobrevive a un apagón abrupto
+      # (como mucho se pierden los últimos ~15s de uploads).
+      SNAPSHOT_SAVE_STRATEGY: "SCHEDULED"
+      SNAPSHOT_FLUSH_INTERVAL: "15"
       DEBUG: "1"
     volumes:
       # Scripts de bootstrap (ready.d) + zip de la Lambda.

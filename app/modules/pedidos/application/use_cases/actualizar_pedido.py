@@ -3,9 +3,10 @@ from typing import List
 from uuid import UUID
 
 from app.modules.ventas.application.use_cases.crear_venta import CrearVentaUseCase
+from app.modules.usuarios.application.ports.usuario_repository import UsuarioRepository
 from app.modules.pedidos.application.ports.pedido_repository import PedidoRepository
 from app.modules.pedidos.application.use_cases.crear_pedido import (
-    LineaPedidoInput, cotizar_a_detalles,
+    LineaPedidoInput, cotizar_a_detalles, validar_responsables,
 )
 from app.modules.pedidos.domain.entities import Pedido
 from app.modules.pedidos.domain.exceptions import (
@@ -28,7 +29,6 @@ class ActualizarPedidoInput:
     telefono: object = _SIN_CAMBIO
     descuento_total: object = _SIN_CAMBIO
     motivo_descuento: object = _SIN_CAMBIO
-    costo_envio: object = _SIN_CAMBIO
     codigo_cupon: object = _SIN_CAMBIO
     cliente_segmento: object = _SIN_CAMBIO
     notas: object = _SIN_CAMBIO
@@ -38,9 +38,13 @@ class ActualizarPedidoInput:
 
 
 class ActualizarPedidoUseCase:
-    def __init__(self, pedido_repo: PedidoRepository, crear_venta_uc: CrearVentaUseCase):
+    def __init__(
+        self, pedido_repo: PedidoRepository, crear_venta_uc: CrearVentaUseCase,
+        usuario_repo: UsuarioRepository,
+    ):
         self._repo = pedido_repo
         self._venta_uc = crear_venta_uc
+        self._usuario_repo = usuario_repo
 
     async def ejecutar(self, data: ActualizarPedidoInput) -> Pedido:
         pedido = await self._repo.obtener_por_id(data.pedido_id)
@@ -65,7 +69,6 @@ class ActualizarPedidoUseCase:
         _set("telefono", data.telefono)
         _set("descuento_total", data.descuento_total)
         _set("motivo_descuento", data.motivo_descuento)
-        _set("costo_envio", data.costo_envio)
         _set("codigo_cupon", data.codigo_cupon)
         _set("cliente_segmento", data.cliente_segmento)
         _set("notas", data.notas)
@@ -80,7 +83,9 @@ class ActualizarPedidoUseCase:
         )
         if reprice:
             fuente = _FuentePrecio(pedido, data.lineas)
-            pedido.reemplazar_lineas(await cotizar_a_detalles(self._venta_uc, fuente))
+            nuevas = await cotizar_a_detalles(self._venta_uc, fuente)
+            await validar_responsables(self._usuario_repo, nuevas)
+            pedido.reemplazar_lineas(nuevas)
 
         _validar(pedido)
         await self._repo.actualizar(pedido)
@@ -90,7 +95,8 @@ class ActualizarPedidoUseCase:
 class _FuentePrecio:
     """Adapta un Pedido (+ líneas nuevas opcionales) a lo que espera
     `cotizar_a_detalles`: atributos `sucursal_id`, `lineas`, `descuento_total`,
-    `cliente_segmento`, `codigo_cupon`, `telefono`."""
+    `cliente_segmento`, `codigo_cupon`, `telefono`. Conserva `asignado_a` de las
+    líneas actuales cuando no se mandan líneas nuevas."""
     def __init__(self, pedido: Pedido, lineas_nuevas: List[LineaPedidoInput] | None):
         self.sucursal_id = pedido.sucursal_id
         self.descuento_total = pedido.descuento_total
@@ -105,6 +111,7 @@ class _FuentePrecio:
                     producto_id=l.producto_id, cantidad=l.cantidad,
                     precio_unitario=l.precio_unitario, descuento_linea=l.descuento_linea,
                     impuesto_tasa=l.impuesto_tasa, producto_unidad_id=l.producto_unidad_id,
+                    asignado_a=l.asignado_a,
                 ) for l in pedido.lineas
             ]
 

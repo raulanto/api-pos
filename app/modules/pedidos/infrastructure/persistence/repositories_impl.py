@@ -44,7 +44,6 @@ class SqlAlchemyPedidoRepository(PedidoRepository):
         orm.telefono = pedido.telefono
         orm.descuento_total = pedido.descuento_total
         orm.motivo_descuento = pedido.motivo_descuento
-        orm.costo_envio = pedido.costo_envio
         orm.codigo_cupon = pedido.codigo_cupon
         orm.cliente_segmento = pedido.cliente_segmento
         orm.notas = pedido.notas

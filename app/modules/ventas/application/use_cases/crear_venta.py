@@ -92,6 +92,7 @@ class CotizacionLinea:
     subtotal: Decimal
     stock_disponible: Decimal | None   # en la unidad de la línea; None = ilimitado
     hay_stock: bool
+    es_servicio: bool = False           # el producto es de tipo SERVICIO
 
 
 @dataclass
@@ -331,6 +332,7 @@ class CrearVentaUseCase:
                 subtotal=l.subtotal,
                 stock_disponible=disp,
                 hay_stock=(disp is None or disp >= l.cantidad),
+                es_servicio=await self._inventario.es_servicio(l.producto_id),
             ))
         total_promos = sum((l.promo_descuento for l in lineas), Decimal("0"))
         total = sum((l.subtotal for l in lineas), Decimal("0")) - data.descuento_total

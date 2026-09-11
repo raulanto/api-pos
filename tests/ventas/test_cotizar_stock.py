@@ -33,6 +33,9 @@ class _Inv:
     async def stock_disponible(self, producto_id, sucursal_id, producto_unidad_id=None):
         return self._disp
 
+    async def es_servicio(self, producto_id):
+        return False
+
 
 class _Promos:
     async def evaluar(self, sucursal_id, lineas, **kw):

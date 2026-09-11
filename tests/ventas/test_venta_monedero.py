@@ -54,6 +54,9 @@ class _Inventario:
     async def stock_disponible(self, producto_id, sucursal_id, producto_unidad_id=None):
         return None
 
+    async def es_servicio(self, producto_id):
+        return False
+
     async def descontar_stock(self, **kw):
         pass
 

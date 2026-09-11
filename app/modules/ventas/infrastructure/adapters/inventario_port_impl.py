@@ -249,6 +249,10 @@ class InventarioPortImpl(InventarioPort):
 
         return (base_disp / factor) if factor else base_disp
 
+    async def es_servicio(self, producto_id: UUID) -> bool:
+        producto = await self._cargar_producto(producto_id)
+        return producto.tipo == TipoProducto.SERVICIO
+
     async def precio_mayoreo_aplicable(
         self, producto_id: UUID, cantidad: Decimal,
     ) -> Decimal | None:

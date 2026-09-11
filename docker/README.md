@@ -101,7 +101,7 @@ Archivos en la raíz del proyecto también relevantes:
 
 - **Imagen**: `localstack/localstack:4`.
 - **Servicios habilitados**: `s3`, `lambda`.
-- **Persistencia**: `PERSISTENCE=1` guarda el estado de S3 entre reinicios en `./docker/localstack/data/`.
+- **Persistencia**: `PERSISTENCE=1` guarda el estado de S3 entre reinicios en `./docker/localstack/data/`. `SNAPSHOT_SAVE_STRATEGY=SCHEDULED` (cada `SNAPSHOT_FLUSH_INTERVAL=15` segundos) hace el guardado periódico en vez de sólo al recibir un shutdown ordenado — así un apagón/kill abrupto de Docker pierde a lo sumo los últimos ~15s, no todo lo subido en la sesión.
 - **Bootstrap** (`docker/localstack/init/ready.d/10-init.sh`):
   1. Crea el bucket `pos-imagenes` con CORS configurado (GET, PUT, HEAD).
   2. Despliega la Lambda `pos-thumbnailer` usando el zip de `lambda_build`.

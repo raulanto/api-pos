@@ -4,7 +4,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import (
     require_permission, UsuarioAutenticado, sucursal_scope, verificar_alcance_sucursal,
@@ -28,12 +27,16 @@ from app.modules.ventas.infrastructure.api.schemas import VentaResponse
 from app.modules.pedidos.application.dtos import FiltroPedidos
 from app.modules.pedidos.domain.value_objects import EstadoPedido, EstadoEntrega, TipoPedido, CanalPedido
 from app.modules.pedidos.domain import exceptions as pexc
+from app.modules.usuarios.infrastructure.persistence.usuario_repository_impl import (
+    SqlAlchemyUsuarioRepository,
+)
 from app.modules.pedidos.infrastructure.persistence.repositories_impl import (
     SqlAlchemyPedidoRepository,
 )
 from app.modules.pedidos.infrastructure.api.schemas import (
     CrearPedidoRequest, ActualizarPedidoRequest, CancelarPedidoRequest,
     CambiarEntregaRequest, RegistrarAnticipoRequest, FacturarPedidoRequest,
+    AsignarServiciosRequest,
     PedidoResponse, PedidoListItem, PedidoPagoResponse, ResumenPedidosResponse,
 )
 from app.modules.pedidos.application.use_cases.crear_pedido import (
@@ -46,6 +49,7 @@ from app.modules.pedidos.application.use_cases.gestionar_pedido import (
     ConfirmarPedidoUseCase, ReabrirPedidoUseCase, CancelarPedidoUseCase,
     CambiarEntregaUseCase, CambiarEntregaInput,
     RegistrarAnticipoUseCase, RegistrarAnticipoInput,
+    AsignarServiciosUseCase, AsignarServiciosInput,
 )
 from app.modules.pedidos.application.use_cases.facturar_pedido import (
     FacturarPedidoUseCase, FacturarPedidoInput,
@@ -64,7 +68,8 @@ _NOT_FOUND = (pexc.PedidoNoEncontrado,)
 _CONFLICT = (pexc.PedidoYaFacturado, pexc.TransicionPedidoInvalida, pexc.EntregaNoAplica)
 _BAD_REQUEST = (
     pexc.PedidoSinLineas, pexc.PedidoNoEditable, pexc.DireccionEnvioRequerida,
-    pexc.ProductoEnvioNoConfigurado, pexc.AnticipoInvalido, pexc.MotivoDescuentoRequerido,
+    pexc.AnticipoInvalido, pexc.MotivoDescuentoRequerido,
+    pexc.ServicioSinResponsable, pexc.ResponsableInvalido,
 )
 
 
@@ -101,17 +106,13 @@ def _repo(db: AsyncSession) -> SqlAlchemyPedidoRepository:
     return SqlAlchemyPedidoRepository(db)
 
 
-def _producto_envio_id() -> UUID | None:
-    raw = settings.pedidos_producto_envio_id
-    return UUID(raw) if raw else None
-
-
 def _lineas_input(lineas) -> list[LineaPedidoInput]:
     return [
         LineaPedidoInput(
             producto_id=l.producto_id, cantidad=l.cantidad,
             precio_unitario=l.precio_unitario, descuento_linea=l.descuento_linea,
             impuesto_tasa=l.impuesto_tasa, producto_unidad_id=l.producto_unidad_id,
+            asignado_a=l.asignado_a,
         ) for l in lineas
     ]
 
@@ -125,14 +126,16 @@ async def crear_pedido(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     sucursal_id = _exige_sucursal(actual)
-    uc = CrearPedidoUseCase(_repo(db), _crear_venta_uc(db), EventPortImpl(db))
+    uc = CrearPedidoUseCase(
+        _repo(db), _crear_venta_uc(db), EventPortImpl(db), SqlAlchemyUsuarioRepository(db),
+    )
     try:
         pedido = await uc.ejecutar(CrearPedidoInput(
             sucursal_id=sucursal_id, usuario_id=actual.id,
             tipo=body.tipo, canal=body.canal, lineas=_lineas_input(body.lineas),
             cliente_id=body.cliente_id, telefono=body.telefono,
             descuento_total=body.descuento_total, motivo_descuento=body.motivo_descuento,
-            costo_envio=body.costo_envio, codigo_cupon=body.codigo_cupon,
+            codigo_cupon=body.codigo_cupon,
             cliente_segmento=body.cliente_segmento, notas=body.notas,
             fecha_promesa=body.fecha_promesa,
             direccion_texto=body.direccion_texto,
@@ -209,13 +212,15 @@ async def actualizar_pedido(
     puestos = body.model_fields_set
     campos = [
         "tipo", "canal", "cliente_id", "telefono", "descuento_total", "motivo_descuento",
-        "costo_envio", "codigo_cupon", "cliente_segmento", "notas", "fecha_promesa",
+        "codigo_cupon", "cliente_segmento", "notas", "fecha_promesa",
         "direccion_texto", "referencia_direccion",
     ]
     kwargs = {c: (getattr(body, c) if c in puestos else _SIN_CAMBIO) for c in campos}
     lineas = _lineas_input(body.lineas) if ("lineas" in puestos and body.lineas) else None
     try:
-        pedido = await ActualizarPedidoUseCase(_repo(db), _crear_venta_uc(db)).ejecutar(
+        pedido = await ActualizarPedidoUseCase(
+            _repo(db), _crear_venta_uc(db), SqlAlchemyUsuarioRepository(db),
+        ).ejecutar(
             ActualizarPedidoInput(pedido_id=pedido_id, lineas=lineas, **kwargs)
         )
     except HTTPException:
@@ -318,6 +323,28 @@ async def registrar_anticipo(
     return ok(PedidoPagoResponse.model_validate(pago))
 
 
+@router.patch("/{pedido_id}/asignaciones", response_model=ApiResponse[PedidoResponse])
+async def asignar_servicios(
+    pedido_id: UUID,
+    body: AsignarServiciosRequest,
+    db: AsyncSession = Depends(get_db),
+    actual: UsuarioAutenticado = Depends(require_permission("pedidos.editar")),
+):
+    """Fija/reasigna el responsable de líneas de servicio sin re-cotizar. Vale en
+    borrador y confirmado."""
+    try:
+        pedido = await AsignarServiciosUseCase(
+            _repo(db), EventPortImpl(db), SqlAlchemyUsuarioRepository(db),
+        ).ejecutar(AsignarServiciosInput(
+            pedido_id=pedido_id, usuario_id=actual.id,
+            asignaciones=[(a.detalle_id, a.asignado_a) for a in body.asignaciones],
+        ))
+    except Exception as e:
+        raise _traducir(e)
+    verificar_alcance_sucursal(actual, pedido.sucursal_id)
+    return ok(PedidoResponse.model_validate(pedido))
+
+
 @router.post(
     "/{pedido_id}/facturar", response_model=ApiResponse[VentaResponse],
     status_code=status.HTTP_201_CREATED,
@@ -330,8 +357,7 @@ async def facturar_pedido(
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     uc = FacturarPedidoUseCase(
-        _repo(db), SqlAlchemyVentaRepository(db), _crear_venta_uc(db),
-        EventPortImpl(db), _producto_envio_id(),
+        _repo(db), SqlAlchemyVentaRepository(db), _crear_venta_uc(db), EventPortImpl(db),
     )
     try:
         venta = await uc.ejecutar(FacturarPedidoInput(

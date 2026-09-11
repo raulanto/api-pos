@@ -19,6 +19,7 @@ def _det_to_orm(l: DetallePedido) -> DetallePedidoORM:
         cantidad_en_unidad_base=l.cantidad_en_unidad_base,
         promo_id=l.promo_id, promo_etiqueta=l.promo_etiqueta,
         promo_descuento=l.promo_descuento,
+        es_servicio=l.es_servicio, asignado_a=l.asignado_a,
     )
 
 
@@ -37,7 +38,7 @@ def to_orm_pedido(e: Pedido) -> PedidoORM:
         estado=e.estado.value,
         estado_entrega=e.estado_entrega.value if e.estado_entrega else None,
         telefono=e.telefono, descuento_total=e.descuento_total,
-        motivo_descuento=e.motivo_descuento, costo_envio=e.costo_envio,
+        motivo_descuento=e.motivo_descuento,
         codigo_cupon=e.codigo_cupon, cliente_segmento=e.cliente_segmento,
         notas=e.notas, fecha_promesa=e.fecha_promesa,
         direccion_texto=e.direccion_texto, referencia_direccion=e.referencia_direccion,
@@ -60,7 +61,6 @@ def to_domain_pedido(orm: PedidoORM) -> Pedido:
         cliente_id=orm.cliente_id, telefono=orm.telefono,
         descuento_total=orm.descuento_total or Decimal("0"),
         motivo_descuento=orm.motivo_descuento,
-        costo_envio=orm.costo_envio or Decimal("0"),
         codigo_cupon=orm.codigo_cupon, cliente_segmento=orm.cliente_segmento,
         notas=orm.notas, fecha_promesa=orm.fecha_promesa,
         direccion_texto=orm.direccion_texto,
@@ -78,6 +78,7 @@ def to_domain_pedido(orm: PedidoORM) -> Pedido:
                 cantidad_en_unidad_base=l.cantidad_en_unidad_base,
                 promo_id=l.promo_id, promo_etiqueta=l.promo_etiqueta,
                 promo_descuento=l.promo_descuento,
+                es_servicio=l.es_servicio, asignado_a=l.asignado_a,
             ) for l in sorted(orm.lineas, key=lambda x: str(x.id))
         ],
         pagos=[
