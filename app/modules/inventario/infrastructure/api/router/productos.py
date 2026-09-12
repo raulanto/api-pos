@@ -114,6 +114,7 @@ async def listar_productos(
     sucursal_id: list[UUID] | None = Query(
         default=None, description="Sólo productos con existencia en esa(s) sucursal(es)"
     ),
+    tipo: TipoProducto | None = Query(default=None),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_PRODUCTOS),
     include: frozenset[str] = Depends(_INC_PRODUCTOS),
@@ -122,6 +123,7 @@ async def listar_productos(
         verificar_alcance_sucursal(actual, s)  # rol de sucursal no consulta otras
     filtro = FiltroProductos(
         categoria_id=categoria_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
+        tipo=tipo,
     )
     pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(filtro, paginacion, orden, include)
     return page_response(

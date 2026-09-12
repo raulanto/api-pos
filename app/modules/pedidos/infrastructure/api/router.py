@@ -118,7 +118,7 @@ def _lineas_input(lineas) -> list[LineaPedidoInput]:
 
 
 # ========================================================================== #
-@router.post("/", response_model=ApiResponse[PedidoResponse], status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ApiResponse[PedidoResponse], status_code=status.HTTP_201_CREATED)
 async def crear_pedido(
     body: CrearPedidoRequest,
     db: AsyncSession = Depends(get_db),
@@ -147,7 +147,7 @@ async def crear_pedido(
     return ok(PedidoResponse.model_validate(pedido))
 
 
-@router.get("/", response_model=ApiResponse[list[PedidoListItem]])
+@router.get("", response_model=ApiResponse[list[PedidoListItem]])
 async def listar_pedidos(
     request: Request,
     db: AsyncSession = Depends(get_db),

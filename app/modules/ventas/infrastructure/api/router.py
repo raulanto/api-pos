@@ -204,7 +204,7 @@ def _devolver_use_case(db: AsyncSession) -> DevolverVentaUseCase:
 # VENTAS
 # ========================================================================== #
 @router.post(
-    "/", response_model=ApiResponse[VentaResponse], status_code=status.HTTP_201_CREATED,
+    "", response_model=ApiResponse[VentaResponse], status_code=status.HTTP_201_CREATED,
 )
 async def crear_venta(
     body: CrearVentaRequest,
@@ -293,7 +293,7 @@ async def validar_cupon(
     return ok(CuponValidacionResponse(promocion_id=pid))
 
 
-@router.get("/", response_model=ApiResponse[list[VentaListItem]])
+@router.get("", response_model=ApiResponse[list[VentaListItem]])
 async def listar_ventas(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -439,7 +439,7 @@ async def ticket_pdf(
 # CAJAS FÍSICAS (terminales) — /api/v1/cajas
 # ========================================================================== #
 @cajas_router.post(
-    "/", response_model=ApiResponse[CajaResponse], status_code=status.HTTP_201_CREATED,
+    "", response_model=ApiResponse[CajaResponse], status_code=status.HTTP_201_CREATED,
 )
 async def crear_caja(
     body: CajaCreateRequest,
@@ -456,7 +456,7 @@ async def crear_caja(
     return ok(caja)
 
 
-@cajas_router.get("/", response_model=ApiResponse[list[CajaResponse]])
+@cajas_router.get("", response_model=ApiResponse[list[CajaResponse]])
 async def listar_cajas(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("caja.operar", "caja.administrar")),
