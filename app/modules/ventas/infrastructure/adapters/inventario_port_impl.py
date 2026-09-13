@@ -86,7 +86,13 @@ class InventarioPortImpl(InventarioPort):
         producto = await self._cargar_producto(producto_id)
         factor = await self._factor(producto_id, producto_unidad_id)
         decimales = await self._decimales_stock(producto, producto_unidad_id)
-        return _cuantizar(cantidad * factor, decimales)
+        cantidad_base = _cuantizar(cantidad * factor, decimales)
+        # Se llama tanto desde `cotizar()` como desde `ejecutar()` (vía
+        # `armar_lineas`): valida acá para que la cotización avise el error de
+        # fraccionamiento antes de cobrar, no solo al descontar stock.
+        if producto_unidad_id is None:
+            producto.validar_cantidad_vendible(cantidad_base)
+        return cantidad_base
 
     async def _expandir(
         self, producto, cantidad_base: Decimal

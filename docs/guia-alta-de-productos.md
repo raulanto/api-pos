@@ -150,6 +150,9 @@ Campos del formulario:
 Precio por **kilo**. Con `incremento_minimo_venta: 0.05` la app sólo deja vender
 50 g, 100 g, 150 g… y una venta de 0.03 kg es rechazada.
 
+> Caso completo (báscula → cotizar → cobrar), con verdura y azúcar a granel:
+> `docs/guia-venta-por-peso.md`.
+
 **Ejemplo — servicio:**
 
 ```json
