@@ -31,6 +31,11 @@ from app.modules.agenda.infrastructure.persistence.orm_models import (
     RecursoORM, EmpleadoServicioORM, DisponibilidadHorarioORM, DisponibilidadExcepcionORM,
     DisponibilidadRecursoORM, CitaORM, CitaAsignacionORM,
 )
+from app.modules.proveedores.infrastructure.persistence.orm_models import (
+    ProveedorORM, ProductoProveedorORM, PedidoProveedorORM, PedidoProveedorLineaORM,
+    RecepcionProveedorORM, RecepcionProveedorLineaORM, DevolucionProveedorORM,
+    DevolucionProveedorLineaORM,
+)
 from app.modules.auditoria.infrastructure.persistence.orm_models import LogAuditoriaORM
 
 target_metadata = Base.metadata

@@ -35,6 +35,11 @@ from app.modules.ventas.infrastructure.api.router import (
 )
 from app.modules.pedidos.infrastructure.api.router import router as pedidos_router
 from app.modules.agenda.infrastructure.api.router import router as agenda_router
+from app.modules.proveedores.infrastructure.api.router import (
+    router as proveedores_router, productos_router as producto_proveedor_router,
+    pedidos_router as pedidos_proveedor_router, recepciones_router as recepciones_proveedor_router,
+    devoluciones_router as devoluciones_proveedor_router,
+)
 from app.modules.reportes.infrastructure.api.router import router as reportes_router
 from app.modules.auditoria.infrastructure.api.router import router as auditoria_router
 
@@ -48,6 +53,19 @@ app.include_router(promociones_router, prefix="/api/v1/promociones", tags=["prom
 app.include_router(ventas_router, prefix="/api/v1/ventas", tags=["ventas"])
 app.include_router(pedidos_router, prefix="/api/v1/pedidos", tags=["pedidos"])
 app.include_router(agenda_router, prefix="/api/v1/agenda", tags=["agenda"])
+app.include_router(proveedores_router, prefix="/api/v1/proveedores", tags=["proveedores"])
+app.include_router(
+    producto_proveedor_router, prefix="/api/v1/inventario/productos", tags=["proveedores"],
+)
+app.include_router(
+    pedidos_proveedor_router, prefix="/api/v1/pedidos-proveedor", tags=["proveedores"],
+)
+app.include_router(
+    recepciones_proveedor_router, prefix="/api/v1/recepciones-proveedor", tags=["proveedores"],
+)
+app.include_router(
+    devoluciones_proveedor_router, prefix="/api/v1/devoluciones-proveedor", tags=["proveedores"],
+)
 app.include_router(cajas_router, prefix="/api/v1/cajas", tags=["caja"])
 app.include_router(caja_router, prefix="/api/v1/caja-turnos", tags=["caja"])
 app.include_router(reportes_router, prefix="/api/v1/reportes", tags=["reportes"])
