@@ -7,7 +7,7 @@ from app.modules.inventario.domain.entities import MovimientoInventario, Existen
 from app.modules.inventario.domain.value_objects import TipoMovimiento
 from app.modules.inventario.domain.exceptions import (
     ProductoNoEncontrado, StockInsuficiente, AjusteSinCantidadFinal, TransferenciaInvalida,
-    LoteRequerido, LoteInvalido,
+    LoteRequerido, LoteInvalido, UnidadInvalida,
 )
 from app.modules.inventario.application.ports.producto_repository import ProductoRepository
 from app.modules.inventario.application.ports.existencia_repository import ExistenciaRepository
@@ -16,6 +16,7 @@ from app.modules.inventario.application.ports.event_port import EventPort
 from app.modules.inventario.application.ports.unidad_medida_repository import (
     UnidadMedidaRepository,
 )
+from app.modules.inventario.application.ports.unidad_repository import ProductoUnidadRepository
 from app.modules.inventario.application.ports.lote_repository import LoteRepository
 
 EVENTO_MOVIMIENTO = "MovimientoInventarioRegistrado"
@@ -82,6 +83,7 @@ class AplicarMovimientoUseCase:
         event_port: EventPort | None = None,
         unidad_medida_repo: UnidadMedidaRepository | None = None,
         lote_repo: LoteRepository | None = None,
+        unidad_repo: ProductoUnidadRepository | None = None,
     ):
         self._producto_repo = producto_repo
         self._existencia_repo = existencia_repo
@@ -89,6 +91,7 @@ class AplicarMovimientoUseCase:
         self._event_port = event_port
         self._unidad_medida_repo = unidad_medida_repo
         self._lote_repo = lote_repo
+        self._unidad_repo = unidad_repo
 
     async def _decimales_stock(self, producto) -> int:
         """Decimales admitidos por la unidad base del producto (0 para piezas)."""
@@ -107,6 +110,14 @@ class AplicarMovimientoUseCase:
         producto = await self._producto_repo.obtener_por_id(data.producto_id)
         if not producto:
             raise ProductoNoEncontrado(f"No existe el producto {data.producto_id}")
+
+        if data.unidad_capturada_id is not None and self._unidad_repo is not None:
+            unidad = await self._unidad_repo.obtener(data.unidad_capturada_id)
+            if unidad is None or unidad.producto_id != data.producto_id:
+                raise UnidadInvalida(
+                    f"La presentación {data.unidad_capturada_id} no corresponde al "
+                    f"producto {data.producto_id}."
+                )
 
         decimales = await self._decimales_stock(producto)
         # SALIDA que vino de vender una PRESENTACIÓN: `cantidad` ya está en unidad

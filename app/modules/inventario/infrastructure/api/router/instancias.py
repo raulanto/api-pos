@@ -40,7 +40,7 @@ _ORDEN_INST = make_sort_dependency({"abierta_at", "saldo", "created_at"}, "abier
 def _motor_movimiento(db: AsyncSession) -> AplicarMovimientoUseCase:
     return AplicarMovimientoUseCase(
         prod_repo(db), exist_repo(db), mov_repo(db), EventPortImpl(db),
-        um_repo(db), lote_repo(db),
+        um_repo(db), lote_repo(db), unidad_repo(db),
     )
 
 

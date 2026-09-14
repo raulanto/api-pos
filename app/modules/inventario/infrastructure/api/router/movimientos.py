@@ -30,7 +30,7 @@ from app.modules.inventario.infrastructure.api.schemas import (
     AplicarMovimientoRequest, TransferenciaRequest, MovimientoResponse,
 )
 from .common import (
-    mov_repo, prod_repo, exist_repo, um_repo, lote_repo, sucursal_efectiva, traducir,
+    mov_repo, prod_repo, exist_repo, um_repo, lote_repo, unidad_repo, sucursal_efectiva, traducir,
 )
 
 router = APIRouter(route_class=EnvelopeRoute)
@@ -63,7 +63,7 @@ async def aplicar_movimiento(
 
     use_case = AplicarMovimientoUseCase(
         prod_repo(db), exist_repo(db), mov_repo(db), EventPortImpl(db),
-        um_repo(db), lote_repo(db),
+        um_repo(db), lote_repo(db), unidad_repo(db),
     )
     lote_nuevo = None
     if body.lote_nuevo is not None:

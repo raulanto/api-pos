@@ -44,6 +44,7 @@ class InventarioPortImpl(InventarioPort):
             movimiento_repo=self._movimiento_repo,
             unidad_medida_repo=self._um_repo,
             lote_repo=self._lote_repo,
+            unidad_repo=self._unidad_repo,
         )
 
     async def _cargar_producto(self, producto_id: UUID):
