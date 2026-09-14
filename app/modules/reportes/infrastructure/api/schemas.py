@@ -98,6 +98,44 @@ class InventarioValorizadoResponse(BaseModel):
     por_categoria: List[CategoriaValorizadaResponse]
 
 
+class MermaAjusteTotalResponse(BaseModel):
+    model_config = _ORM
+    tipo: str
+    numero_movimientos: int
+    cantidad_total: Decimal
+    valor_estimado: Decimal
+
+
+class ReporteMermasResponse(BaseModel):
+    model_config = _ORM
+    desde: datetime
+    hasta: datetime
+    sucursal_id: Optional[UUID]
+    total_merma: Decimal
+    total_ajuste: Decimal
+    valor_estimado_total: Decimal
+    detalle: List[MermaAjusteTotalResponse]
+
+
+class CajaAbiertaResponse(BaseModel):
+    model_config = _ORM
+    sucursal_id: UUID
+    caja_turno_id: UUID
+    usuario_id: UUID
+    abierto_en: datetime
+    saldo_inicial: Decimal
+
+
+class DashboardResponse(BaseModel):
+    model_config = _ORM
+    sucursal_id: Optional[UUID]
+    ventas_hoy: ReporteVentasResponse
+    ventas_ayer: ReporteVentasResponse
+    top_productos_hoy: List[ProductoRankingResponse]
+    productos_bajo_stock: int
+    cajas_abiertas: List[CajaAbiertaResponse]
+
+
 class ClienteSaldoResponse(BaseModel):
     model_config = _ORM
     cliente_id: UUID

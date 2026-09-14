@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.modules.reportes.application.ports.reporte_query_port import (
     ReporteQueryPort, ReporteVentasOutput, VentasPorMetodoOutput,
-    InventarioValorizadoOutput, PaginaReporte,
+    InventarioValorizadoOutput, ReporteMermasOutput, DashboardOutput, PaginaReporte,
 )
 
 
@@ -59,6 +59,24 @@ class InventarioValorizadoUseCase:
         self, sucursal_id: UUID | None = None, categoria_id: UUID | None = None
     ) -> InventarioValorizadoOutput:
         return await self._q.inventario_valorizado(sucursal_id, categoria_id)
+
+
+class MermasYAjustesUseCase:
+    def __init__(self, query_port: ReporteQueryPort):
+        self._q = query_port
+
+    async def ejecutar(
+        self, desde: datetime, hasta: datetime, sucursal_id: UUID | None = None
+    ) -> ReporteMermasOutput:
+        return await self._q.mermas_y_ajustes(desde, hasta, sucursal_id)
+
+
+class DashboardUseCase:
+    def __init__(self, query_port: ReporteQueryPort):
+        self._q = query_port
+
+    async def ejecutar(self, sucursal_id: UUID | None = None) -> DashboardOutput:
+        return await self._q.dashboard(sucursal_id)
 
 
 class ClientesConSaldoUseCase:
