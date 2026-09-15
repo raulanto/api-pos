@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +16,11 @@ app = FastAPI(
 register_exception_handlers(app)
 
 # Imágenes de producto/sucursal: guardadas en disco, servidas como estático.
+# `media_base_url` puede ser absoluta (esquema+host, para un frontend en otro
+# origen); el mount necesita sólo el path, nunca la URL completa.
 Path(settings.media_root).mkdir(parents=True, exist_ok=True)
-app.mount(settings.media_base_url, StaticFiles(directory=settings.media_root), name="media")
+_media_mount_path = "/" + (urlsplit(settings.media_base_url).path or "media").lstrip("/")
+app.mount(_media_mount_path, StaticFiles(directory=settings.media_root), name="media")
 
 # CORS Config
 origins = [origin.strip() for origin in settings.cors_origins.split(",")]
