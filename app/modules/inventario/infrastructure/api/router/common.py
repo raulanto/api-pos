@@ -168,15 +168,15 @@ def inst_repo(db):
 
 
 """
-    Fábrica del almacén de archivos de imagen (S3 / LocalStack).
+    Fábrica del almacén de archivos de imagen (filesystem local).
 
-    @return: Instancia de la clase S3AlmacenImagenes.
+    @return: Instancia de la clase LocalAlmacenImagenes.
 """
 def almacen_imagenes():
-    from app.modules.inventario.infrastructure.adapters.s3_almacen_imagenes import (
-        S3AlmacenImagenes,
+    from app.modules.inventario.infrastructure.adapters.local_almacen_imagenes import (
+        LocalAlmacenImagenes,
     )
-    return S3AlmacenImagenes()
+    return LocalAlmacenImagenes()
 
 
 """

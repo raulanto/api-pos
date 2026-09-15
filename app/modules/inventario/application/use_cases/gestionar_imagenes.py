@@ -162,7 +162,7 @@ class EliminarImagenUseCase:
         ):
             raise ImagenNoEncontrada(f"No existe la imagen {imagen_id} para ese dueño.")
         await self._repo.eliminar(imagen_id)
-        # Imagen propia (S3): borra también el original y su miniatura (best-effort).
+        # Imagen propia: borra también el original y su miniatura (best-effort).
         if self._almacen is not None and imagen.object_key:
             await self._almacen.eliminar(imagen.object_key)
             await self._almacen.eliminar(AlmacenImagenes.key_miniatura(imagen.object_key))

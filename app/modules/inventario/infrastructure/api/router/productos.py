@@ -332,7 +332,7 @@ async def activar_producto(
 
 """
     Endpoint para BORRAR físicamente un producto y su catálogo propio
-    (imágenes + objetos S3, presentaciones, receta como kit, lotes, existencia).
+    (imágenes + sus archivos en disco, presentaciones, receta como kit, lotes, existencia).
 
     Solo procede si el producto no tiene historial: sin movimientos de inventario
     y sin ventas. Si lo tiene -> 409; usar PATCH /productos/{id}/desactivar.

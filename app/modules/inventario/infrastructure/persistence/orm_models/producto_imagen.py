@@ -14,9 +14,9 @@ from app.shared.infrastructure.orm_base import Base, TimestampMixin
     - id
     - producto_id: FK a producto.id (nullable)
     - producto_unidad_id: FK a producto_unidad.id (nullable)
-    - url: URL externa de la imagen (nullable; NULL si vive en S3)
-    - object_key: key del objeto en el bucket S3 (nullable; NULL si es URL externa)
-    - content_type: MIME del archivo subido a S3
+    - url: URL externa de la imagen (nullable; NULL si es propia)
+    - object_key: key del archivo en disco (nullable; NULL si es URL externa)
+    - content_type: MIME del archivo subido
     - alt_texto: descripción / texto alternativo
     - orden: posición en la galería
     - es_principal: miniatura/portada del dueño
@@ -28,7 +28,7 @@ from app.shared.infrastructure.orm_base import Base, TimestampMixin
     Indices:
     - ix_producto_imagen_producto / ix_producto_imagen_producto_unidad: listar
       la galería de un dueño.
-    - ix_producto_imagen_object_key: resolver una imagen por su key de S3.
+    - ix_producto_imagen_object_key: resolver una imagen por su key de archivo.
 """
 class ProductoImagenORM(Base, TimestampMixin):
     __tablename__ = "producto_imagen"

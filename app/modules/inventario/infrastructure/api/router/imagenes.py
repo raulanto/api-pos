@@ -24,7 +24,7 @@ from .common import almacen_imagenes, imagen_repo, prod_repo, unidad_repo, tradu
 router = APIRouter(route_class=EnvelopeRoute)
 
 # Las entidades `ProductoImagen` ya traen `url` / `thumbnail_url` resueltas
-# (el mapper las prefirma al leer una imagen S3), así que se serializan directo
+# (el mapper las arma al leer una imagen propia), así que se serializan directo
 # con `ImagenResponse.model_config = from_attributes`.
 
 

@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.shared.exceptions import register_exception_handlers
 
@@ -10,6 +13,10 @@ app = FastAPI(
 
 # Contrato único de errores: todo error sale como {success:false, error:{...}}.
 register_exception_handlers(app)
+
+# Imágenes de producto/sucursal: guardadas en disco, servidas como estático.
+Path(settings.media_root).mkdir(parents=True, exist_ok=True)
+app.mount(settings.media_base_url, StaticFiles(directory=settings.media_root), name="media")
 
 # CORS Config
 origins = [origin.strip() for origin in settings.cors_origins.split(",")]

@@ -295,7 +295,7 @@ Un envase destapado con su saldo restante en fracciones de la unidad base
 | GET | `/productos/resolver-codigo?codigo_barras=` | POS: producto **o** presentación + `factor` + `precio_venta` |
 | GET / PATCH | `/productos/{id}` | PATCH edita también `sku`, `tipo`, `unidad_medida_id`, flags de fracción/lote/instancia, mayoreo (`cambiar_mayoreo`), IVA-incluido, sobre-pedido (con `cambiar_*` para volver a NULL) |
 | PATCH | `/productos/{id}/activar` · `/desactivar` | `desactivar` acepta `?confirmar_con_stock=true` |
-| DELETE | `/productos/{id}` | **borrado físico** (producto + imágenes/S3 + presentaciones + kit + lotes + existencia). Permiso `inventario.eliminar`. Rechaza (409) si el producto tiene movimientos o ventas — ahí se usa `/desactivar` |
+| DELETE | `/productos/{id}` | **borrado físico** (producto + imágenes/archivos + presentaciones + kit + lotes + existencia). Permiso `inventario.eliminar`. Rechaza (409) si el producto tiene movimientos o ventas — ahí se usa `/desactivar` |
 
 ### Recetas de kit (componentes)
 | Método | Ruta |
@@ -313,8 +313,8 @@ Un envase destapado con su saldo restante en fracciones de la unidad base
 | Método | Ruta | Nota |
 |--------|------|------|
 | GET / POST | `/productos/{id}/imagenes` | POST JSON = URL externa |
-| POST | `/productos/{id}/imagenes/upload` | **multipart** `file` → sube a S3 (LocalStack en dev), guarda `object_key`; devuelve `url`/`thumbnail_url` prefirmadas. Ver `docs/imagenes-s3-localstack.md` |
-| PATCH / DELETE | `/productos/{id}/imagenes/{imagen_id}` | DELETE borra también el objeto y su miniatura de S3 |
+| POST | `/productos/{id}/imagenes/upload` | **multipart** `file` → guarda en disco, guarda `object_key`; devuelve `url`/`thumbnail_url` ya resueltas. Ver `docs/imagenes-almacenamiento-local.md` |
+| PATCH / DELETE | `/productos/{id}/imagenes/{imagen_id}` | DELETE borra también el archivo y su miniatura en disco |
 | GET / POST · `/upload` | `/productos/{id}/unidades/{unidad_id}/imagenes` | ídem para presentaciones |
 | PATCH / DELETE | `/productos/{id}/unidades/{unidad_id}/imagenes/{imagen_id}` | |
 
@@ -581,7 +581,7 @@ revierte cada SALIDA al mismo lote y repone la instancia abierta si la hubo.
 | 1b | **Instancia física abierta** (envase abierto vendido en fracciones) | **Implementado** (migración `d5e6f7a8b9c0`). Ver §2.10 y §5.9, y `docs/instancia-fisica-abierta.md`. |
 | 1c | **Transferencia entre sucursales de productos con lote** | **Implementado** — FEFO-out en origen + ENTRADA al mismo lote en destino. Ver §5.8. |
 | 2 | **Backfill completo de `unidad_medida_id`** | Hoy el backfill es best-effort por match de texto. Falta una pasada de datos + eventualmente hacer la FK `NOT NULL` y dropear la columna string `unidad_medida`. |
-| 3 | **Subida de archivos de imagen** | **Implementado** — `POST .../imagenes/upload` (multipart) → S3 (LocalStack en dev), URLs prefirmadas, Lambda de miniaturas. Ver `docs/imagenes-s3-localstack.md`. |
+| 3 | **Subida de archivos de imagen** | **Implementado** — `POST .../imagenes/upload` (multipart) → disco local, miniatura generada con Pillow en el mismo request. Ver `docs/imagenes-almacenamiento-local.md`. |
 | 4 | **Precio de presentación derivado de la unidad base** | Hoy cada `producto_unidad.precio_venta` es 100% manual e independiente. Contemplado: `producto.precio_por_unidad_base` + flag `precio_derivado` por presentación (precio calculado en lectura = `base × factor`). |
 | 5 | **Reportes por presentación** | Los KPIs (`/productos/kpis`) trabajan en unidad base. Ver ventas/stock por presentación requiere un endpoint nuevo con `group by producto_unidad_id`. |
 | 6 | **`decimales_permitidos` / redondeo configurable a nivel producto** | Hoy los decimales salen de `unidad_medida.decimales` (fallback 4). Contemplado exponerlo/overridearlo por producto si algún caso lo pide. |

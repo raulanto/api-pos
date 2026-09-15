@@ -1,9 +1,8 @@
-# Guía: cargar imágenes por archivo (S3) en vez de URL
+# Guía: cargar imágenes por archivo (disco local) en vez de URL
 
 Los productos y sus presentaciones de venta ya no dependen de una `url` externa:
-se sube el **archivo** a un endpoint y la API lo guarda en S3 (LocalStack en
-dev), genera una miniatura vía Lambda y devuelve URLs **prefirmadas** listas
-para mostrar.
+se sube el **archivo** a un endpoint, la API lo guarda en disco y genera al
+mismo tiempo una miniatura (Pillow), devolviendo URLs listas para mostrar.
 
 El flujo viejo por URL (`POST .../imagenes` con `{"url": "..."}`) sigue
 funcionando para imágenes hospedadas por terceros; esta guía cubre el flujo
@@ -16,15 +15,10 @@ nuevo por archivo (`.../imagenes/upload`).
 ```bash
 # esquema al día (agrega object_key / content_type a producto_imagen)
 uv run alembic upgrade head
-
-# stack con S3 + Lambda (si corrés la API por docker-compose, ya lo hace el entrypoint)
-docker compose up -d --build
-docker compose exec localstack awslocal s3 ls s3://pos-imagenes
 ```
 
-Si corrés `uvicorn` a mano, la API usa `S3_ENDPOINT_URL` / `S3_PUBLIC_ENDPOINT_URL`
-del `.env` (por defecto `http://localhost:4566`). LocalStack tiene que estar
-arriba.
+No hace falta infra aparte: la API guarda los archivos bajo `MEDIA_ROOT`
+(`media/` por defecto) y los sirve ella misma en `MEDIA_BASE_URL` (`/media`).
 
 ---
 
@@ -54,7 +48,7 @@ TOKEN=$(curl -s localhost:8000/api/v1/usuarios/token \
 | `GET` | `/api/v1/inventario/productos/{producto_id}/imagenes` | Lista la galería (URLs prefirmadas) |
 | `GET` | `/api/v1/inventario/productos/{producto_id}/unidades/{unidad_id}/imagenes` | Lista la galería de la presentación |
 | `PATCH` | `/api/v1/inventario/productos/{producto_id}/imagenes/{imagen_id}` | Edita `alt_texto` / `orden` / `es_principal` |
-| `DELETE` | `/api/v1/inventario/productos/{producto_id}/imagenes/{imagen_id}` | Borra la fila y el objeto + miniatura de S3 |
+| `DELETE` | `/api/v1/inventario/productos/{producto_id}/imagenes/{imagen_id}` | Borra la fila y el archivo + miniatura en disco |
 
 (Las variantes `.../unidades/{unidad_id}/imagenes/{imagen_id}` para `PATCH` /
 `DELETE` existen igual.)
@@ -144,7 +138,7 @@ curl -s "localhost:8000/api/v1/inventario/productos/$PID/imagenes" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-Cada elemento trae `url` y `thumbnail_url` **prefirmadas** (para imágenes S3) o la
+Cada elemento trae `url` y `thumbnail_url` resueltas (para imágenes propias) o la
 `url` externa tal cual (para las cargadas por el flujo viejo). Vienen ordenadas
 por `orden` y luego por antigüedad.
 
@@ -164,9 +158,9 @@ curl -s -X PATCH \
 ```
 
 Campos (todos opcionales): `alt_texto`, `cambiar_alt_texto` (para poder ponerlo
-en `null`), `orden`, `es_principal`. **No mandes `url`** para una imagen subida a
-S3: ese campo es solo para el flujo por URL externa. Para cambiar el archivo,
-subí uno nuevo con `upload` y borrá el anterior.
+en `null`), `orden`, `es_principal`. **No mandes `url`** para una imagen propia:
+ese campo es solo para el flujo por URL externa. Para cambiar el archivo, subí
+uno nuevo con `upload` y borrá el anterior.
 
 ---
 
@@ -178,8 +172,8 @@ curl -s -X DELETE \
   -H "Authorization: Bearer $TOKEN" -i     # 204 No Content
 ```
 
-Borra la fila y, si era una imagen S3, también el original y su miniatura del
-bucket.
+Borra la fila y, si era una imagen propia, también el original y su miniatura
+en disco.
 
 ---
 
@@ -192,8 +186,8 @@ Sobre estándar de la API:
   "success": true,
   "data": {
     "id": "7b3f...","producto_id": "a34a...","producto_unidad_id": null,
-    "url":           "http://localhost:4566/pos-imagenes/originales/producto/a34a.../c1d2.png?X-Amz-Algorithm=...",
-    "thumbnail_url": "http://localhost:4566/pos-imagenes/thumbnails/producto/a34a.../c1d2.png?X-Amz-Algorithm=...",
+    "url":           "/media/originales/producto/a34a.../c1d2.png",
+    "thumbnail_url": "/media/thumbnails/producto/a34a.../c1d2.png",
     "object_key":    "originales/producto/a34a.../c1d2.png",
     "alt_texto": "Vista frontal",
     "orden": 0,
@@ -204,9 +198,9 @@ Sobre estándar de la API:
 
 | Campo | Para qué sirve |
 |---|---|
-| `url` | Mostrar la imagen a tamaño completo. Prefirmada, **expira** (`S3_PRESIGN_EXPIRA_SEGUNDOS`, 1 h). Volvé a pedir el `GET` para refrescarla. |
-| `thumbnail_url` | Miniatura 400×400 (grillas, carrusel). Puede dar **404 ~1-2 s** después de subir, hasta que la Lambda la genera. |
-| `object_key` | Identificador estable del objeto en S3. Guardalo si necesitás referencia; para mostrar usá siempre `url`/`thumbnail_url`. |
+| `url` | Mostrar la imagen a tamaño completo. No expira; se sirve directo desde la API. |
+| `thumbnail_url` | Miniatura 400×400 (grillas, carrusel). Ya está lista en la misma respuesta del `upload` (se genera en el mismo request, no hay espera). |
+| `object_key` | Identificador estable del archivo. Guardalo si necesitás referencia; para mostrar usá siempre `url`/`thumbnail_url`. |
 
 ---
 
@@ -229,7 +223,7 @@ Sobre de error: `{"success": false, "error": {"code": "...", "message": "...", "
 - **Frontend nuevo**: usar solo `.../imagenes/upload`. El `<input type="file">`
   manda el `File` en `FormData`; no setear `Content-Type` a mano.
 - **Datos existentes** con `url` externa: siguen funcionando; `object_key` y
-  `thumbnail_url` van `null`. Si querés migrarlos a S3, hay que descargar el
-  binario y re-subirlo por `upload` (no hay endpoint que lo haga solo).
-- Una fila es **o** URL externa **o** S3, nunca las dos: si subís por `upload`,
-  `url` en la BD queda `NULL` y la pública se deriva prefirmada en cada lectura.
+  `thumbnail_url` van `null`. Si querés migrarlos al almacén propio, hay que
+  descargar el binario y re-subirlo por `upload` (no hay endpoint que lo haga solo).
+- Una fila es **o** URL externa **o** propia, nunca las dos: si subís por
+  `upload`, `url` en la BD queda `NULL` y la pública se deriva en cada lectura.

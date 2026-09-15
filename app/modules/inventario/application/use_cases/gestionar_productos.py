@@ -334,8 +334,9 @@ class ReactivarProductoUseCase:
 
 
 class EliminarProductoUseCase:
-    """Borrado FÍSICO del producto y de su catálogo propio (imágenes + objetos
-    S3, presentaciones, receta como kit, lotes, existencia y existencia_lote).
+    """Borrado FÍSICO del producto y de su catálogo propio (imágenes + sus
+    archivos en disco, presentaciones, receta como kit, lotes, existencia y
+    existencia_lote).
 
     Solo si el producto NO tiene historial: sin movimientos de inventario y sin
     ventas que lo referencien. Si lo tiene -> `ProductoConHistorial` (409) y hay
@@ -379,7 +380,7 @@ class EliminarProductoUseCase:
                 "históricos; no se puede borrar. Usá PATCH /productos/{id}/desactivar."
             ) from e
 
-        # Limpieza de S3 best-effort, ya con el DELETE en BD hecho (mismo
+        # Limpieza de archivos best-effort, ya con el DELETE en BD hecho (mismo
         # criterio que EliminarImagenUseCase).
         if self._almacen is not None:
             for key in object_keys:

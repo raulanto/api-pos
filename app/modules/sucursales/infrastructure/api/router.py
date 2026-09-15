@@ -171,7 +171,7 @@ async def reactivar_sucursal(
 
 
 # --------------------------------------------------------------------------- #
-# Imagen de fachada (S3)
+# Imagen de fachada
 # --------------------------------------------------------------------------- #
 @router.post("/{sucursal_id}/fachada", response_model=ApiResponse[SucursalResponse])
 async def subir_fachada(

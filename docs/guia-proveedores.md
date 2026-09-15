@@ -235,7 +235,7 @@ POST /api/v1/recepciones-proveedor
 - El **estado de la recepción** lo calcula el backend solo, no lo mandás:
   `con_defectos` si algo vino defectuoso, si no `parcial` si alguna línea con
   `cantidad_esperada` no llegó completa, si no `completa`.
-- `fotos_evidencia_keys` son **keys de S3 ya subidas** (por el subidor de
+- `fotos_evidencia_keys` son **keys de archivos ya subidos** (por el subidor de
   imágenes genérico que ya existe) — este endpoint no sube archivos, sólo
   guarda las referencias.
 
