@@ -10,7 +10,7 @@ from app.modules.pedidos.domain.value_objects import (
 from app.modules.pedidos.domain.exceptions import (
     PedidoSinLineas, TransicionPedidoInvalida, PedidoNoEditable, PedidoYaFacturado,
     DireccionEnvioRequerida, EntregaNoAplica, AnticipoInvalido,
-    MotivoDescuentoRequerido,
+    MotivoDescuentoRequerido, ServicioSinResponsable, ResponsableInvalido,
 )
 
 
@@ -34,6 +34,10 @@ class DetallePedido:
     promo_id: UUID | None = None
     promo_etiqueta: str | None = None
     promo_descuento: Decimal = Decimal("0")
+    # Congelado por el backend según el `tipo` del producto (servicio = no mueve
+    # stock). Una línea `es_servicio` necesita `asignado_a` para confirmar.
+    es_servicio: bool = False
+    asignado_a: UUID | None = None      # usuario responsable del servicio
 
     @staticmethod
     def crear(
@@ -43,6 +47,7 @@ class DetallePedido:
         cantidad_en_unidad_base: Decimal | None = None,
         promo_id: UUID | None = None, promo_etiqueta: str | None = None,
         promo_descuento: Decimal = Decimal("0"),
+        es_servicio: bool = False, asignado_a: UUID | None = None,
     ) -> "DetallePedido":
         return DetallePedido(
             id=uuid4(), pedido_id=uuid4(),
@@ -52,6 +57,7 @@ class DetallePedido:
             cantidad_en_unidad_base=cantidad_en_unidad_base,
             promo_id=promo_id, promo_etiqueta=promo_etiqueta,
             promo_descuento=promo_descuento,
+            es_servicio=es_servicio, asignado_a=asignado_a,
         )
 
     @property
@@ -97,7 +103,6 @@ class Pedido:
     telefono: str | None = None
     descuento_total: Decimal = Decimal("0")
     motivo_descuento: str | None = None
-    costo_envio: Decimal = Decimal("0")
     codigo_cupon: str | None = None
     cliente_segmento: str | None = None   # hint para promos por segmento
     notas: str | None = None
@@ -131,7 +136,7 @@ class Pedido:
         lineas: list[DetallePedido], *,
         cliente_id: UUID | None = None, telefono: str | None = None,
         descuento_total: Decimal = Decimal("0"), motivo_descuento: str | None = None,
-        costo_envio: Decimal = Decimal("0"), codigo_cupon: str | None = None,
+        codigo_cupon: str | None = None,
         cliente_segmento: str | None = None, notas: str | None = None,
         fecha_promesa: datetime | None = None,
         direccion_texto: str | None = None, referencia_direccion: str | None = None,
@@ -162,7 +167,7 @@ class Pedido:
             tipo=tipo, canal=canal, estado=EstadoPedido.BORRADOR,
             cliente_id=cliente_id, telefono=(telefono or "").strip() or None,
             descuento_total=descuento_total, motivo_descuento=motivo_descuento,
-            costo_envio=costo_envio, codigo_cupon=(codigo_cupon or "").strip() or None,
+            codigo_cupon=(codigo_cupon or "").strip() or None,
             cliente_segmento=cliente_segmento, notas=(notas or "").strip() or None,
             fecha_promesa=fecha_promesa,
             estado_entrega=(
@@ -185,7 +190,11 @@ class Pedido:
 
     @property
     def total(self) -> Decimal:
-        return self.subtotal - self.descuento_total + self.costo_envio
+        return self.subtotal - self.descuento_total
+
+    @property
+    def servicios_sin_responsable(self) -> list[DetallePedido]:
+        return [l for l in self.lineas if l.es_servicio and l.asignado_a is None]
 
     @property
     def total_promociones(self) -> Decimal:
@@ -224,9 +233,24 @@ class Pedido:
             self.entrega_fallo_motivo = None
             self.despachado_en = None
             self.entregado_en = None
-            self.costo_envio = Decimal("0")
         elif self.estado_entrega is None:
             self.estado_entrega = EstadoEntrega.PENDIENTE
+
+    def asignar_servicio(self, detalle_id: UUID, usuario_id: UUID) -> None:
+        """Fija el responsable de una línea de servicio. Vale en borrador y
+        confirmado (reasignar un repartidor/técnico); no en facturado/cancelado."""
+        if self.estado in (EstadoPedido.FACTURADO, EstadoPedido.CANCELADO):
+            raise TransicionPedidoInvalida(
+                f"No se reasignan servicios en un pedido '{self.estado.value}'."
+            )
+        linea = next((l for l in self.lineas if l.id == detalle_id), None)
+        if linea is None:
+            raise ResponsableInvalido(
+                f"La línea {detalle_id} no pertenece al pedido {self.id}."
+            )
+        if not linea.es_servicio:
+            raise ResponsableInvalido("La línea no es un servicio.")
+        linea.asignado_a = usuario_id
 
     def confirmar(self) -> None:
         if self.estado != EstadoPedido.BORRADOR:
@@ -236,6 +260,12 @@ class Pedido:
         if self.tipo == TipoPedido.DOMICILIO and not self.direccion_texto:
             raise DireccionEnvioRequerida(
                 "Un pedido a domicilio necesita `direccion_texto` antes de confirmar."
+            )
+        faltan = self.servicios_sin_responsable
+        if faltan:
+            raise ServicioSinResponsable(
+                f"{len(faltan)} línea(s) de servicio sin persona asignada "
+                "(`asignado_a`)."
             )
         self.estado = EstadoPedido.CONFIRMADO
 

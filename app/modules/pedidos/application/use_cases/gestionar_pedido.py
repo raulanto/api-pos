@@ -5,9 +5,12 @@ from uuid import UUID
 from app.modules.ventas.application.use_cases.crear_venta import CrearVentaUseCase
 from app.modules.ventas.application.ports.event_port import EventPort
 from app.modules.ventas.domain.value_objects import MetodoPago
+from app.modules.usuarios.application.ports.usuario_repository import UsuarioRepository
 from app.modules.pedidos.application.ports.pedido_repository import PedidoRepository
 from app.modules.pedidos.application.use_cases.actualizar_pedido import _FuentePrecio
-from app.modules.pedidos.application.use_cases.crear_pedido import cotizar_a_detalles
+from app.modules.pedidos.application.use_cases.crear_pedido import (
+    cotizar_a_detalles, validar_responsables,
+)
 from app.modules.pedidos.domain.entities import Pedido, PedidoPago
 from app.modules.pedidos.domain.exceptions import PedidoNoEncontrado
 from app.modules.pedidos.domain.value_objects import EstadoEntrega
@@ -147,3 +150,36 @@ class RegistrarAnticipoUseCase:
             },
         ))
         return pago
+
+
+@dataclass
+class AsignarServiciosInput:
+    pedido_id: UUID
+    usuario_id: UUID
+    asignaciones: list[tuple[UUID, UUID]]   # (detalle_id, asignado_a)
+
+
+class AsignarServiciosUseCase:
+    """Fija/reasigna el responsable de líneas de servicio sin re-cotizar (así no
+    se pierden ids ni asignaciones). Vale en borrador y confirmado."""
+    def __init__(self, pedido_repo: PedidoRepository, event_port: EventPort,
+                 usuario_repo: UsuarioRepository):
+        self._repo = pedido_repo
+        self._event_port = event_port
+        self._usuario_repo = usuario_repo
+
+    async def ejecutar(self, data: AsignarServiciosInput) -> Pedido:
+        pedido = await _cargar(self._repo, data.pedido_id)
+        for detalle_id, asignado_a in data.asignaciones:
+            pedido.asignar_servicio(detalle_id, asignado_a)
+        await validar_responsables(self._usuario_repo, pedido.lineas)
+        await self._repo.actualizar(pedido)
+        await self._event_port.publicar("PedidoServiciosAsignados", _evento(
+            data.usuario_id, "asignar_servicios", pedido, {
+                "asignaciones": [
+                    {"detalle_id": str(d), "asignado_a": str(a)}
+                    for d, a in data.asignaciones
+                ],
+            },
+        ))
+        return pedido

@@ -37,11 +37,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM base AS runtime
 
 # curl para el HEALTHCHECK; usuario sin privilegios para correr la app.
+# UID/GID fijos en 1000: en dev, docker-compose bindea `.:/app` (incluida
+# `media/`) desde el host, así que un UID no determinista rompía los permisos
+# de escritura cada vez que se reconstruía la imagen (UID nuevo != dueño de
+# los archivos que dejó el contenedor anterior). 1000 es el UID del primer
+# usuario en la gran mayoría de hosts Linux de desarrollo.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system app \
-    && useradd --system --gid app --home-dir /app app
+    && groupadd --system --gid 1000 app \
+    && useradd --system --uid 1000 --gid app --home-dir /app app
 
 WORKDIR /app
 

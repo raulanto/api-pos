@@ -37,6 +37,12 @@ class InventarioPort(ABC):
         ...
 
     @abstractmethod
+    async def es_servicio(self, producto_id: UUID) -> bool:
+        """True si el producto es de tipo SERVICIO (no mueve inventario). Lo usa
+        la cotización para marcar las líneas que son un servicio."""
+        ...
+
+    @abstractmethod
     async def precio_mayoreo_aplicable(
         self, producto_id: UUID, cantidad: Decimal,
     ) -> Decimal | None:

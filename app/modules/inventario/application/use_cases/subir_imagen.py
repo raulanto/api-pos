@@ -1,9 +1,9 @@
-"""Caso de uso: subir el binario de una imagen (multipart) y guardarlo en S3.
+"""Caso de uso: subir el binario de una imagen (multipart) y guardarlo en disco.
 
 Espeja `AgregarImagenUseCase` (imágenes por URL externa) pero recibe los bytes:
 1. Valida el dueño (producto XOR presentación) reusando `_validar_dueno`.
 2. Valida `content_type` (allowlist) y tamaño.
-3. Sube el objeto a S3 bajo `originales/...` (esto dispara la Lambda de miniaturas).
+3. Guarda el original bajo `originales/...` (el adapter genera la miniatura ahí mismo).
 4. Persiste la fila `producto_imagen` con la `object_key`.
 
 Si el paso 4 (o el commit del request) falla, el objeto recién subido queda
@@ -78,7 +78,7 @@ class SubirImagenUseCase:
 
         await self._almacen.subir(data.contenido, content_type, key)
         try:
-            imagen = ProductoImagen.crear_desde_s3(
+            imagen = ProductoImagen.crear_propia(
                 object_key=key,
                 content_type=content_type,
                 producto_id=data.producto_id,
@@ -96,8 +96,8 @@ class SubirImagenUseCase:
             await self._almacen.eliminar(key)   # compensación: no dejar objeto huérfano
             raise
 
-        # Deja la entidad igual que una leída por el mapper: `url` y
-        # `thumbnail_url` prefirmadas, para que el 201 ya sirva para mostrar.
+        # Deja la entidad igual que una leída por el mapper (`url` y
+        # `thumbnail_url` resueltas), para que el 201 ya sirva para mostrar.
         imagen.url = self._almacen.url_publica(key)
         imagen.thumbnail_url = self._almacen.url_publica(
             AlmacenImagenes.key_miniatura(key)

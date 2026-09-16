@@ -13,23 +13,23 @@ from uuid import UUID, uuid4
 
     Una imagen es de UNO de dos orígenes:
     - Externa: `url` apunta a un host de terceros; `object_key` es None.
-    - Propia (S3): `object_key` es la key en el bucket; `url` es None y la URL
-      pública se deriva prefirmada al leer. La miniatura la genera una Lambda y
-      su key se deriva de `object_key` (no se persiste).
+    - Propia (almacén local): `object_key` es la key del archivo en disco;
+      `url` es None y la URL pública se deriva al leer. La miniatura se genera
+      junto con el original y su key se deriva de `object_key` (no se persiste).
 
     @param id: ID de la imagen.
     @param producto_id: Dueño si es una imagen de producto (XOR con el otro).
     @param producto_unidad_id: Dueño si es una imagen de una presentación.
-    @param url: URL externa de la imagen (None si vive en S3).
-    @param object_key: Key del objeto en el bucket (None si es una URL externa).
-    @param content_type: MIME del archivo subido a S3.
+    @param url: URL externa de la imagen (None si es propia).
+    @param object_key: Key del archivo en disco (None si es una URL externa).
+    @param content_type: MIME del archivo subido.
     @param alt_texto: Texto alternativo / descripción.
     @param orden: Posición en la galería (0 = primera).
     @param es_principal: Miniatura/portada del dueño.
     @param created_at: Fecha de alta.
-    @param thumbnail_url: DERIVADO (no se persiste). URL prefirmada de la
-        miniatura; la rellena el mapper al leer una imagen S3. Para imágenes
-        externas queda None.
+    @param thumbnail_url: DERIVADO (no se persiste). URL de la miniatura; la
+        rellena el mapper al leer una imagen propia. Para imágenes externas
+        queda None.
 """
 @dataclass
 class ProductoImagen:
@@ -62,7 +62,7 @@ class ProductoImagen:
         )
 
     @staticmethod
-    def crear_desde_s3(
+    def crear_propia(
         object_key: str, content_type: str,
         producto_id: UUID | None = None, producto_unidad_id: UUID | None = None,
         alt_texto: str | None = None, orden: int = 0, es_principal: bool = False,

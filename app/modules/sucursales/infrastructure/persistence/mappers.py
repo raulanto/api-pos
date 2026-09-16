@@ -3,12 +3,12 @@ from app.modules.sucursales.infrastructure.persistence.orm_models import Sucursa
 
 
 def to_domain_sucursal(orm: SucursalORM) -> Sucursal:
-    # La URL de la fachada se deriva prefirmada al leer (mismo patrón que
+    # La URL de la fachada se deriva al leer (mismo patrón que
     # `to_domain_imagen` en inventario); nunca se persiste.
     imagen_fachada_url = None
     if orm.imagen_fachada_key:
-        from app.core.aws import presign_get_url
-        imagen_fachada_url = presign_get_url(orm.imagen_fachada_key)
+        from app.core.media_storage import url_publica
+        imagen_fachada_url = url_publica(orm.imagen_fachada_key)
     return Sucursal(
         id=orm.id,
         nombre=orm.nombre,

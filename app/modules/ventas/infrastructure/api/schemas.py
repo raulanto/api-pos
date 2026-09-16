@@ -160,6 +160,7 @@ class LineaVentaResponse(BaseModel):
     promo_etiqueta: Optional[str] = None
     promos_aplicadas: List[PromoAplicadaResponse] = []
     cantidad_devuelta: Decimal = Decimal("0")
+    cita_id: Optional[UUID] = None
     subtotal: Decimal
 
 

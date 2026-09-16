@@ -17,7 +17,7 @@ class ProductoRepository(ABC):
         (imágenes, presentaciones, receta como kit, lotes, existencia y
         existencia_lote). NO toca `movimiento_inventario` ni `detalle_venta`:
         si alguno lo referencia, el DELETE final lanza IntegrityError.
-        Devuelve las `object_key` de S3 de las imágenes borradas."""
+        Devuelve las `object_key` de las imágenes borradas."""
         ...
 
     @abstractmethod

@@ -40,8 +40,8 @@ class SqlAlchemyImagenRepository(ImagenRepository):
             id=imagen.id,
             producto_id=imagen.producto_id,
             producto_unidad_id=imagen.producto_unidad_id,
-            # Invariante: imagen S3 => la columna `url` queda NULL (la pública se
-            # deriva prefirmada al leer; `imagen.url` puede traer ese valor
+            # Invariante: imagen propia => la columna `url` queda NULL (la
+            # pública se deriva al leer; `imagen.url` puede traer ese valor
             # transitorio y no debe persistirse).
             url=None if imagen.object_key else imagen.url,
             object_key=imagen.object_key,

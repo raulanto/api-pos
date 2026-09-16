@@ -115,6 +115,11 @@ class ActualizarProductoInput:
     codigo_barras: str | None = None
     cambiar_codigo_barras: bool = False
     cambiar_descripcion: bool = False
+    duracion_minutos: int | None = None
+    cambiar_duracion_minutos: bool = False
+    tiempo_buffer_minutos: int | None = None
+    requiere_recurso: bool | None = None
+    disponibilidad_cruzada_activa: bool | None = None
 
 
 class ActualizarProductoUseCase:
@@ -229,6 +234,11 @@ class ActualizarProductoUseCase:
             codigo_barras=data.codigo_barras,
             cambiar_codigo_barras=data.cambiar_codigo_barras,
             cambiar_descripcion=data.cambiar_descripcion,
+            duracion_minutos=data.duracion_minutos,
+            cambiar_duracion_minutos=data.cambiar_duracion_minutos,
+            tiempo_buffer_minutos=data.tiempo_buffer_minutos,
+            requiere_recurso=data.requiere_recurso,
+            disponibilidad_cruzada_activa=data.disponibilidad_cruzada_activa,
         )
         if data.cambiar_mayoreo:
             _validar_mayoreo(producto.precio_mayoreo, producto.cantidad_minima_mayoreo)
@@ -324,8 +334,9 @@ class ReactivarProductoUseCase:
 
 
 class EliminarProductoUseCase:
-    """Borrado FÍSICO del producto y de su catálogo propio (imágenes + objetos
-    S3, presentaciones, receta como kit, lotes, existencia y existencia_lote).
+    """Borrado FÍSICO del producto y de su catálogo propio (imágenes + sus
+    archivos en disco, presentaciones, receta como kit, lotes, existencia y
+    existencia_lote).
 
     Solo si el producto NO tiene historial: sin movimientos de inventario y sin
     ventas que lo referencien. Si lo tiene -> `ProductoConHistorial` (409) y hay
@@ -369,7 +380,7 @@ class EliminarProductoUseCase:
                 "históricos; no se puede borrar. Usá PATCH /productos/{id}/desactivar."
             ) from e
 
-        # Limpieza de S3 best-effort, ya con el DELETE en BD hecho (mismo
+        # Limpieza de archivos best-effort, ya con el DELETE en BD hecho (mismo
         # criterio que EliminarImagenUseCase).
         if self._almacen is not None:
             for key in object_keys:

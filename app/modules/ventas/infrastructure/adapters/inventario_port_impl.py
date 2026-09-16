@@ -44,6 +44,7 @@ class InventarioPortImpl(InventarioPort):
             movimiento_repo=self._movimiento_repo,
             unidad_medida_repo=self._um_repo,
             lote_repo=self._lote_repo,
+            unidad_repo=self._unidad_repo,
         )
 
     async def _cargar_producto(self, producto_id: UUID):
@@ -86,7 +87,13 @@ class InventarioPortImpl(InventarioPort):
         producto = await self._cargar_producto(producto_id)
         factor = await self._factor(producto_id, producto_unidad_id)
         decimales = await self._decimales_stock(producto, producto_unidad_id)
-        return _cuantizar(cantidad * factor, decimales)
+        cantidad_base = _cuantizar(cantidad * factor, decimales)
+        # Se llama tanto desde `cotizar()` como desde `ejecutar()` (vía
+        # `armar_lineas`): valida acá para que la cotización avise el error de
+        # fraccionamiento antes de cobrar, no solo al descontar stock.
+        if producto_unidad_id is None:
+            producto.validar_cantidad_vendible(cantidad_base)
+        return cantidad_base
 
     async def _expandir(
         self, producto, cantidad_base: Decimal
@@ -248,6 +255,10 @@ class InventarioPortImpl(InventarioPort):
             base_disp = e.cantidad if e is not None else Decimal("0")
 
         return (base_disp / factor) if factor else base_disp
+
+    async def es_servicio(self, producto_id: UUID) -> bool:
+        producto = await self._cargar_producto(producto_id)
+        return producto.tipo == TipoProducto.SERVICIO
 
     async def precio_mayoreo_aplicable(
         self, producto_id: UUID, cantidad: Decimal,

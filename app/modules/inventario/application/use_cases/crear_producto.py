@@ -41,6 +41,10 @@ class CrearProductoInput:
     es_sobre_pedido: bool = False
     monedero_pct: Decimal | None = None
     monedero_monto: Decimal | None = None
+    duracion_minutos: int | None = None
+    tiempo_buffer_minutos: int = 0
+    requiere_recurso: bool = False
+    disponibilidad_cruzada_activa: bool = False
 
 class CrearProductoUseCase:
     def __init__(
@@ -108,6 +112,10 @@ class CrearProductoUseCase:
             es_sobre_pedido=data.es_sobre_pedido,
             monedero_pct=data.monedero_pct,
             monedero_monto=data.monedero_monto,
+            duracion_minutos=data.duracion_minutos,
+            tiempo_buffer_minutos=data.tiempo_buffer_minutos,
+            requiere_recurso=data.requiere_recurso,
+            disponibilidad_cruzada_activa=data.disponibilidad_cruzada_activa,
         )
         try:
             await self._producto_repo.guardar(producto)

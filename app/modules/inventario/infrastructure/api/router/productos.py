@@ -80,6 +80,10 @@ async def crear_producto(
                 es_sobre_pedido=body.es_sobre_pedido,
                 monedero_pct=body.monedero_pct,
                 monedero_monto=body.monedero_monto,
+                duracion_minutos=body.duracion_minutos,
+                tiempo_buffer_minutos=body.tiempo_buffer_minutos,
+                requiere_recurso=body.requiere_recurso,
+                disponibilidad_cruzada_activa=body.disponibilidad_cruzada_activa,
                 codigo_barras=body.codigo_barras, descripcion=body.descripcion,
             )
         )
@@ -110,6 +114,7 @@ async def listar_productos(
     sucursal_id: list[UUID] | None = Query(
         default=None, description="Sólo productos con existencia en esa(s) sucursal(es)"
     ),
+    tipo: TipoProducto | None = Query(default=None),
     paginacion: PageParams = Depends(page_params),
     orden: Sort = Depends(_ORDEN_PRODUCTOS),
     include: frozenset[str] = Depends(_INC_PRODUCTOS),
@@ -118,6 +123,7 @@ async def listar_productos(
         verificar_alcance_sucursal(actual, s)  # rol de sucursal no consulta otras
     filtro = FiltroProductos(
         categoria_id=categoria_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
+        tipo=tipo,
     )
     pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(filtro, paginacion, orden, include)
     return page_response(
@@ -260,6 +266,11 @@ async def actualizar_producto(
                 monedero_pct=body.monedero_pct,
                 monedero_monto=body.monedero_monto,
                 cambiar_monedero=body.cambiar_monedero,
+                duracion_minutos=body.duracion_minutos,
+                cambiar_duracion_minutos=body.cambiar_duracion_minutos,
+                tiempo_buffer_minutos=body.tiempo_buffer_minutos,
+                requiere_recurso=body.requiere_recurso,
+                disponibilidad_cruzada_activa=body.disponibilidad_cruzada_activa,
                 codigo_barras=body.codigo_barras, cambiar_codigo_barras=body.cambiar_codigo_barras,
                 cambiar_descripcion=body.cambiar_descripcion,
             )
@@ -321,7 +332,7 @@ async def activar_producto(
 
 """
     Endpoint para BORRAR físicamente un producto y su catálogo propio
-    (imágenes + objetos S3, presentaciones, receta como kit, lotes, existencia).
+    (imágenes + sus archivos en disco, presentaciones, receta como kit, lotes, existencia).
 
     Solo procede si el producto no tiene historial: sin movimientos de inventario
     y sin ventas. Si lo tiene -> 409; usar PATCH /productos/{id}/desactivar.

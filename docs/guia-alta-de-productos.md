@@ -150,6 +150,9 @@ Campos del formulario:
 Precio por **kilo**. Con `incremento_minimo_venta: 0.05` la app sólo deja vender
 50 g, 100 g, 150 g… y una venta de 0.03 kg es rechazada.
 
+> Caso completo (báscula → cotizar → cobrar), con verdura y azúcar a granel:
+> `docs/guia-venta-por-peso.md`.
+
 **Ejemplo — servicio:**
 
 ```json
@@ -259,8 +262,8 @@ POST /productos/{id}/imagenes/upload
   es_principal=true
 ```
 
-La API lo guarda en su almacén (S3) y responde con `url` y `thumbnail_url` ya
-firmadas y listas para mostrar. La miniatura puede tardar 1–2 s en generarse.
+La API lo guarda en disco y responde con `url` y `thumbnail_url` ya listas
+para mostrar (la miniatura se genera en el mismo request, sin espera).
 
 **B) Registrar una URL externa** (si ya subiste la foto a tu propio CDN):
 
@@ -277,8 +280,8 @@ POST /productos/{id}/imagenes
 - `orden`: para el carrusel (0 = primera).
 - `es_principal`: la portada. Sólo puede haber **una**: si marcás otra como
   principal, la anterior se desmarca sola.
-- `DELETE /productos/{id}/imagenes/{imagen_id}` borra la imagen (y su archivo en
-  S3 si la habías subido por la opción A).
+- `DELETE /productos/{id}/imagenes/{imagen_id}` borra la imagen (y su archivo
+  en disco si la habías subido por la opción A).
 
 La foto de portada aparece en `imagen_principal` cada vez que pedís el producto
 (en el detalle y en el listado), sin necesidad de pedir nada extra.
@@ -287,7 +290,7 @@ Las presentaciones (la reja) también pueden tener sus propias fotos:
 `POST /productos/{id}/unidades/{unidad_id}/imagenes` (o `.../imagenes/upload`).
 Su portada viaja en `unidades[].imagen_principal` cuando pedís
 `GET /productos?include=unidades` (mismo formato que la del producto: `url` y
-`thumbnail_url` prefirmadas si vive en S3), para que el POS pinte cada
+`thumbnail_url` resueltas si es propia), para que el POS pinte cada
 presentación con su miniatura.
 
 ### Paso 6 — Cargar el stock inicial

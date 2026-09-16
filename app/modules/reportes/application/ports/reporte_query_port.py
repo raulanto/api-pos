@@ -115,6 +115,50 @@ class InventarioValorizadoOutput:
 
 
 # --------------------------------------------------------------------------- #
+# Mermas y ajustes
+# --------------------------------------------------------------------------- #
+@dataclass
+class MermaAjusteTotalOutput:
+    tipo: str  # "merma" | "ajuste"
+    numero_movimientos: int
+    cantidad_total: Decimal
+    valor_estimado: Decimal
+
+
+@dataclass
+class ReporteMermasOutput:
+    desde: datetime
+    hasta: datetime
+    sucursal_id: UUID | None
+    total_merma: Decimal
+    total_ajuste: Decimal
+    valor_estimado_total: Decimal
+    detalle: list[MermaAjusteTotalOutput] = field(default_factory=list)
+
+
+# --------------------------------------------------------------------------- #
+# Dashboard (KPIs multi-dominio)
+# --------------------------------------------------------------------------- #
+@dataclass
+class CajaAbiertaOutput:
+    sucursal_id: UUID
+    caja_turno_id: UUID
+    usuario_id: UUID
+    abierto_en: datetime
+    saldo_inicial: Decimal
+
+
+@dataclass
+class DashboardOutput:
+    sucursal_id: UUID | None
+    ventas_hoy: ReporteVentasOutput
+    ventas_ayer: ReporteVentasOutput
+    top_productos_hoy: list[ProductoRankingOutput] = field(default_factory=list)
+    productos_bajo_stock: int = 0
+    cajas_abiertas: list[CajaAbiertaOutput] = field(default_factory=list)
+
+
+# --------------------------------------------------------------------------- #
 # Cartera de crédito
 # --------------------------------------------------------------------------- #
 @dataclass
@@ -162,6 +206,14 @@ class ReporteQueryPort(ABC):
     async def inventario_valorizado(
         self, sucursal_id: UUID | None = None, categoria_id: UUID | None = None
     ) -> InventarioValorizadoOutput: ...
+
+    @abstractmethod
+    async def mermas_y_ajustes(
+        self, desde: datetime, hasta: datetime, sucursal_id: UUID | None = None
+    ) -> ReporteMermasOutput: ...
+
+    @abstractmethod
+    async def dashboard(self, sucursal_id: UUID | None = None) -> DashboardOutput: ...
 
     @abstractmethod
     async def clientes_con_saldo(

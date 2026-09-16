@@ -372,6 +372,9 @@ Respuesta:
   avisar de líneas sin stock.
 - **Ojo:** cotizar **no reserva** stock. Entre cotizar y cobrar otro puede llevarse
   la última unidad → la venta falla con `StockInsuficiente`.
+- Para productos **fraccionables** (venta por peso/volumen), `cotizar` corre la
+  misma validación de `incremento_minimo_venta` que el cobro real. Caso
+  completo: `docs/guia-venta-por-peso.md`.
 
 ### 2.5 Pago completo vs. crédito
 

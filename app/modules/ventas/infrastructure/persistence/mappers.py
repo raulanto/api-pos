@@ -122,6 +122,7 @@ def to_orm_venta(entidad: Venta) -> VentaORM:
             promo_descuento=l.promo_descuento,
             promo_etiqueta=l.promo_etiqueta,
             cantidad_devuelta=l.cantidad_devuelta,
+            cita_id=l.cita_id,
         )
         det.promos = [
             DetalleVentaPromoORM(
@@ -175,6 +176,7 @@ def to_domain_venta(orm: VentaORM, includes: frozenset[str] = frozenset()) -> Ve
                     for p in getattr(l, "promos", []) or []
                 ],
                 cantidad_devuelta=l.cantidad_devuelta,
+                cita_id=l.cita_id,
             ) for l in orm.lineas
         ],
         pagos=[

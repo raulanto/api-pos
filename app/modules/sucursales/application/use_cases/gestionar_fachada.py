@@ -1,7 +1,7 @@
 """Casos de uso de la imagen de fachada de una sucursal (subir / eliminar).
 
-El binario vive en S3; en BD solo se guarda `imagen_fachada_key`. La URL pública
-se deriva prefirmada al leer (en `to_domain_sucursal`).
+El binario vive en disco; en BD solo se guarda `imagen_fachada_key`. La URL
+pública se deriva al leer (en `to_domain_sucursal`).
 """
 from dataclasses import dataclass
 from uuid import UUID

@@ -1,14 +1,14 @@
-"""Puerto de almacenamiento de archivos de imagen (S3 / compatible).
+"""Puerto de almacenamiento de archivos de imagen.
 
-El módulo `inventario` sube el binario de una imagen a un object storage y sólo
-persiste su *object key* en `producto_imagen`. La URL que consume el front se
-deriva al leer (`url_publica`, prefirmada). La miniatura la genera fuera de
-banda una Lambda disparada por el evento `s3:ObjectCreated`; su key se deriva
-de la original con `key_miniatura` (no se guarda en BD).
+El módulo `inventario` sube el binario de una imagen al almacén y sólo
+persiste su *key* en `producto_imagen`. La URL que consume el front se deriva
+al leer (`url_publica`). La miniatura la genera el adapter en el momento de
+subir el original; su key se deriva de la original con `key_miniatura` (no se
+guarda en BD).
 
-Layout de keys en el bucket:
-    originales/<dueno>/<dueno_id>/<uuid><ext>   <- dispara la Lambda
-    thumbnails/<dueno>/<dueno_id>/<uuid><ext>   <- salida de la Lambda
+Layout de keys:
+    originales/<dueno>/<dueno_id>/<uuid><ext>
+    thumbnails/<dueno>/<dueno_id>/<uuid><ext>   <- generada junto al original
 """
 from abc import ABC, abstractmethod
 from uuid import UUID

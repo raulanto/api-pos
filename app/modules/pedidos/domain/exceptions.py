@@ -30,8 +30,12 @@ class EntregaNoAplica(PedidoError):
     """Operación de entrega sobre un pedido que no es de domicilio/recoger."""
 
 
-class ProductoEnvioNoConfigurado(PedidoError):
-    """Hay `costo_envio` pero falta `settings.pedidos_producto_envio_id`."""
+class ServicioSinResponsable(PedidoError):
+    """Se intentó confirmar un pedido con una línea de servicio sin `asignado_a`."""
+
+
+class ResponsableInvalido(PedidoError):
+    """`asignado_a` no es un usuario activo, o la línea no es un servicio."""
 
 
 class AnticipoInvalido(PedidoError):

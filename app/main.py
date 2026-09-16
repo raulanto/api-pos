@@ -1,5 +1,9 @@
+from pathlib import Path
+from urllib.parse import urlsplit
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 from app.shared.exceptions import register_exception_handlers
 
@@ -10,6 +14,13 @@ app = FastAPI(
 
 # Contrato único de errores: todo error sale como {success:false, error:{...}}.
 register_exception_handlers(app)
+
+# Imágenes de producto/sucursal: guardadas en disco, servidas como estático.
+# `media_base_url` puede ser absoluta (esquema+host, para un frontend en otro
+# origen); el mount necesita sólo el path, nunca la URL completa.
+Path(settings.media_root).mkdir(parents=True, exist_ok=True)
+_media_mount_path = "/" + (urlsplit(settings.media_base_url).path or "media").lstrip("/")
+app.mount(_media_mount_path, StaticFiles(directory=settings.media_root), name="media")
 
 # CORS Config
 origins = [origin.strip() for origin in settings.cors_origins.split(",")]
@@ -34,6 +45,12 @@ from app.modules.ventas.infrastructure.api.router import (
     router as ventas_router, caja_router, cajas_router,
 )
 from app.modules.pedidos.infrastructure.api.router import router as pedidos_router
+from app.modules.agenda.infrastructure.api.router import router as agenda_router
+from app.modules.proveedores.infrastructure.api.router import (
+    router as proveedores_router, productos_router as producto_proveedor_router,
+    pedidos_router as pedidos_proveedor_router, recepciones_router as recepciones_proveedor_router,
+    devoluciones_router as devoluciones_proveedor_router,
+)
 from app.modules.reportes.infrastructure.api.router import router as reportes_router
 from app.modules.auditoria.infrastructure.api.router import router as auditoria_router
 
@@ -46,6 +63,20 @@ app.include_router(clientes_router, prefix="/api/v1/clientes", tags=["clientes"]
 app.include_router(promociones_router, prefix="/api/v1/promociones", tags=["promociones"])
 app.include_router(ventas_router, prefix="/api/v1/ventas", tags=["ventas"])
 app.include_router(pedidos_router, prefix="/api/v1/pedidos", tags=["pedidos"])
+app.include_router(agenda_router, prefix="/api/v1/agenda", tags=["agenda"])
+app.include_router(proveedores_router, prefix="/api/v1/proveedores", tags=["proveedores"])
+app.include_router(
+    producto_proveedor_router, prefix="/api/v1/inventario/productos", tags=["proveedores"],
+)
+app.include_router(
+    pedidos_proveedor_router, prefix="/api/v1/pedidos-proveedor", tags=["proveedores"],
+)
+app.include_router(
+    recepciones_proveedor_router, prefix="/api/v1/recepciones-proveedor", tags=["proveedores"],
+)
+app.include_router(
+    devoluciones_proveedor_router, prefix="/api/v1/devoluciones-proveedor", tags=["proveedores"],
+)
 app.include_router(cajas_router, prefix="/api/v1/cajas", tags=["caja"])
 app.include_router(caja_router, prefix="/api/v1/caja-turnos", tags=["caja"])
 app.include_router(reportes_router, prefix="/api/v1/reportes", tags=["reportes"])

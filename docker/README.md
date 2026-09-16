@@ -1,35 +1,27 @@
 # Docker — Entorno de Desarrollo del POS
 
-Toda la infraestructura de desarrollo local se levanta con **Docker Compose**. Incluye 4 servicios que trabajan en conjunto para emular el entorno de producción sin depender de servicios externos.
+Toda la infraestructura de desarrollo local se levanta con **Docker Compose**. Son 2 servicios: la API y PostgreSQL. Las imágenes subidas se guardan en disco (dentro del propio bind-mount de la API), sin infra aparte.
 
 ---
 
 ## Arquitectura de servicios
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         docker-compose.yml                          │
-│                                                                      │
-│   ┌──────────┐     ┌──────────┐     ┌─────────────┐                │
-│   │  pos_api  │────▶│  pos_db  │     │ pos_lambda  │                │
-│   │ :8000     │     │ :5432    │     │  _build     │                │
-│   │ FastAPI   │     │ Postgres │     │ (one-shot)  │                │
-│   └──────────┘     └──────────┘     └──────┬──────┘                │
-│        │                                    │                        │
-│        │            ┌───────────────────────▼──────┐                │
-│        └───────────▶│       pos_localstack         │                │
-│          S3 I/O     │          :4566               │                │
-│                     │   S3 + Lambda (miniaturas)   │                │
-│                     └──────────────────────────────┘                │
-└──────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│           docker-compose.yml          │
+│                                        │
+│   ┌──────────┐     ┌──────────┐      │
+│   │  pos_api  │────▶│  pos_db  │      │
+│   │ :8000     │     │ :5432    │      │
+│   │ FastAPI   │     │ Postgres │      │
+│   └──────────┘     └──────────┘      │
+└────────────────────────────────────────┘
 ```
 
 | Servicio | Contenedor | Imagen | Puerto | Descripción |
 |---|---|---|---|---|
 | `api` | `pos_api` | Build local (`Dockerfile`, target `runtime`) | `8000` | API FastAPI con hot-reload |
 | `db` | `pos_db` | `postgres:15-alpine` | `5432` | Base de datos PostgreSQL |
-| `lambda_build` | `pos_lambda_build` | `python:3.12-slim` | — | One-shot: empaqueta la Lambda de miniaturas en un zip |
-| `localstack` | `pos_localstack` | `localstack/localstack:4` | `4566` | S3 local + Lambda para generación de thumbnails |
 
 ---
 
@@ -39,15 +31,7 @@ Toda la infraestructura de desarrollo local se levanta con **Docker Compose**. I
 docker/
 ├── README.md              ← este archivo
 ├── entrypoint.sh          ← script de arranque del contenedor de la API
-├── pgdata/                ← datos de PostgreSQL (bind-mount, ignorado por git)
-└── localstack/
-    ├── data/              ← estado persistido de LocalStack (ignorado por git)
-    ├── init/
-    │   └── ready.d/
-    │       └── 10-init.sh ← bootstrap: crea bucket S3, despliega Lambda, conecta evento
-    └── lambda/
-        ├── handler.py     ← código de la Lambda de miniaturas (Pillow)
-        └── requirements.txt
+└── pgdata/                ← datos de PostgreSQL (bind-mount, ignorado por git)
 ```
 
 Archivos en la raíz del proyecto también relevantes:
@@ -58,6 +42,7 @@ Archivos en la raíz del proyecto también relevantes:
 | `Dockerfile` | Imagen multi-stage de la API (base → builder → runtime) |
 | `.dockerignore` | Excluye archivos innecesarios del build context |
 | `.env` / `.env.example` | Variables de entorno (no se commitea `.env`) |
+| `media/` | Imágenes subidas por la API (bind-mount vía `.:/app`, ignorado por git) |
 
 ---
 
@@ -72,13 +57,11 @@ Archivos en la raíz del proyecto también relevantes:
   1. Espera activa a que PostgreSQL responda (hasta 30 intentos con `asyncpg`).
   2. Ejecuta `alembic upgrade head` para aplicar migraciones pendientes.
   3. Arranca el comando (`uvicorn` con `--reload`).
-- **Hot-reload**: el directorio `.:/app` se monta como bind-mount. El venv vive en `/opt/venv`, así que el mount no pisa las dependencias.
+- **Hot-reload**: el directorio `.:/app` se monta como bind-mount. El venv vive en `/opt/venv`, así que el mount no pisa las dependencias. Las imágenes subidas quedan en `./media` dentro de ese mismo bind-mount.
 - **Healthcheck**: `curl http://localhost:8000/health` cada 30s.
-- **Dependencias**: espera a que `db` y `localstack` estén healthy antes de arrancar.
+- **Dependencias**: espera a que `db` esté healthy antes de arrancar.
 - **Variables de entorno** pisadas por Compose (no las del `.env`):
   - `DATABASE_URL` → apunta a `db:5432` (red interna de Compose).
-  - `S3_ENDPOINT_URL` → `http://localstack:4566` (red interna).
-  - `S3_PUBLIC_ENDPOINT_URL` → `http://localhost:4566` (para URLs firmadas que abre el navegador).
 
 ### 2. `db` — PostgreSQL (pos_db)
 
@@ -89,28 +72,6 @@ Archivos en la raíz del proyecto también relevantes:
   - `POSTGRES_USER` → `postgres`
   - `POSTGRES_PASSWORD` → `password`
   - `POSTGRES_DB` → `pos_db`
-
-### 3. `lambda_build` — Empaquetador de Lambda (pos_lambda_build)
-
-- **Imagen**: `python:3.12-slim` (contenedor efímero, one-shot).
-- **Propósito**: compila Pillow (wheel nativo para Linux) e instala las dependencias de la Lambda en un volumen compartido (`lambda_dist`).
-- **Resultado**: genera `/dist/function.zip` con `handler.py` + dependencias, listo para desplegar en LocalStack.
-- **No expone puertos**. Corre una vez y termina.
-
-### 4. `localstack` — S3 + Lambda (pos_localstack)
-
-- **Imagen**: `localstack/localstack:4`.
-- **Servicios habilitados**: `s3`, `lambda`.
-- **Persistencia**: `PERSISTENCE=1` guarda el estado de S3 entre reinicios en `./docker/localstack/data/`.
-- **Bootstrap** (`docker/localstack/init/ready.d/10-init.sh`):
-  1. Crea el bucket `pos-imagenes` con CORS configurado (GET, PUT, HEAD).
-  2. Despliega la Lambda `pos-thumbnailer` usando el zip de `lambda_build`.
-  3. Conecta la notificación S3: `s3:ObjectCreated:*` con prefijo `originales/` dispara la Lambda.
-- **Lambda de miniaturas** (`docker/localstack/lambda/handler.py`):
-  - Se dispara cuando se sube una imagen a `originales/<dueño>/<id>/<uuid>.<ext>`.
-  - Genera un thumbnail de 400×400px (conserva proporción) en `thumbnails/<dueño>/<id>/<uuid>.<ext>`.
-  - Soporta JPEG, PNG y WebP. Es idempotente (sobrescribe si ya existía).
-- **Dependencia**: espera a que `lambda_build` termine exitosamente.
 
 ---
 
@@ -127,15 +88,14 @@ Archivos en la raíz del proyecto también relevantes:
 ### Arranque completo
 
 ```bash
-# Levanta los 4 servicios (build de imagen incluido la primera vez)
+# Levanta los 2 servicios (build de imagen incluido la primera vez)
 docker compose up -d
 ```
 
 Esto hace, en orden:
-1. `lambda_build` empaqueta la Lambda (one-shot, termina rápido).
-2. `db` arranca PostgreSQL y espera a estar healthy.
-3. `localstack` arranca cuando `lambda_build` terminó; crea bucket, despliega Lambda.
-4. `api` arranca cuando `db` y `localstack` están healthy; aplica migraciones y levanta uvicorn.
+
+1. `db` arranca PostgreSQL y espera a estar healthy.
+2. `api` arranca cuando `db` está healthy; aplica migraciones y levanta uvicorn.
 
 ### Reconstruir la imagen de la API (tras cambiar dependencias)
 
@@ -152,9 +112,6 @@ docker compose logs -f
 
 # Solo la API
 docker compose logs -f api
-
-# Solo LocalStack (para ver si la Lambda se desplegó bien)
-docker compose logs -f localstack
 ```
 
 ### Detener los servicios
@@ -163,24 +120,21 @@ docker compose logs -f localstack
 # Detener sin eliminar contenedores
 docker compose stop
 
-# Detener y eliminar contenedores (los datos de Postgres y S3 se conservan)
+# Detener y eliminar contenedores (los datos de Postgres y las imágenes se conservan)
 docker compose down
-
-# Detener, eliminar contenedores y el volumen scratch de lambda_dist
-docker compose down -v
 ```
 
-> **Nota**: `docker compose down -v` **no** borra los datos de PostgreSQL ni de S3 porque son bind-mounts (`./docker/pgdata/` y `./docker/localstack/data/`), no named volumes.
+> **Nota**: los datos de PostgreSQL (`./docker/pgdata/`) y las imágenes subidas (`./media/`) son bind-mounts, no named volumes — `docker compose down -v` no los borra.
 
 ### Borrar datos completamente (reset total)
 
 ```bash
-docker compose down -v
-rm -rf docker/pgdata docker/localstack/data
+docker compose down
+rm -rf docker/pgdata media
 docker compose up -d
 ```
 
-Esto recrea la base de datos desde cero (las migraciones se reaplicarán automáticamente al arrancar).
+Esto recrea la base de datos desde cero (las migraciones se reaplicarán automáticamente al arrancar) y vacía las imágenes subidas.
 
 ---
 
@@ -192,11 +146,8 @@ Esto recrea la base de datos desde cero (las migraciones se reaplicarán automá
 | `POSTGRES_PASSWORD` | `password` | `db`, `api` | Contraseña de PostgreSQL |
 | `POSTGRES_DB` | `pos_db` | `db`, `api` | Nombre de la base de datos |
 | `DATABASE_URL` | ver `.env.example` | `api` | Connection string (Compose la pisa con host `db`) |
-| `S3_ENDPOINT_URL` | `http://localhost:4566` | `api` | Endpoint S3 (Compose la pisa con `http://localstack:4566`) |
-| `S3_PUBLIC_ENDPOINT_URL` | `http://localhost:4566` | `api` | Endpoint para URLs firmadas (accesible desde el navegador) |
-| `S3_BUCKET_IMAGENES` | `pos-imagenes` | `api`, `localstack` | Nombre del bucket de imágenes |
-| `AWS_ACCESS_KEY_ID` | `test` | `api` | Credencial AWS (ficticia para LocalStack) |
-| `AWS_SECRET_ACCESS_KEY` | `test` | `api` | Credencial AWS (ficticia para LocalStack) |
+| `MEDIA_ROOT` | `media` | `api` | Carpeta en disco donde se guardan las imágenes |
+| `MEDIA_BASE_URL` | `/media` | `api` | Prefijo bajo el que la API sirve esa carpeta como estático |
 
 ---
 
@@ -206,34 +157,15 @@ Esto recrea la base de datos desde cero (las migraciones se reaplicarán automá
 |---|---|---|
 | `8000` | API FastAPI | `http://localhost:8000` — Docs en `/docs` |
 | `5432` | PostgreSQL | Conexión directa con cliente SQL (DBeaver, pgAdmin, etc.) |
-| `4566` | LocalStack | S3 local — `http://localhost:4566` |
 
 ---
 
-## Flujo de imágenes (S3 + Lambda)
+## Flujo de imágenes (disco local)
 
-```
-                                      ┌──────────────────────┐
- API sube imagen                     │   Bucket S3            │
- ──────────────────▶  originales/    │   pos-imagenes         │
-                     <dueño>/<id>/   │                        │
-                     <uuid>.jpg      │                        │
-                                      └──────────┬───────────┘
-                                                  │ s3:ObjectCreated
-                                                  ▼
-                                      ┌──────────────────────┐
-                                      │ Lambda pos-thumbnailer│
-                                      │   Pillow resize       │
-                                      │   400×400 max         │
-                                      └──────────┬───────────┘
-                                                  │ PUT
-                                                  ▼
-                                      ┌──────────────────────┐
-                                      │  thumbnails/          │
-                                      │  <dueño>/<id>/        │
-                                      │  <uuid>.jpg           │
-                                      └──────────────────────┘
-```
+Ver `docs/imagenes-almacenamiento-local.md`: la API guarda el original en
+`media/originales/<dueño>/<id>/<uuid>.ext` y genera la miniatura (Pillow,
+400×400 máx.) en `media/thumbnails/...` en el mismo request de subida — sin
+servicios externos.
 
 ---
 
@@ -244,18 +176,9 @@ Esto recrea la base de datos desde cero (las migraciones se reaplicarán automá
 - Ver logs de la base: `docker compose logs db`
 - El entrypoint reintenta 30 veces cada 2 segundos antes de fallar.
 
-### El bucket S3 no se crea
-- Ver logs de LocalStack: `docker compose logs localstack`
-- Verificar que el script `10-init.sh` ejecutó: buscar líneas `[init]` en los logs.
-
-### La Lambda no genera miniaturas
-- Verificar que `lambda_build` terminó bien: `docker compose logs lambda_build`
-- Si el zip no se generó, el init lo salta con un aviso (la API funciona sin miniaturas).
-- Probar manualmente: `docker compose exec localstack awslocal lambda invoke --function-name pos-thumbnailer --payload '{}' /tmp/out.json`
-
 ### Datos corruptos / quiero empezar de cero
 ```bash
-docker compose down -v
-rm -rf docker/pgdata docker/localstack/data
+docker compose down
+rm -rf docker/pgdata media
 docker compose up -d
 ```

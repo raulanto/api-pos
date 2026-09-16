@@ -26,6 +26,9 @@ class LineaPedidoRequest(BaseModel):
     descuento_linea: Decimal = Field(default=Decimal("0"), ge=0)
     impuesto_tasa: Decimal = Field(default=Decimal("0"), ge=0)
     producto_unidad_id: Optional[UUID] = None
+    # Responsable, si el producto es un servicio (envío, instalación, …).
+    # Se ignora en productos que no son servicio.
+    asignado_a: Optional[UUID] = None
 
 
 class CrearPedidoRequest(BaseModel):
@@ -37,7 +40,6 @@ class CrearPedidoRequest(BaseModel):
     telefono: Optional[str] = Field(default=None, max_length=50)
     descuento_total: Decimal = Field(default=Decimal("0"), ge=0)
     motivo_descuento: Optional[str] = Field(default=None, max_length=255)
-    costo_envio: Decimal = Field(default=Decimal("0"), ge=0)
     codigo_cupon: Optional[str] = Field(default=None, max_length=40)
     cliente_segmento: Optional[str] = Field(default=None, max_length=60)
     notas: Optional[str] = Field(default=None, max_length=1000)
@@ -57,7 +59,6 @@ class ActualizarPedidoRequest(BaseModel):
     telefono: Optional[str] = Field(default=None, max_length=50)
     descuento_total: Optional[Decimal] = Field(default=None, ge=0)
     motivo_descuento: Optional[str] = Field(default=None, max_length=255)
-    costo_envio: Optional[Decimal] = Field(default=None, ge=0)
     codigo_cupon: Optional[str] = Field(default=None, max_length=40)
     cliente_segmento: Optional[str] = Field(default=None, max_length=60)
     notas: Optional[str] = Field(default=None, max_length=1000)
@@ -85,6 +86,17 @@ class RegistrarAnticipoRequest(BaseModel):
     referencia: Optional[str] = Field(default=None, max_length=120)
 
 
+class AsignacionServicioItem(BaseModel):
+    model_config = _FORBID
+    detalle_id: UUID
+    asignado_a: UUID
+
+
+class AsignarServiciosRequest(BaseModel):
+    model_config = _FORBID
+    asignaciones: List[AsignacionServicioItem] = Field(min_length=1)
+
+
 class FacturarPedidoRequest(BaseModel):
     model_config = _FORBID
     caja_turno_id: UUID
@@ -109,6 +121,8 @@ class DetallePedidoResponse(BaseModel):
     promo_etiqueta: Optional[str] = None
     promo_descuento: Decimal
     subtotal: Decimal
+    es_servicio: bool
+    asignado_a: Optional[UUID] = None
 
 
 class PedidoPagoResponse(BaseModel):
@@ -134,7 +148,6 @@ class PedidoResponse(BaseModel):
     telefono: Optional[str] = None
     descuento_total: Decimal
     motivo_descuento: Optional[str] = None
-    costo_envio: Decimal
     codigo_cupon: Optional[str] = None
     cliente_segmento: Optional[str] = None
     notas: Optional[str] = None

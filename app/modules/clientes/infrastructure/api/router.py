@@ -109,7 +109,7 @@ async def _obtener_en_alcance(
 
 # ========================================================================== #
 @router.post(
-    "/", response_model=ApiResponse[ClienteResponse], status_code=status.HTTP_201_CREATED,
+    "", response_model=ApiResponse[ClienteResponse], status_code=status.HTTP_201_CREATED,
 )
 async def crear_cliente(
     body: CrearClienteRequest,
@@ -132,7 +132,7 @@ async def crear_cliente(
     return ok(cliente)
 
 
-@router.get("/", response_model=ApiResponse[list[ClienteResponse]])
+@router.get("", response_model=ApiResponse[list[ClienteResponse]])
 async def listar_clientes(
     request: Request,
     db: AsyncSession = Depends(get_db),

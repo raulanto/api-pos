@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, ForeignKey, Numeric, Index
+from sqlalchemy import Column, String, Boolean, Integer, ForeignKey, Numeric, Index
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
 from app.shared.infrastructure.orm_base import Base, TimestampMixin, SoftDeleteMixin
@@ -87,6 +87,11 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     # sobreescribir.
     monedero_pct = Column(Numeric(5, 2), nullable=True)
     monedero_monto = Column(Numeric(12, 2), nullable=True)
+    # Agenda: "servicio agendable" = tipo=servicio CON duracion_minutos seteado.
+    duracion_minutos = Column(Integer, nullable=True)
+    tiempo_buffer_minutos = Column(Integer, default=0, nullable=False)
+    requiere_recurso = Column(Boolean, default=False, nullable=False)
+    disponibilidad_cruzada_activa = Column(Boolean, default=False, nullable=False)
 
     # Solo lectura, para `?include=categoria,existencias,componentes`.
     categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")

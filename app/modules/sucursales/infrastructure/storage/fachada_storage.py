@@ -1,20 +1,15 @@
 """Storage de la imagen de fachada de una sucursal.
 
-Reusa la capa S3 del proyecto (`app/core/aws.py`) sin abstracción nueva. Mismo
-bucket que las imágenes de producto (`settings.s3_bucket_imagenes`), prefijo
-`sucursales/`. La Lambda de miniaturas de inventario filtra por prefijo
-`originales/`, así que no se dispara con las fachadas.
+Reusa el almacén local del proyecto (`app/core/media_storage.py`) sin
+abstracción nueva. Misma carpeta que las imágenes de producto
+(`settings.media_root`), prefijo `sucursales/`. No pasa por `originales/`, así
+que el adapter de inventario no le genera miniatura (las fachadas no tienen).
 """
-import logging
 from uuid import UUID, uuid4
 
-from botocore.exceptions import ClientError
 from fastapi.concurrency import run_in_threadpool
 
-from app.core.aws import get_s3_client, presign_get_url
-from app.core.config import settings
-
-logger = logging.getLogger(__name__)
+from app.core import media_storage
 
 PREFIJO = "sucursales/"
 
@@ -36,25 +31,12 @@ def nueva_key(sucursal_id: UUID, content_type: str) -> str:
 
 
 async def subir(key: str, contenido: bytes, content_type: str) -> None:
-    await run_in_threadpool(
-        get_s3_client().put_object,
-        Bucket=settings.s3_bucket_imagenes,
-        Key=key,
-        Body=contenido,
-        ContentType=content_type,
-    )
+    await run_in_threadpool(media_storage.guardar, key, contenido)
 
 
 async def eliminar(key: str) -> None:
-    try:
-        await run_in_threadpool(
-            get_s3_client().delete_object,
-            Bucket=settings.s3_bucket_imagenes,
-            Key=key,
-        )
-    except ClientError as exc:  # noqa: BLE001 - best-effort
-        logger.warning("No se pudo borrar %s de S3: %s", key, exc)
+    await run_in_threadpool(media_storage.borrar, key)
 
 
 def url_publica(key: str) -> str:
-    return presign_get_url(key)
+    return media_storage.url_publica(key)

@@ -98,9 +98,9 @@ class ComponenteEmbed(BaseModel):
 class ImagenEmbed(BaseModel):
     """Imagen de la galería de un producto o presentación (`?include=imagenes`).
 
-    `url` (y `thumbnail_url` si aplica) salen PREFIRMADAS cuando la imagen vive
-    en S3 (`object_key` presente); si es una URL externa, `url` va tal cual y
-    `thumbnail_url` es None.
+    `url` (y `thumbnail_url` si aplica) se resuelven al leer cuando la imagen
+    es propia (`object_key` presente); si es una URL externa, `url` va tal
+    cual y `thumbnail_url` es None.
     """
     model_config = _ORM
     id: UUID
@@ -129,6 +129,6 @@ class UnidadEmbed(BaseModel):
     # Monedero (cashback) propio de la presentación; null = usa el del producto.
     monedero_pct: Optional[Decimal] = None
     monedero_monto: Optional[Decimal] = None
-    # Portada de la presentación (prefirmada si vive en S3); null si no tiene una
-    # imagen marcada como principal.
+    # Portada de la presentación (url resuelta si es propia); null si no tiene
+    # una imagen marcada como principal.
     imagen_principal: Optional[ImagenEmbed] = None

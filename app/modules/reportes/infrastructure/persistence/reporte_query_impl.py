@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -11,6 +11,8 @@ from app.modules.reportes.application.ports.reporte_query_port import (
     VentasPorMetodoOutput, MetodoPagoTotalOutput,
     VentaPorUsuarioOutput, ProductoRankingOutput,
     InventarioValorizadoOutput, CategoriaValorizadaOutput,
+    ReporteMermasOutput, MermaAjusteTotalOutput,
+    DashboardOutput, CajaAbiertaOutput,
     ClienteSaldoOutput, PaginaReporte,
 )
 # Lecturas directas de los modelos ORM de otros módulos (patrón CQRS de solo lectura).
@@ -19,8 +21,9 @@ from app.modules.ventas.infrastructure.persistence.orm_models import (
 )
 from app.modules.ventas.domain.value_objects import MetodoPago, EstadoVenta
 from app.modules.inventario.infrastructure.persistence.orm_models import (
-    ProductoORM, ExistenciaORM, CategoriaORM,
+    ProductoORM, ExistenciaORM, CategoriaORM, MovimientoInventarioORM,
 )
+from app.modules.inventario.domain.value_objects import TipoMovimiento
 from app.modules.usuarios.infrastructure.persistence.orm_models import UsuarioORM
 from app.modules.clientes.infrastructure.persistence.orm_models import ClienteORM
 
@@ -339,6 +342,101 @@ class SqlAlchemyReporteQueryImpl(ReporteQueryPort):
             categoria_id=categoria_id,
             valor_total=sum((c.valor for c in por_categoria), _CERO),
             por_categoria=por_categoria,
+        )
+
+    # ------------------------------------------------------------------ #
+    # Mermas y ajustes
+    # ------------------------------------------------------------------ #
+    async def mermas_y_ajustes(
+        self, desde: datetime, hasta: datetime, sucursal_id: UUID | None = None
+    ) -> ReporteMermasOutput:
+        cond = [
+            MovimientoInventarioORM.tipo.in_(
+                (TipoMovimiento.MERMA.value, TipoMovimiento.AJUSTE.value)
+            ),
+            MovimientoInventarioORM.created_at >= desde,
+            MovimientoInventarioORM.created_at <= hasta,
+        ]
+        if sucursal_id is not None:
+            cond.append(MovimientoInventarioORM.sucursal_id == sucursal_id)
+
+        valor_expr = func.coalesce(
+            MovimientoInventarioORM.cantidad * MovimientoInventarioORM.costo_unitario, 0
+        )
+        filas = (await self._db.execute(
+            select(
+                MovimientoInventarioORM.tipo,
+                func.count(MovimientoInventarioORM.id),
+                func.coalesce(func.sum(MovimientoInventarioORM.cantidad), 0),
+                func.coalesce(func.sum(valor_expr), 0),
+            )
+            .where(*cond)
+            .group_by(MovimientoInventarioORM.tipo)
+        )).all()
+
+        detalle = [
+            MermaAjusteTotalOutput(
+                tipo=tipo, numero_movimientos=int(n),
+                cantidad_total=Decimal(cant or 0), valor_estimado=Decimal(valor or 0),
+            )
+            for tipo, n, cant, valor in filas
+        ]
+        por_tipo = {d.tipo: d.cantidad_total for d in detalle}
+        return ReporteMermasOutput(
+            desde=desde, hasta=hasta, sucursal_id=sucursal_id,
+            total_merma=por_tipo.get(TipoMovimiento.MERMA.value, _CERO),
+            total_ajuste=por_tipo.get(TipoMovimiento.AJUSTE.value, _CERO),
+            valor_estimado_total=sum((d.valor_estimado for d in detalle), _CERO),
+            detalle=detalle,
+        )
+
+    # ------------------------------------------------------------------ #
+    # Dashboard (KPIs multi-dominio, reusa los métodos de arriba)
+    # ------------------------------------------------------------------ #
+    async def dashboard(self, sucursal_id: UUID | None = None) -> DashboardOutput:
+        ahora = datetime.utcnow()
+        hoy_desde = datetime.combine(ahora.date(), time.min)
+        # "Ayer" comparado hasta la misma hora que "hoy" (rango parejo, no día completo).
+        ayer_desde = hoy_desde - timedelta(days=1)
+        ayer_hasta = ahora - timedelta(days=1)
+
+        ventas_hoy = await self.reporte_ventas(hoy_desde, ahora, sucursal_id)
+        ventas_ayer = await self.reporte_ventas(ayer_desde, ayer_hasta, sucursal_id)
+        top_hoy = await self.top_productos(hoy_desde, ahora, sucursal_id, limit=3, offset=0)
+
+        cond_stock = [ProductoORM.activo.is_(True), ExistenciaORM.cantidad <= ExistenciaORM.stock_minimo]
+        if sucursal_id is not None:
+            cond_stock.append(ExistenciaORM.sucursal_id == sucursal_id)
+        bajo_stock = await self._db.scalar(
+            select(func.count())
+            .select_from(ExistenciaORM)
+            .join(ProductoORM, ProductoORM.id == ExistenciaORM.producto_id)
+            .where(*cond_stock)
+        )
+
+        cond_caja = [CajaTurnoORM.estado == "abierto"]
+        if sucursal_id is not None:
+            cond_caja.append(CajaTurnoORM.sucursal_id == sucursal_id)
+        filas_caja = (await self._db.execute(
+            select(
+                CajaTurnoORM.sucursal_id, CajaTurnoORM.id, CajaTurnoORM.usuario_id,
+                CajaTurnoORM.abierto_en, CajaTurnoORM.saldo_inicial,
+            ).where(*cond_caja)
+        )).all()
+
+        return DashboardOutput(
+            sucursal_id=sucursal_id,
+            ventas_hoy=ventas_hoy,
+            ventas_ayer=ventas_ayer,
+            top_productos_hoy=top_hoy.items,
+            productos_bajo_stock=int(bajo_stock or 0),
+            cajas_abiertas=[
+                CajaAbiertaOutput(
+                    sucursal_id=suc, caja_turno_id=cid, usuario_id=uid,
+                    abierto_en=abierto_en, saldo_inicial=Decimal(saldo or 0),
+                )
+                for suc, cid, uid, abierto_en, saldo in filas_caja
+            ],
         )
 
     # ------------------------------------------------------------------ #

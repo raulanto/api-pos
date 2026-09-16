@@ -163,6 +163,10 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         es_sobre_pedido=orm.es_sobre_pedido,
         monedero_pct=orm.monedero_pct,
         monedero_monto=orm.monedero_monto,
+        duracion_minutos=orm.duracion_minutos,
+        tiempo_buffer_minutos=orm.tiempo_buffer_minutos,
+        requiere_recurso=orm.requiere_recurso,
+        disponibilidad_cruzada_activa=orm.disponibilidad_cruzada_activa,
         # Siempre presente: no depende de `includes` (ver `_opts_producto`,
         # que carga `imagen_principal` incondicionalmente).
         imagen_principal=to_domain_imagen(orm.imagen_principal) if orm.imagen_principal else None,
@@ -188,17 +192,17 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
     Transforma una imagen de catálogo ORM <-> entidad de dominio.
 """
 def to_domain_imagen(orm: ProductoImagenORM) -> ProductoImagen:
-    # Imagen propia (S3): `url` y `thumbnail_url` se derivan prefirmadas al leer.
+    # Imagen propia (almacén local): `url` y `thumbnail_url` se derivan al leer.
     # Imagen externa: `url` es el valor guardado; no hay miniatura.
     url = orm.url
     thumbnail_url = None
     if orm.object_key:
-        from app.core.aws import presign_get_url
+        from app.core.media_storage import url_publica
         from app.modules.inventario.application.ports.almacen_imagenes import (
             AlmacenImagenes,
         )
-        url = presign_get_url(orm.object_key)
-        thumbnail_url = presign_get_url(AlmacenImagenes.key_miniatura(orm.object_key))
+        url = url_publica(orm.object_key)
+        thumbnail_url = url_publica(AlmacenImagenes.key_miniatura(orm.object_key))
     return ProductoImagen(
         id=orm.id,
         producto_id=orm.producto_id,
@@ -306,6 +310,10 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         es_sobre_pedido=entidad.es_sobre_pedido,
         monedero_pct=entidad.monedero_pct,
         monedero_monto=entidad.monedero_monto,
+        duracion_minutos=entidad.duracion_minutos,
+        tiempo_buffer_minutos=entidad.tiempo_buffer_minutos,
+        requiere_recurso=entidad.requiere_recurso,
+        disponibilidad_cruzada_activa=entidad.disponibilidad_cruzada_activa,
         activo=entidad.activo
     )
 
