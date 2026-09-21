@@ -31,6 +31,7 @@ def _to_domain(orm: LogAuditoriaORM, includes: frozenset[str] = frozenset()) -> 
 class SqlAlchemyAuditoriaRepository(AuditoriaRepository):
     _ORDEN = {
         "fecha": LogAuditoriaORM.fecha,
+        "created_at": LogAuditoriaORM.fecha,
         "modulo": LogAuditoriaORM.modulo,
         "accion": LogAuditoriaORM.accion,
     }

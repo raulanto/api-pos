@@ -9,7 +9,7 @@ from app.shared.exceptions import register_exception_handlers
 
 app = FastAPI(
     title="POS Backend API",
-    version="1.0.0",
+    version="1.3.0",
 )
 
 # Contrato único de errores: todo error sale como {success:false, error:{...}}.
