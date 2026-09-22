@@ -24,7 +24,7 @@ Cada registro de auditoría contiene la siguiente información:
 |---|---|---|
 | `id` | `UUID` | Identificador único del log. |
 | `usuario_id` | `UUID` | ID del usuario autenticado que ejecutó la acción. Se puede expandir con `?include=usuario`. |
-| `modulo` | `varchar(50)` | Nombre del módulo (`ventas`, `caja`, `inventario`, `usuarios`, `clientes`, `proveedores`, `promociones`, `sucursales`). |
+| `modulo` | `varchar(50)` | Nombre del módulo (`ventas`, `caja`, `inventario`, `usuarios`, `clientes`, `proveedores`, `promociones`, `sucursales`, `pedidos`). |
 | `accion` | `varchar(100)` | Código de la acción (ej. `crear_producto`, `VentaCreada`, `CajaTurnoAbierto`). |
 | `entidad` | `varchar(100)` | Nombre de la entidad afectada (ej. `Producto`, `Venta`, `Cliente`). |
 | `entidad_id` | `varchar(100)` | ID en formato texto de la entidad modificada. |
@@ -79,6 +79,17 @@ El sistema captura automáticamente los siguientes eventos:
 ### 🏢 Sucursales
 - `SucursalCreada`: Alta de sucursal.
 - `SucursalEditada`: Modificación de sucursal.
+
+### 📋 Pedidos
+- `PedidoCreado`: Registro de pedido de cliente (presencial, delivery o web).
+- `PedidoConfirmado`: Confirmación del pedido con snapshot de precio congelado.
+- `PedidoCancelado`: Cancelación de pedido.
+- `PedidoReabierto`: Reapertura de pedido cancelado o modificado.
+- `PedidoEntregaActualizada`: Avance en estado de entrega o asignación de repartidor.
+- `PedidoAnticipoRegistrado`: Abono o anticipo registrado para el pedido.
+- `PedidoServiciosAsignados`: Asignación de personal a líneas de servicios.
+- `PedidoFacturado`: Conversión del pedido confirmado en Venta de caja.
+
 
 ---
 

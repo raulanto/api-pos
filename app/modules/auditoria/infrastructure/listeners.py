@@ -62,3 +62,14 @@ event_bus.suscribir("PromocionEditada", registrar_auditoria)
 # Sucursales
 event_bus.suscribir("SucursalCreada", registrar_auditoria)
 event_bus.suscribir("SucursalEditada", registrar_auditoria)
+
+# Pedidos
+event_bus.suscribir("PedidoCreado", registrar_auditoria)
+event_bus.suscribir("PedidoConfirmado", registrar_auditoria)
+event_bus.suscribir("PedidoCancelado", registrar_auditoria)
+event_bus.suscribir("PedidoReabierto", registrar_auditoria)
+event_bus.suscribir("PedidoEntregaActualizada", registrar_auditoria)
+event_bus.suscribir("PedidoAnticipoRegistrado", registrar_auditoria)
+event_bus.suscribir("PedidoServiciosAsignados", registrar_auditoria)
+event_bus.suscribir("PedidoFacturado", registrar_auditoria)
+
