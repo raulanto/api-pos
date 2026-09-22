@@ -34,6 +34,9 @@ app.add_middleware(
 
 # Registra los listeners de auditoría en el event_bus global (efecto de import).
 from app.modules.auditoria.infrastructure import listeners as _auditoria_listeners  # noqa: F401,E402
+from app.core.signal_listeners import registrar_signal_listeners
+
+registrar_signal_listeners()
 
 from app.modules.usuarios.infrastructure.api.router import router as usuarios_router
 from app.modules.usuarios.infrastructure.api.roles_router import router as roles_router, permisos_router
@@ -53,6 +56,7 @@ from app.modules.proveedores.infrastructure.api.router import (
 )
 from app.modules.reportes.infrastructure.api.router import router as reportes_router
 from app.modules.auditoria.infrastructure.api.router import router as auditoria_router
+from app.core.signals_router import router as signals_router
 
 app.include_router(usuarios_router, prefix="/api/v1/usuarios", tags=["usuarios"])
 app.include_router(roles_router, prefix="/api/v1/roles", tags=["roles"])
@@ -81,6 +85,7 @@ app.include_router(cajas_router, prefix="/api/v1/cajas", tags=["caja"])
 app.include_router(caja_router, prefix="/api/v1/caja-turnos", tags=["caja"])
 app.include_router(reportes_router, prefix="/api/v1/reportes", tags=["reportes"])
 app.include_router(auditoria_router, prefix="/api/v1/auditoria", tags=["auditoria"])
+app.include_router(signals_router, prefix="/api/v1/signals", tags=["signals"])
 
 @app.get("/health")
 def health_check():
