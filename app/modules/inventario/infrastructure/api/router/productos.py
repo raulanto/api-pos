@@ -13,6 +13,7 @@ from app.shared.responses import (
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 from app.modules.inventario.application.dtos import FiltroProductos
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.modules.inventario.application.use_cases.crear_producto import (
@@ -87,6 +88,14 @@ async def crear_producto(
                 codigo_barras=body.codigo_barras, descripcion=body.descripcion,
             )
         )
+        await event_bus.publicar("ProductoCreado", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "crear_producto",
+            "entidad": "Producto",
+            "entidad_id": str(producto.id),
+            "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+        }, db)
     except Exception as e:
         raise traducir_create(e)
     return ok(producto)
@@ -275,6 +284,14 @@ async def actualizar_producto(
                 cambiar_descripcion=body.cambiar_descripcion,
             )
         )
+        await event_bus.publicar("ProductoEditado", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "editar_producto",
+            "entidad": "Producto",
+            "entidad_id": str(producto.id),
+            "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+        }, db)
     except Exception as e:
         raise traducir(e)
     return ok(producto)
@@ -302,6 +319,14 @@ async def desactivar_producto(
         producto = await DesactivarProductoUseCase(
             prod_repo(db), exist_repo(db), comp_repo(db),
         ).ejecutar(producto_id, confirmar_con_stock=confirmar_con_stock)
+        await event_bus.publicar("ProductoDesactivado", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "desactivar_producto",
+            "entidad": "Producto",
+            "entidad_id": str(producto.id),
+            "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+        }, db)
     except Exception as e:
         raise traducir(e)
     return ok(producto)

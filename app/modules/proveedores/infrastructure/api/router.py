@@ -13,6 +13,7 @@ from app.shared.responses import (
     page_params, make_sort_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 
 from app.modules.proveedores.domain import exceptions as pexc
 from app.modules.proveedores.domain.value_objects import (
@@ -158,6 +159,14 @@ async def crear_proveedor(
         proveedor = await CrearProveedorUseCase(_prov_repo(db)).ejecutar(
             CrearProveedorInput(**body.model_dump())
         )
+        await event_bus.publicar("ProveedorCreado", {
+            "usuario_id": actual.id,
+            "modulo": "proveedores",
+            "accion": "crear_proveedor",
+            "entidad": "Proveedor",
+            "entidad_id": str(proveedor.id),
+            "detalle": {"nombre": proveedor.nombre, "rfc": proveedor.rfc},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(proveedor)
@@ -203,6 +212,14 @@ async def actualizar_proveedor(
         proveedor = await ActualizarProveedorUseCase(_prov_repo(db)).ejecutar(
             ActualizarProveedorInput(proveedor_id=proveedor_id, **body.model_dump())
         )
+        await event_bus.publicar("ProveedorEditado", {
+            "usuario_id": actual.id,
+            "modulo": "proveedores",
+            "accion": "editar_proveedor",
+            "entidad": "Proveedor",
+            "entidad_id": str(proveedor.id),
+            "detalle": {"nombre": proveedor.nombre},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(proveedor)

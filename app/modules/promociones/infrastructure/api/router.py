@@ -11,6 +11,7 @@ from app.shared.responses import (
     page_params, make_sort_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 from app.modules.promociones.application.dtos import FiltroPromociones
 from app.modules.promociones.domain.entities import TipoPromocion
 from app.modules.promociones.domain.exceptions import (
@@ -111,6 +112,14 @@ async def crear_promocion(
             cliente_segmento=body.cliente_segmento,
             requiere_cupon=body.requiere_cupon,
         ))
+        await event_bus.publicar("PromocionCreada", {
+            "usuario_id": actual.id,
+            "modulo": "promociones",
+            "accion": "crear_promocion",
+            "entidad": "Promocion",
+            "entidad_id": str(promo.id),
+            "detalle": {"nombre": promo.nombre, "tipo": str(promo.tipo)},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(promo)
@@ -157,6 +166,14 @@ async def actualizar_promocion(
             cambiar_condiciones=body.cambiar_condiciones,
             objetivos=_objetivos(body.objetivos) if body.objetivos is not None else None,
         ))
+        await event_bus.publicar("PromocionEditada", {
+            "usuario_id": actual.id,
+            "modulo": "promociones",
+            "accion": "editar_promocion",
+            "entidad": "Promocion",
+            "entidad_id": str(promo.id),
+            "detalle": {"nombre": promo.nombre},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(promo)

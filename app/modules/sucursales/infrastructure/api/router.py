@@ -12,6 +12,7 @@ from app.shared.responses import (
     page_params, make_sort_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 from app.modules.sucursales.application.dtos import FiltroSucursales
 from app.modules.sucursales.domain.entities import TipoSucursal
 from app.modules.sucursales.domain.exceptions import (
@@ -96,6 +97,14 @@ async def crear_sucursal(
             horario_apertura=body.horario_apertura, horario_cierre=body.horario_cierre,
             sucursal_padre_id=body.sucursal_padre_id, permite_ventas=body.permite_ventas,
         ))
+        await event_bus.publicar("SucursalCreada", {
+            "usuario_id": actual.id,
+            "modulo": "sucursales",
+            "accion": "crear_sucursal",
+            "entidad": "Sucursal",
+            "entidad_id": str(sucursal.id),
+            "detalle": {"nombre": sucursal.nombre, "codigo": sucursal.codigo},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(sucursal)
@@ -139,6 +148,14 @@ async def actualizar_sucursal(
             cambiar_horario=body.cambiar_horario,
             sucursal_padre_id=body.sucursal_padre_id, cambiar_padre=body.cambiar_padre,
         ))
+        await event_bus.publicar("SucursalEditada", {
+            "usuario_id": actual.id,
+            "modulo": "sucursales",
+            "accion": "editar_sucursal",
+            "entidad": "Sucursal",
+            "entidad_id": str(sucursal.id),
+            "detalle": {"nombre": sucursal.nombre},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(sucursal)

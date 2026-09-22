@@ -10,6 +10,7 @@ from app.core.dependencies import (
     invalidar_cache_permisos, sucursal_scope, verificar_alcance_sucursal,
 )
 from app.core.rate_limit import login_rate_limiter
+from app.shared.events import event_bus
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
@@ -221,6 +222,7 @@ async def obtener_usuario(
 )
 async def crear_usuario(
     body: CrearUsuarioRequest,
+    db: AsyncSession = Depends(get_db),
     use_case: CrearUsuarioUseCase = Depends(get_crear_usuario_use_case),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.crear")),
 ):
@@ -232,6 +234,14 @@ async def crear_usuario(
             email=body.email,
             password_plano=body.password,
         ))
+        await event_bus.publicar("UsuarioCreado", {
+            "usuario_id": actual.id,
+            "modulo": "usuarios",
+            "accion": "crear_usuario",
+            "entidad": "Usuario",
+            "entidad_id": str(usuario.id),
+            "detalle": {"nombre": usuario.nombre, "email": usuario.email},
+        }, db)
     except _BAD_REQUEST as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return ok(usuario)
@@ -257,6 +267,14 @@ async def editar_usuario(
     )
     try:
         usuario = await use_case.ejecutar(data)
+        await event_bus.publicar("UsuarioEditado", {
+            "usuario_id": actual.id,
+            "modulo": "usuarios",
+            "accion": "editar_usuario",
+            "entidad": "Usuario",
+            "entidad_id": str(usuario.id),
+            "detalle": {"nombre": usuario.nombre, "email": usuario.email},
+        }, db)
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except _BAD_REQUEST as e:
@@ -301,6 +319,14 @@ async def desactivar_usuario(
         usuario = await use_case.ejecutar(DesactivarUsuarioInput(
             usuario_id=usuario_id, solicitante_id=actual.id,
         ))
+        await event_bus.publicar("UsuarioDesactivado", {
+            "usuario_id": actual.id,
+            "modulo": "usuarios",
+            "accion": "desactivar_usuario",
+            "entidad": "Usuario",
+            "entidad_id": str(usuario.id),
+            "detalle": {"email": usuario.email},
+        }, db)
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except _BAD_REQUEST as e:
@@ -319,6 +345,14 @@ async def reactivar_usuario(
     use_case = ReactivarUsuarioUseCase(usuario_repo=SqlAlchemyUsuarioRepository(db))
     try:
         usuario = await use_case.ejecutar(usuario_id)
+        await event_bus.publicar("UsuarioReactivado", {
+            "usuario_id": actual.id,
+            "modulo": "usuarios",
+            "accion": "reactivar_usuario",
+            "entidad": "Usuario",
+            "entidad_id": str(usuario.id),
+            "detalle": {"email": usuario.email},
+        }, db)
     except UsuarioNoEncontrado as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     return ok(usuario)

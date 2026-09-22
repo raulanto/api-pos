@@ -10,6 +10,7 @@ from app.shared.responses import (
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 from app.modules.inventario.application.dtos import FiltroCategorias
 from app.modules.inventario.application.use_cases.crear_categoria import (
     CrearCategoriaUseCase, CrearCategoriaInput,
@@ -42,6 +43,14 @@ async def crear_categoria(
         categoria = await CrearCategoriaUseCase(cat_repo(db)).ejecutar(
             CrearCategoriaInput(nombre=body.nombre, categoria_padre_id=body.categoria_padre_id)
         )
+        await event_bus.publicar("CategoriaCreada", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "crear_categoria",
+            "entidad": "Categoria",
+            "entidad_id": str(categoria.id),
+            "detalle": {"nombre": categoria.nombre},
+        }, db)
     except Exception as e:
         raise traducir_create(e)
     return ok(categoria)
@@ -100,6 +109,14 @@ async def actualizar_categoria(
                 cambiar_padre=body.cambiar_padre,
             )
         )
+        await event_bus.publicar("CategoriaEditada", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "editar_categoria",
+            "entidad": "Categoria",
+            "entidad_id": str(categoria.id),
+            "detalle": {"nombre": categoria.nombre},
+        }, db)
     except Exception as e:
         raise traducir(e)
     return ok(categoria)
