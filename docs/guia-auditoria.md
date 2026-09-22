@@ -103,6 +103,7 @@ GET /api/v1/auditoria
 
 #### Parámetros Query Admitidos:
 - `usuario_id` (`UUID`): Filtrar por el usuario que realizó la acción.
+- `sucursal_id` (`UUID`): Filtrar logs por la sucursal asignada al usuario que realizó la acción.
 - `modulo` (`string`): Filtrar por módulo (ej. `ventas`, `inventario`).
 - `accion` (`string`): Filtrar por acción específica (ej. `crear_producto`).
 - `entidad` (`string`): Filtrar por entidad (ej. `Producto`).

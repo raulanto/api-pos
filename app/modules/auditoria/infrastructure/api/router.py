@@ -37,6 +37,7 @@ async def listar_auditoria(
     repo: AuditoriaRepository = Depends(get_auditoria_repo),
     actual: UsuarioAutenticado = Depends(require_permission("auditoria.leer")),
     usuario_id: UUID | None = Query(default=None),
+    sucursal_id: UUID | None = Query(default=None),
     modulo: str | None = Query(default=None),
     accion: str | None = Query(default=None),
     entidad: str | None = Query(default=None),
@@ -48,7 +49,7 @@ async def listar_auditoria(
     include: frozenset[str] = Depends(_INC_AUDITORIA),
 ):
     filtro = FiltroAuditoria(
-        usuario_id=usuario_id, modulo=modulo, accion=accion,
+        usuario_id=usuario_id, sucursal_id=sucursal_id, modulo=modulo, accion=accion,
         entidad=entidad, entidad_id=entidad_id, desde=desde, hasta=hasta,
     )
     pagina = await ListarAuditoriaUseCase(repo).ejecutar(filtro, paginacion, orden, include)

@@ -10,6 +10,7 @@ __all__ = ["FiltroAuditoria", "Page"]
 @dataclass
 class FiltroAuditoria:
     usuario_id: UUID | None = None
+    sucursal_id: UUID | None = None
     modulo: str | None = None
     accion: str | None = None
     entidad: str | None = None
