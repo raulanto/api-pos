@@ -1,20 +1,46 @@
+from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.auditoria.infrastructure.persistence.orm_models import LogAuditoriaORM
 from app.shared.events import event_bus
+
+CAMPOS_SENSIBLES = {
+    "password", "password_plano", "password_hash", "token", "refresh_token",
+    "access_token", "secret", "jwt_secret", "pin", "cvv", "tarjeta", "card_number",
+}
+
+
+def _sanitizar_detalle(valor: Any) -> Any:
+    """Enmascara recursivamente cualquier valor cuya clave coincida con patrones sensibles."""
+    if isinstance(valor, dict):
+        limpio = {}
+        for k, v in valor.items():
+            if isinstance(k, str) and k.lower() in CAMPOS_SENSIBLES:
+                limpio[k] = "********"
+            else:
+                limpio[k] = _sanitizar_detalle(v)
+        return limpio
+    elif isinstance(valor, list):
+        return [_sanitizar_detalle(item) for item in valor]
+    return valor
+
 
 async def registrar_auditoria(payload: dict, db: AsyncSession) -> None:
     """
     Listener que se suscribe a los eventos y guarda la auditoría en la BD.
     Utiliza la misma AsyncSession (db) que el publicador para mantenerse 
     en la misma transacción (commit conjunto).
+    Sanitiza datos sensibles (como passwords o tokens) en el campo detalle.
     """
+    detalle_raw = payload.get("detalle")
+    detalle_limpio = _sanitizar_detalle(detalle_raw) if detalle_raw is not None else None
+
     log = LogAuditoriaORM(
         usuario_id=payload.get("usuario_id"),
         modulo=payload.get("modulo"),
         accion=payload.get("accion"),
         entidad=payload.get("entidad"),
         entidad_id=str(payload.get("entidad_id")),
-        detalle=payload.get("detalle"),
+        detalle=detalle_limpio,
         ip_address=payload.get("ip_address"),
     )
     db.add(log)

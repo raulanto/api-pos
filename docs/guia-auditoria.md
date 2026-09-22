@@ -12,6 +12,7 @@
 - Todo evento de importancia (crear/editar productos, usuarios, clientes, ventas, arqueos de caja, ajustes de stock, etc.) emite un **evento de dominio in-process** a través del `event_bus`.
 - El listener del módulo `auditoria` escucha estos eventos y los persiste automáticamente en la tabla `log_auditoria` usando la **misma transacción de la base de datos** (`AsyncSession`). Si una operación falla o hace *rollback*, la auditoría tampoco se guarda (consistencia total).
 - Toda acción auditada registra **quién la realizó** (`usuario_id`), en **qué módulo** (`modulo`), **qué acción** (`accion`), sobre **qué entidad** (`entidad` y `entidad_id`), junto con un **desglose en JSON** (`detalle`) y la **marca de tiempo** (`fecha`).
+- **Sanitización de Datos Sensibles**: Se filtran y enmascaran automáticamente datos sensibles (tales como `password`, `token`, `secret`, `pin`, `cvv`, etc.) antes de ser guardados en la columna `detalle`.
 - La consulta de auditoría está protegida por el permiso **`auditoria.leer`**.
 
 ---

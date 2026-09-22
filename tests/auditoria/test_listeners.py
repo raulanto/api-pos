@@ -33,3 +33,32 @@ async def test_registrar_auditoria_listener():
     assert log_guardado.entidad == "Venta"
     assert log_guardado.entidad_id == str(entidad_id)
     assert log_guardado.detalle == {"total": 500.0}
+
+
+@pytest.mark.asyncio
+async def test_registrar_auditoria_sanitiza_datos_sensibles():
+    db_mock = MagicMock()
+    payload = {
+        "usuario_id": uuid.uuid4(),
+        "modulo": "usuarios",
+        "accion": "crear_usuario",
+        "entidad": "Usuario",
+        "entidad_id": str(uuid.uuid4()),
+        "detalle": {
+            "nombre": "Juan",
+            "email": "juan@test.local",
+            "password": "mi_password_secreta",
+            "password_plano": "123456",
+            "anidado": {"refresh_token": "token123", "publico": "ok"},
+        },
+    }
+
+    await registrar_auditoria(payload, db_mock)
+
+    log_guardado = db_mock.add.call_args[0][0]
+    assert log_guardado.detalle["nombre"] == "Juan"
+    assert log_guardado.detalle["email"] == "juan@test.local"
+    assert log_guardado.detalle["password"] == "********"
+    assert log_guardado.detalle["password_plano"] == "********"
+    assert log_guardado.detalle["anidado"]["refresh_token"] == "********"
+    assert log_guardado.detalle["anidado"]["publico"] == "ok"
