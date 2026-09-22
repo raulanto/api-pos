@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado
+from app.shared.client_info import obtener_ip_cliente
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
     page_params, make_sort_dependency, ok, page_response,
@@ -93,6 +94,7 @@ async def listar_promociones(
 )
 async def crear_promocion(
     body: CrearPromocionRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("promociones.crear")),
 ):
@@ -114,6 +116,7 @@ async def crear_promocion(
         ))
         await event_bus.publicar("PromocionCreada", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "promociones",
             "accion": "crear_promocion",
             "entidad": "Promocion",
@@ -142,6 +145,7 @@ async def obtener_promocion(
 async def actualizar_promocion(
     promocion_id: UUID,
     body: ActualizarPromocionRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("promociones.editar")),
 ):
@@ -168,6 +172,7 @@ async def actualizar_promocion(
         ))
         await event_bus.publicar("PromocionEditada", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "promociones",
             "accion": "editar_promocion",
             "entidad": "Promocion",

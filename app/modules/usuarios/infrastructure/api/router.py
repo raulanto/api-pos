@@ -10,6 +10,7 @@ from app.core.dependencies import (
     invalidar_cache_permisos, sucursal_scope, verificar_alcance_sucursal,
 )
 from app.core.rate_limit import login_rate_limiter
+from app.shared.client_info import obtener_ip_cliente
 from app.shared.events import event_bus
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
@@ -34,14 +35,14 @@ from app.modules.usuarios.infrastructure.persistence.usuario_repository_impl imp
 from app.modules.usuarios.infrastructure.persistence.catalogos_repository_impl import (
     SqlAlchemyRolRepository,
 )
-from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
-    SqlAlchemySucursalRepository,
-)
 from app.modules.usuarios.infrastructure.persistence.refresh_token_repository_impl import SqlAlchemyRefreshTokenRepository
 from app.modules.usuarios.domain.exceptions import (
     RolNoEncontrado, EmailDuplicado, CredencialesInvalidas,
     PasswordInvalida, UsuarioNoEncontrado, UltimoAdminActivo, AutoDesactivacionNoPermitida,
     RefreshTokenInvalido,
+)
+from app.modules.sucursales.infrastructure.persistence.sucursal_repository_impl import (
+    SqlAlchemySucursalRepository,
 )
 from app.modules.sucursales.domain.exceptions import SucursalNoEncontrada
 
@@ -60,7 +61,7 @@ _INC_USUARIOS = make_include_dependency({"rol", "sucursal"})
 
 def _cliente_info(request: Request) -> tuple[str | None, str | None]:
     ua = request.headers.get("user-agent")
-    ip = request.client.host if request.client else None
+    ip = obtener_ip_cliente(request)
     return ua, ip
 
 
@@ -222,6 +223,7 @@ async def obtener_usuario(
 )
 async def crear_usuario(
     body: CrearUsuarioRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     use_case: CrearUsuarioUseCase = Depends(get_crear_usuario_use_case),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.crear")),
@@ -236,6 +238,7 @@ async def crear_usuario(
         ))
         await event_bus.publicar("UsuarioCreado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "usuarios",
             "accion": "crear_usuario",
             "entidad": "Usuario",
@@ -251,6 +254,7 @@ async def crear_usuario(
 async def editar_usuario(
     usuario_id: UUID,
     body: EditarUsuarioRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.editar")),
 ):
@@ -269,6 +273,7 @@ async def editar_usuario(
         usuario = await use_case.ejecutar(data)
         await event_bus.publicar("UsuarioEditado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "usuarios",
             "accion": "editar_usuario",
             "entidad": "Usuario",
@@ -308,6 +313,7 @@ async def cambiar_rol(
 @router.patch("/{usuario_id}/desactivar", response_model=ApiResponse[UsuarioResponse])
 async def desactivar_usuario(
     usuario_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.desactivar")),
 ):
@@ -321,6 +327,7 @@ async def desactivar_usuario(
         ))
         await event_bus.publicar("UsuarioDesactivado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "usuarios",
             "accion": "desactivar_usuario",
             "entidad": "Usuario",
@@ -337,6 +344,7 @@ async def desactivar_usuario(
 @router.patch("/{usuario_id}/reactivar", response_model=ApiResponse[UsuarioResponse])
 async def reactivar_usuario(
     usuario_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("usuarios.desactivar")),
 ):
@@ -347,6 +355,7 @@ async def reactivar_usuario(
         usuario = await use_case.ejecutar(usuario_id)
         await event_bus.publicar("UsuarioReactivado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "usuarios",
             "accion": "reactivar_usuario",
             "entidad": "Usuario",

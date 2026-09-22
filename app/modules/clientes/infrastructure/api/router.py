@@ -11,6 +11,7 @@ from app.shared.responses import (
     ApiResponse, EnvelopeRoute, Page, PageParams, Sort,
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
+from app.shared.client_info import obtener_ip_cliente
 from app.shared.filtering import active_filters
 from app.shared.events import event_bus
 from app.modules.clientes.domain import exceptions as cexc
@@ -114,6 +115,7 @@ async def _obtener_en_alcance(
 )
 async def crear_cliente(
     body: CrearClienteRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("clientes.crear")),
 ):
@@ -130,6 +132,7 @@ async def crear_cliente(
         ))
         await event_bus.publicar("ClienteCreado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "clientes",
             "accion": "crear_cliente",
             "entidad": "Cliente",
@@ -263,6 +266,7 @@ async def historial_ventas_cliente(
 async def actualizar_cliente(
     cliente_id: UUID,
     body: ActualizarClienteRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("clientes.editar")),
 ):
@@ -279,6 +283,7 @@ async def actualizar_cliente(
         ))
         await event_bus.publicar("ClienteEditado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "clientes",
             "accion": "editar_cliente",
             "entidad": "Cliente",

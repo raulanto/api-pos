@@ -14,6 +14,7 @@ from app.shared.responses import (
 )
 from app.shared.filtering import active_filters
 from app.shared.events import event_bus
+from app.shared.client_info import obtener_ip_cliente
 from app.modules.inventario.application.dtos import FiltroProductos
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.modules.inventario.application.use_cases.crear_producto import (
@@ -55,6 +56,7 @@ _INC_PRODUCTOS = make_include_dependency(
 )
 async def crear_producto(
     body: CrearProductoRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.crear")),
 ):
@@ -95,6 +97,7 @@ async def crear_producto(
             "entidad": "Producto",
             "entidad_id": str(producto.id),
             "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+            "ip_address": obtener_ip_cliente(request),
         }, db)
     except Exception as e:
         raise traducir_create(e)
@@ -242,6 +245,7 @@ async def obtener_producto(
 async def actualizar_producto(
     producto_id: UUID,
     body: ActualizarProductoRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
 ):
@@ -291,6 +295,7 @@ async def actualizar_producto(
             "entidad": "Producto",
             "entidad_id": str(producto.id),
             "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+            "ip_address": obtener_ip_cliente(request),
         }, db)
     except Exception as e:
         raise traducir(e)
@@ -311,6 +316,7 @@ async def actualizar_producto(
 )
 async def desactivar_producto(
     producto_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
     confirmar_con_stock: bool = Query(default=False),
@@ -326,6 +332,7 @@ async def desactivar_producto(
             "entidad": "Producto",
             "entidad_id": str(producto.id),
             "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+            "ip_address": obtener_ip_cliente(request),
         }, db)
     except Exception as e:
         raise traducir(e)

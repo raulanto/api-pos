@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.dependencies import (
     require_permission, UsuarioAutenticado, sucursal_scope, verificar_alcance_sucursal,
 )
+from app.shared.client_info import obtener_ip_cliente
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
     page_params, make_sort_dependency, ok, page_response,
@@ -152,6 +153,7 @@ def _aplicar_movimiento_uc(db: AsyncSession) -> AplicarMovimientoUseCase:
 )
 async def crear_proveedor(
     body: ProveedorCreateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("proveedores.crear")),
 ):
@@ -161,6 +163,7 @@ async def crear_proveedor(
         )
         await event_bus.publicar("ProveedorCreado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "proveedores",
             "accion": "crear_proveedor",
             "entidad": "Proveedor",
@@ -205,6 +208,7 @@ async def obtener_proveedor(
 async def actualizar_proveedor(
     proveedor_id: UUID,
     body: ProveedorUpdateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("proveedores.editar")),
 ):
@@ -214,6 +218,7 @@ async def actualizar_proveedor(
         )
         await event_bus.publicar("ProveedorEditado", {
             "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
             "modulo": "proveedores",
             "accion": "editar_proveedor",
             "entidad": "Proveedor",

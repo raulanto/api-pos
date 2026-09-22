@@ -113,6 +113,7 @@ Una vez levantada la aplicación, puedes acceder a la documentación interactiva
 * **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
 * **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
 * **Health Check:** [http://localhost:8000/health](http://localhost:8000/health)
+* **Guías de Integración:** Consultar la carpeta [`docs/`](file:///home/raulantodev/Projects/backend/api-pos/docs) (`guia-auditoria.md`, `guia-ventas-y-caja.md`, `guia-agenda.md`, etc.).
 
 ---
 

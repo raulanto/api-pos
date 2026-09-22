@@ -14,7 +14,8 @@ async def registrar_auditoria(payload: dict, db: AsyncSession) -> None:
         accion=payload.get("accion"),
         entidad=payload.get("entidad"),
         entidad_id=str(payload.get("entidad_id")),
-        detalle=payload.get("detalle")
+        detalle=payload.get("detalle"),
+        ip_address=payload.get("ip_address"),
     )
     db.add(log)
     # No se hace db.commit() aquí para asegurar consistencia transaccional
