@@ -103,6 +103,12 @@ alembic upgrade head
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
+ o de forma de desarrollo 
+
+```bash
+uv run uvicorn app.main:app --reload --port 8000
+```
+
 
 ---
 
