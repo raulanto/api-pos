@@ -26,7 +26,7 @@ class Notificacion:
     sucursal_id: UUID | None = None
     entidad: str | None = None
     entidad_id: str | None = None
-    metadata: dict = field(default_factory=dict)
+    datos: dict = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
 
     @staticmethod
@@ -39,7 +39,7 @@ class Notificacion:
         sucursal_id: UUID | None = None,
         entidad: str | None = None,
         entidad_id: str | None = None,
-        metadata: dict | None = None,
+        datos: dict | None = None,
     ) -> "Notificacion":
         return Notificacion(
             id=uuid4(),
@@ -53,7 +53,7 @@ class Notificacion:
             sucursal_id=sucursal_id,
             entidad=entidad,
             entidad_id=str(entidad_id) if entidad_id else None,
-            metadata=metadata or {},
+            datos=datos or {},
             created_at=datetime.utcnow(),
         )
 

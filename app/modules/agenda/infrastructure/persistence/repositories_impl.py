@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -287,7 +287,19 @@ class SqlAlchemyCitaRepository(CitaRepository):
         if filtro.servicio_id is not None:
             cond.append(CitaORM.servicio_id == filtro.servicio_id)
         if filtro.empleado_id is not None:
-            cond.append(CitaORM.empleado_id == filtro.empleado_id)
+            subq_ofertas = (
+                select(CitaAsignacionORM.cita_id)
+                .where(
+                    CitaAsignacionORM.empleado_id == filtro.empleado_id,
+                    CitaAsignacionORM.estado == "ofrecida",
+                )
+            )
+            cond.append(
+                or_(
+                    CitaORM.empleado_id == filtro.empleado_id,
+                    CitaORM.id.in_(subq_ofertas),
+                )
+            )
         if filtro.cliente_id is not None:
             cond.append(CitaORM.cliente_id == filtro.cliente_id)
         if filtro.estado is not None:

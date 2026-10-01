@@ -1,23 +1,14 @@
-# Guía: Sistema de Señales Reactivas en Tiempo Real (WebSockets)
+# Guía Detallada: Sistema de Señales en Tiempo Real vía WebSockets
 
-> Cómo funciona la arquitectura Pub/Sub en tiempo real de la API backend mediante WebSockets,
-> la estructura de los mensajes transmitidos por canal/módulo, la sanitización de datos y 
-> la forma de conectar y consumir endpoints WebSockets.
-> Todo cuelga del endpoint `/api/v1/signals/ws/{modulo}`.
-
----
-
-## ⚡ La idea en dos minutos
-
-- **Patrón Publish/Subscribe Desacoplado**: Cuando ocurre una acción en cualquier UseCase (ej. crear cita, venta, pedido, movimiento de caja), la aplicación emite un evento de dominio in-process mediante `event_bus.publicar()`.
-- **Retransmisión Automática**: El listener global de señales escucha los eventos transmitidos en `event_bus` y los retransmite en tiempo real a todos los clientes WebSocket suscritos al canal correspondiente.
-- **Canales por Módulo**: Las conexiones se aíslan por módulo (`agenda`, `ventas`, `caja`, `inventario`, `usuarios`, `clientes`, `proveedores`, `promociones`, `sucursales`, `pedidos`).
-- **Autenticación Vía Token Query**: Cada conexión WebSocket valida opcionalmente el token JWT pasado como parámetro query (`?token=<JWT>`).
-- **Sanitización de Datos Sensibles**: Antes de transmitir una señal a través del WebSocket, los campos sensibles (tales como `password`, `token`, `secret`, `pin`, `cvv`, etc.) se filtran y enmascaran a `"********"`.
+> Documentación oficial de la arquitectura, contrato de conexión, parámetros,
+> sanitización de datos y funcionamiento del servidor WebSocket en el POS Backend FastAPI.
+> Endpoint base: `ws://<host>:<puerto>/api/v1/signals/ws/{modulo}`
 
 ---
 
-## 🏗️ Arquitectura General del Backend
+## 📐 1. Arquitectura del Sistema de Señales
+
+El sistema utiliza un patrón **Publish/Subscribe desacoplado** integrado directamente con el bus de eventos in-process (`event_bus`) de la aplicación.
 
 ```
  ┌─────────────────────────────────────────────────────────────┐
@@ -45,13 +36,50 @@
 
 ---
 
-## 📡 Contrato de la API de Señales (WebSocket)
+## 🛠️ 2. Especificación de Endpoints y Parámetros
 
-- **URL base:** `ws://<host>:<puerto>/api/v1/signals/ws/{modulo}`
-- **Parámetros Query:** `token` (opcional, Token JWT Bearer del usuario autenticado).
-- **Módulos / Canales Soportados:** `agenda`, `ventas`, `caja`, `inventario`, `usuarios`, `clientes`, `proveedores`, `promociones`, `sucursales`, `pedidos`.
+### Endpoint Único de Conexión
 
-### Estructura del JSON Transmitido (Payload)
+```http
+GET /api/v1/signals/ws/{modulo}?token={jwt_token}
+Upgrade: websocket
+Connection: Upgrade
+```
+
+| Parámetro | Ubicación | Tipo | Requerido | Descripción |
+|---|---|---|---|---|
+| `modulo` | **Path** | `string` | **Sí** | Identificador del canal/módulo al que se suscribe el cliente. |
+| `token` | **Query** | `string` | No (Opcional) | Token JWT Bearer de acceso. Si se proporciona y es inválido o expiró, el servidor rechaza la conexión con código `1008 (Policy Violation)`. |
+
+---
+
+## 📺 3. Canales / Módulos Disponibles
+
+Los clientes pueden suscribirse a cualquiera de los siguientes canales:
+
+- **`agenda`**: Citas agendadas, asignadas, reagendadas, canceladas o cambios de estado.
+- **`ventas`**: Registro de ventas cobradas, cobros o anulaciones de tickets.
+- **`caja`**: Apertura/cierre de turnos de caja y movimientos de cajón.
+- **`inventario`**: Altas, ediciones, ajustes o movimientos de stock y transferencias entre sucursales.
+- **`pedidos`**: Cambios de estado en pedidos, anticipos, entregas o facturación.
+- **`usuarios`**: Alta, modificación o desactivación de cuentas.
+- **`clientes`**: Registro o edición de clientes.
+- **`proveedores`**: Recepciones o devoluciones de proveedores.
+- **`promociones`**: Modificaciones o activación de promociones.
+- **`sucursales`**: Cambios en configuración de sucursales.
+
+---
+
+## 🔒 4. Autenticación y Seguridad
+
+1. **Validación JWT**: Si el cliente envía el parámetro `?token=<JWT>`, el servidor verifica la firma y la fecha de expiración mediante `decode_access_token()`. Si el token es inválido, el socket se cierra de inmediato con el código de estado WebSocket `1008 Policy Violation`.
+2. **Sanitización de Datos Sensibles**: Antes de enviar cualquier mensaje JSON al WebSocket, el `SignalManager` ejecuta un filtro que enmascara automáticamente valores de claves sensibles (tales como `password`, `token`, `secret`, `pin`, `cvv`, `card_number`, etc.) a `"********"`.
+
+---
+
+## 📦 5. Formato del Mensaje Transmitido (Payload)
+
+Cada mensaje enviado por el servidor a los clientes conectados sigue este esquema estándar JSON:
 
 ```json
 {
@@ -64,7 +92,8 @@
     "entidad": "Cita",
     "entidad_id": "a1b2c3d4-11ee-b9d1-0242ac120002",
     "detalle": {
-      "paciente": "María López",
+      "servicio_nombre": "Corte de Cabello",
+      "cliente_nombre": "María López",
       "fecha_hora": "2026-09-22T10:00:00Z"
     },
     "ip_address": "127.0.0.1"
@@ -72,87 +101,47 @@
 }
 ```
 
-> **Nota de Seguridad**: Si `detalle` contiene claves como `password` o `refresh_token`, su valor será reemplazado automáticamente por `"********"`.
+---
+
+## 🔄 6. Ciclo de Vida de la Conexión (`SignalManager`)
+
+- **Conexión (`conectar`)**: El servidor acepta el handshake del cliente y registra el socket en la lista interna de conexiones activas asociadas a ese `modulo`.
+- **Mantenimiento**: El servidor mantiene un bucle pasivo escuchando la conexión (`websocket.receive_text()`) para recibir mensajes de Keep-Alive (Heartbeat/Ping) enviadas por el cliente.
+- **Emisión (`emitir_modulo`)**: Cuando ocurre un evento en el backend, el listener toma el mensaje, lo sanitiza y lo transmite en paralelo a todos los sockets activos del canal.
+- **Desconexión (`desconectar`)**: Si un socket se cierra (desconexión limpia del cliente o pérdida de red), el `SignalManager` captura la excepción `WebSocketDisconnect` y remueve la conexión de la lista para evitar fugas de memoria.
 
 ---
 
-## 📡 Lista de Eventos Emitidos por Módulo
+## 🧪 7. Pruebas y Verificación
 
-El backend transmite automáticamente las siguientes señales en tiempo real al registrarse acciones en el sistema:
-
-### 📅 Agenda
-- `CitaCreada`: Cita agendada.
-- `CitaAsignada`: Empleado asignado a la cita.
-- `CitaOfertaAceptada`: Oferta de cita aceptada por el empleado.
-- `CitaOfertaRechazada`: Oferta rechazada.
-- `CitaEstadoActualizado`: Cambio de estado de la cita (`en_proceso`, `completada`, etc.).
-- `CitaCancelada`: Cancelación de cita.
-- `CitaReagendada`: Cambio de horario/fecha de cita.
-
-### 🛒 Ventas
-- `VentaCreada`: Nueva venta cobrada en caja.
-- `VentaAnulada`: Venta cancelada o anulada.
-- `DescuentoManualAplicado`: Descuento especial aplicado en venta.
-
-### 💰 Caja
-- `CajaTurnoAbierto`: Apertura de turno/cajón con saldo inicial.
-- `CajaTurnoCerrado`: Arqueo y cierre de turno.
-- `MovimientoCajaRegistrado`: Entrada, salida o retiro de efectivo.
-- `TurnoConciliado`: Conciliación gerencial de turno.
-
-### 📦 Inventario
-- `ProductoCreado`: Alta de producto en catálogo.
-- `ProductoEditado`: Edición de información de producto.
-- `ProductoDesactivado`: Baja lógica de producto.
-- `CategoriaCreada`: Creación de categoría.
-- `CategoriaEditada`: Edición de categoría.
-- `MovimientoInventarioRegistrado`: Entrada/salida/ajuste de stock.
-- `TransferenciaInventarioRegistrada`: Traspaso de mercancía entre sucursales.
-
-### 📋 Pedidos
-- `PedidoCreado`: Registro de nuevo pedido.
-- `PedidoConfirmado`: Confirmación de pedido.
-- `PedidoCancelado`: Cancelación de pedido.
-- `PedidoReabierto`: Reapertura de pedido.
-- `PedidoEntregaActualizada`: Cambio en estado de entrega o repartidor.
-- `PedidoAnticipoRegistrado`: Registro de anticipo o pago parcial.
-- `PedidoServiciosAsignados`: Asignación de personal a servicios del pedido.
-- `PedidoFacturado`: Facturación del pedido a venta.
-
----
-
-## 💻 Ejemplos de Conexión y Pruebas
-
-### Pruebas Automatizadas en Backend
-Para verificar el funcionamiento del gestor de señales y los endpoints WebSockets del backend:
-
+### Correr Pruebas Automatizadas del Backend
 ```bash
 uv run pytest tests/core/test_signals.py
 ```
 
-### Ejemplo de Cliente genérico en JavaScript / WebSockets
+### Ejemplo de Cliente en JavaScript Nativo
 
 ```javascript
 const modulo = 'agenda';
-const token = localStorage.getItem('access_token');
-const wsUrl = `ws://localhost:8000/api/v1/signals/ws/${modulo}?token=${encodeURIComponent(token)}`;
+const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
+const url = `ws://localhost:8000/api/v1/signals/ws/${modulo}?token=${encodeURIComponent(token)}`;
 
-const socket = new WebSocket(wsUrl);
+const socket = new WebSocket(url);
 
 socket.onopen = () => {
-  console.log(`Conectado al canal WebSocket de [${modulo}]`);
+  console.log(`Conectado exitosamente al canal [${modulo}]`);
 };
 
 socket.onmessage = (event) => {
   const signal = JSON.parse(event.data);
-  console.log('Señal recibida en tiempo real:', signal.evento, signal.data);
+  console.log('Señal en tiempo real recibida:', signal.evento, signal.data);
 };
 
 socket.onerror = (error) => {
-  console.error('Error WebSocket:', error);
+  console.error('Error en WebSocket:', error);
 };
 
-socket.onclose = () => {
-  console.log('Conexión WebSocket cerrada');
+socket.onclose = (event) => {
+  console.log(`Conexión cerrada. Código: ${event.code}`);
 };
 ```
