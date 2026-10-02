@@ -25,6 +25,7 @@ class CrearProductoInput:
     precio_venta: Decimal
     costo: Decimal
     impuesto_tasa: Decimal
+    marca_id: UUID | None = None
     permite_stock_negativo: bool = False
     codigo_barras: str | None = None
     descripcion: str | None = None
@@ -52,10 +53,12 @@ class CrearProductoUseCase:
         producto_repo: ProductoRepository,
         categoria_repo: CategoriaRepository,
         unidad_medida_repo: UnidadMedidaRepository | None = None,
+        marca_repo = None,
     ):
         self._producto_repo = producto_repo
         self._categoria_repo = categoria_repo
         self._unidad_medida_repo = unidad_medida_repo
+        self._marca_repo = marca_repo
 
     async def ejecutar(self, data: CrearProductoInput) -> Producto:
         categoria = await self._categoria_repo.obtener_por_id(data.categoria_id)
@@ -63,6 +66,12 @@ class CrearProductoUseCase:
             raise CategoriaNoEncontrada(f"No existe la categoría con id {data.categoria_id}")
         if not categoria.activo:
             raise CategoriaNoEncontrada(f"La categoría {data.categoria_id} está inactiva")
+
+        if data.marca_id is not None and self._marca_repo is not None:
+            from app.modules.inventario.domain.exceptions import MarcaNoEncontrada
+            marca = await self._marca_repo.obtener_por_id(data.marca_id)
+            if not marca or not marca.activo:
+                raise MarcaNoEncontrada(f"No existe una marca activa con id {data.marca_id}")
 
         if data.unidad_medida_id is not None and self._unidad_medida_repo is not None:
             unidad = await self._unidad_medida_repo.obtener(data.unidad_medida_id)
@@ -96,6 +105,7 @@ class CrearProductoUseCase:
             precio_venta=data.precio_venta,
             costo=data.costo,
             impuesto_tasa=data.impuesto_tasa,
+            marca_id=data.marca_id,
             permite_stock_negativo=data.permite_stock_negativo,
             codigo_barras=data.codigo_barras,
             descripcion=data.descripcion,

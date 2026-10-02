@@ -20,6 +20,8 @@ def _condiciones_producto(filtro: FiltroProductos) -> list:
     cond = []
     if filtro.categoria_id:
         cond.append(ProductoORM.categoria_id.in_(filtro.categoria_id))
+    if filtro.marca_id:
+        cond.append(ProductoORM.marca_id.in_(filtro.marca_id))
     if filtro.activo is not None:
         cond.append(ProductoORM.activo == filtro.activo)
     if filtro.busqueda:
@@ -71,6 +73,8 @@ def _opts_producto(includes: frozenset[str], sucursal_ids: list[UUID] | None = N
     opts = [selectinload(ProductoORM.imagen_principal)]
     if "categoria" in includes:
         opts.append(selectinload(ProductoORM.categoria))
+    if "marca" in includes:
+        opts.append(selectinload(ProductoORM.marca))
     if "existencias" in includes:
         rel = ProductoORM.existencias
         if sucursal_ids:
@@ -132,6 +136,7 @@ class SqlAlchemyProductoRepository(ProductoRepository):
                 nombre=producto.nombre,
                 descripcion=producto.descripcion,
                 categoria_id=producto.categoria_id,
+                marca_id=producto.marca_id,
                 unidad_medida=producto.unidad_medida,
                 unidad_medida_id=producto.unidad_medida_id,
                 precio_venta=producto.precio_venta,

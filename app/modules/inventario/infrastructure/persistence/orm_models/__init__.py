@@ -1,4 +1,5 @@
 from .categoria import CategoriaORM
+from .marca import MarcaORM
 from .unidad_medida import UnidadMedidaORM
 from .producto import ProductoORM
 from .producto_componente import ProductoComponenteORM
@@ -12,6 +13,7 @@ from .movimiento import MovimientoInventarioORM
 
 __all__ = [
     "CategoriaORM",
+    "MarcaORM",
     "UnidadMedidaORM",
     "ProductoORM",
     "ProductoComponenteORM",
@@ -23,3 +25,4 @@ __all__ = [
     "ExistenciaORM",
     "MovimientoInventarioORM",
 ]
+

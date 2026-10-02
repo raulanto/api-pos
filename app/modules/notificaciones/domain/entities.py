@@ -10,6 +10,10 @@ class TipoNotificacion(str, Enum):
     CITA_CANCELADA = "cita_cancelada"
     CITA_REAGENDADA = "cita_reagendada"
     CITA_ESTADO_CAMBIADO = "cita_estado_cambiado"
+    CAJA_ABIERTA = "caja_abierta"
+    CAJA_CERRADA = "caja_cerrada"
+    USUARIO_LOGIN = "usuario_login"
+    USUARIO_LOGOUT = "usuario_logout"
     SISTEMA = "sistema"
 
 

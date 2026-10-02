@@ -47,6 +47,7 @@ class Producto:
     permite_stock_negativo: bool
     activo: bool
     created_at: datetime = field(default_factory=datetime.utcnow)
+    marca_id: UUID | None = None
     unidad_medida_id: UUID | None = None
     permite_venta_fraccionada: bool = False
     incremento_minimo_venta: Decimal | None = None
@@ -80,8 +81,9 @@ class Producto:
     disponibilidad_cruzada_activa: bool = False
 
     # Relaciones embebidas opcionales
-    # (`?include=categoria,existencias,componentes,unidades,imagenes`).
+    # (`?include=categoria,marca,existencias,componentes,unidades,imagenes`).
     categoria: object | None = field(default=None, compare=False, repr=False)
+    marca: object | None = field(default=None, compare=False, repr=False)
     existencias: object | None = field(default=None, compare=False, repr=False)
     componentes: object | None = field(default=None, compare=False, repr=False)
     unidades: object | None = field(default=None, compare=False, repr=False)
@@ -116,6 +118,7 @@ class Producto:
         precio_venta: Decimal, costo: Decimal, impuesto_tasa: Decimal,
         permite_stock_negativo: bool = False, codigo_barras: str | None = None,
         descripcion: str | None = None, tipo: TipoProducto = TipoProducto.SIMPLE,
+        marca_id: UUID | None = None,
         unidad_medida_id: UUID | None = None,
         permite_venta_fraccionada: bool = False,
         incremento_minimo_venta: Decimal | None = None,
@@ -147,6 +150,7 @@ class Producto:
             tipo=tipo,
             permite_stock_negativo=permite_stock_negativo,
             activo=True,
+            marca_id=marca_id,
             unidad_medida_id=unidad_medida_id,
             permite_venta_fraccionada=(
                 permite_venta_fraccionada or tipo == TipoProducto.FRACCIONABLE
@@ -206,6 +210,8 @@ class Producto:
     @param sku: Nuevo SKU.
     @param tipo: Nuevo tipo de producto.
     @param cambiar_descripcion: Permite fijar `descripcion` a NULL.
+    @param marca_id: Nueva FK al catálogo de marcas.
+    @param cambiar_marca_id: Permite fijar `marca_id` a NULL.
     @param unidad_medida_id: Nueva FK al catálogo de unidades.
     @param cambiar_unidad_medida_id: Permite fijar `unidad_medida_id` a NULL.
     @param permite_venta_fraccionada: Nuevo valor del flag.
@@ -228,6 +234,8 @@ class Producto:
         sku: str | None = None,
         tipo: TipoProducto | None = None,
         cambiar_descripcion: bool = False,
+        marca_id: UUID | None = None,
+        cambiar_marca_id: bool = False,
         unidad_medida_id: UUID | None = None,
         cambiar_unidad_medida_id: bool = False,
         permite_venta_fraccionada: bool | None = None,
@@ -261,6 +269,10 @@ class Producto:
             self.descripcion = descripcion
         if categoria_id is not None:
             self.categoria_id = categoria_id
+        if cambiar_marca_id:
+            self.marca_id = marca_id
+        elif marca_id is not None:
+            self.marca_id = marca_id
         if unidad_medida is not None:
             self.unidad_medida = unidad_medida
         if cambiar_unidad_medida_id:

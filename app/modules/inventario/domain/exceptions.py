@@ -1,6 +1,13 @@
 class CategoriaNoEncontrada(Exception):
     pass
 
+class MarcaNoEncontrada(Exception):
+    pass
+
+class MarcaConProductosActivos(Exception):
+    """No se puede desactivar una marca que aún tiene productos activos."""
+    pass
+
 class ProductoNoEncontrado(Exception):
     pass
 

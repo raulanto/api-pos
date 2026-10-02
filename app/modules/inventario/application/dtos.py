@@ -9,7 +9,7 @@ from app.modules.inventario.domain.value_objects import (
 from app.shared.responses import Page  # re-export por compatibilidad
 
 __all__ = [
-    "FiltroProductos", "FiltroMovimientos", "FiltroCategorias", "FiltroExistencias",
+    "FiltroProductos", "FiltroMovimientos", "FiltroCategorias", "FiltroMarcas", "FiltroExistencias",
     "FiltroInstancias", "ProductoKpis", "Page",
 ]
 
@@ -17,6 +17,7 @@ __all__ = [
 @dataclass
 class FiltroProductos:
     categoria_id: list[UUID] | None = None
+    marca_id: list[UUID] | None = None
     activo: bool | None = None
     busqueda: str | None = None  # coincide contra nombre / sku / codigo_barras
     # Sólo productos con existencia registrada en alguna de estas sucursales.
@@ -62,6 +63,12 @@ class ProductoKpis:
 class FiltroCategorias:
     activo: bool | None = None
     categoria_padre_id: UUID | None = None
+    busqueda: str | None = None  # coincide contra nombre
+
+
+@dataclass
+class FiltroMarcas:
+    activo: bool | None = None
     busqueda: str | None = None  # coincide contra nombre
 
 

@@ -1,14 +1,14 @@
 from sqlalchemy import inspect as sa_inspect
 
 from app.modules.inventario.domain.entities import (
-    Categoria, UnidadMedida, Producto, ProductoComponente, ProductoUnidad, ProductoImagen,
+    Categoria, Marca, UnidadMedida, Producto, ProductoComponente, ProductoUnidad, ProductoImagen,
     InstanciaAbierta, Lote, ExistenciaLote, Existencia, MovimientoInventario,
 )
 from app.modules.inventario.domain.value_objects import (
     TipoProducto, TipoMovimiento, TipoMagnitud, EstadoInstancia,
 )
 from app.modules.inventario.infrastructure.persistence.orm_models import (
-    CategoriaORM, UnidadMedidaORM, ProductoORM, ProductoComponenteORM, ProductoUnidadORM,
+    CategoriaORM, MarcaORM, UnidadMedidaORM, ProductoORM, ProductoComponenteORM, ProductoUnidadORM,
     ProductoImagenORM, InstanciaAbiertaORM, LoteORM, ExistenciaLoteORM, ExistenciaORM,
     MovimientoInventarioORM,
 )
@@ -128,6 +128,25 @@ def to_orm_categoria(entidad: Categoria) -> CategoriaORM:
         activo=entidad.activo
     )
 
+
+"""
+    Transforma una marca ORM <-> entidad de dominio.
+"""
+def to_domain_marca(orm: MarcaORM) -> Marca:
+    return Marca(
+        id=orm.id,
+        nombre=orm.nombre,
+        activo=orm.activo,
+    )
+
+
+def to_orm_marca(entidad: Marca) -> MarcaORM:
+    return MarcaORM(
+        id=entidad.id,
+        nombre=entidad.nombre,
+        activo=entidad.activo,
+    )
+
 """
     Transforma un producto ORM a una entidad de dominio.
     @params:
@@ -151,6 +170,7 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
         permite_stock_negativo=orm.permite_stock_negativo,
         activo=orm.activo,
         created_at=orm.created_at,
+        marca_id=orm.marca_id,
         unidad_medida_id=orm.unidad_medida_id,
         permite_venta_fraccionada=orm.permite_venta_fraccionada,
         incremento_minimo_venta=orm.incremento_minimo_venta,
@@ -173,6 +193,8 @@ def to_domain_producto(orm: ProductoORM, includes: frozenset[str] = frozenset())
     )
     if "categoria" in includes:
         producto.categoria = orm.categoria
+    if "marca" in includes:
+        producto.marca = orm.marca
     if "existencias" in includes:
         producto.existencias = list(orm.existencias)
     if "componentes" in includes:
@@ -292,6 +314,7 @@ def to_orm_producto(entidad: Producto) -> ProductoORM:
         nombre=entidad.nombre,
         descripcion=entidad.descripcion,
         categoria_id=entidad.categoria_id,
+        marca_id=entidad.marca_id,
         unidad_medida=entidad.unidad_medida,
         unidad_medida_id=entidad.unidad_medida_id,
         precio_venta=entidad.precio_venta,

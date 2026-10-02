@@ -102,6 +102,93 @@ async def procesar_evento_notificacion(payload: dict, db: Any = None) -> None:
             except Exception as e:
                 logger.warning(f"Error procesar cambio cita: {e}")
 
+    # 4. CajaTurnoAbierto
+    elif accion == "CajaTurnoAbierto":
+        usr_id_raw = payload.get("usuario_id")
+        saldo_inicial = detalle.get("saldo_inicial", "0")
+        if usr_id_raw:
+            try:
+                usr_id = UUID(str(usr_id_raw))
+                notif = Notificacion.crear(
+                    usuario_id=usr_id,
+                    modulo="ventas",
+                    tipo=TipoNotificacion.CAJA_ABIERTA,
+                    titulo="Turno de caja abierto",
+                    mensaje=f"Se ha abierto el turno de caja con saldo inicial de ${saldo_inicial}.",
+                    sucursal_id=sucursal_id,
+                    entidad=entidad,
+                    entidad_id=str(entidad_id) if entidad_id else None,
+                    datos={"detalle": detalle},
+                )
+                notificaciones_a_crear.append(notif)
+            except Exception as e:
+                logger.warning(f"Error procesar apertura caja: {e}")
+
+    # 5. CajaTurnoCerrado
+    elif accion == "CajaTurnoCerrado":
+        usr_id_raw = payload.get("usuario_id")
+        saldo_final = detalle.get("saldo_final_declarado", "0")
+        if usr_id_raw:
+            try:
+                usr_id = UUID(str(usr_id_raw))
+                notif = Notificacion.crear(
+                    usuario_id=usr_id,
+                    modulo="ventas",
+                    tipo=TipoNotificacion.CAJA_CERRADA,
+                    titulo="Turno de caja cerrado",
+                    mensaje=f"Se ha cerrado el turno de caja. Saldo final declarado: ${saldo_final}.",
+                    sucursal_id=sucursal_id,
+                    entidad=entidad,
+                    entidad_id=str(entidad_id) if entidad_id else None,
+                    datos={"detalle": detalle},
+                )
+                notificaciones_a_crear.append(notif)
+            except Exception as e:
+                logger.warning(f"Error procesar cierre caja: {e}")
+
+    # 6. UsuarioSesionIniciada
+    elif accion == "UsuarioSesionIniciada":
+        usr_id_raw = payload.get("usuario_id")
+        ip = detalle.get("ip", "")
+        if usr_id_raw:
+            try:
+                usr_id = UUID(str(usr_id_raw))
+                notif = Notificacion.crear(
+                    usuario_id=usr_id,
+                    modulo="usuarios",
+                    tipo=TipoNotificacion.USUARIO_LOGIN,
+                    titulo="Inicio de sesión exitoso",
+                    mensaje=f"Has iniciado sesión en el sistema{f' (IP {ip})' if ip else ''}.",
+                    sucursal_id=sucursal_id,
+                    entidad="Usuario",
+                    entidad_id=str(usr_id),
+                    datos={"detalle": detalle},
+                )
+                notificaciones_a_crear.append(notif)
+            except Exception as e:
+                logger.warning(f"Error procesar inicio sesion: {e}")
+
+    # 7. UsuarioSesionCerrada
+    elif accion == "UsuarioSesionCerrada":
+        usr_id_raw = payload.get("usuario_id")
+        if usr_id_raw:
+            try:
+                usr_id = UUID(str(usr_id_raw))
+                notif = Notificacion.crear(
+                    usuario_id=usr_id,
+                    modulo="usuarios",
+                    tipo=TipoNotificacion.USUARIO_LOGOUT,
+                    titulo="Cierre de sesión",
+                    mensaje="Has cerrado sesión correctamente del sistema.",
+                    sucursal_id=sucursal_id,
+                    entidad="Usuario",
+                    entidad_id=str(usr_id),
+                    datos={"detalle": detalle},
+                )
+                notificaciones_a_crear.append(notif)
+            except Exception as e:
+                logger.warning(f"Error procesar cierre sesion: {e}")
+
     if notificaciones_a_crear:
         creadas = await repo.guardar_varias(notificaciones_a_crear)
         from app.core.signals import signal_manager
@@ -124,7 +211,7 @@ async def procesar_evento_notificacion(payload: dict, db: Any = None) -> None:
 
 
 def registrar_listeners_notificaciones():
-    eventos_agenda = [
+    eventos = [
         "CitaCreada",
         "CitaAsignada",
         "CitaOfertaAceptada",
@@ -132,6 +219,10 @@ def registrar_listeners_notificaciones():
         "CitaEstadoActualizado",
         "CitaCancelada",
         "CitaReagendada",
+        "CajaTurnoAbierto",
+        "CajaTurnoCerrado",
+        "UsuarioSesionIniciada",
+        "UsuarioSesionCerrada",
     ]
-    for evento in eventos_agenda:
+    for evento in eventos:
         event_bus.suscribir(evento, procesar_evento_notificacion)

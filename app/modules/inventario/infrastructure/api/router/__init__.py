@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from .categorias import router as categorias_router
+from .marcas import router as marcas_router
 from .unidades_medida import router as unidades_medida_router
 from .productos import router as productos_router
 from .componentes import router as componentes_router
@@ -14,6 +15,7 @@ from .movimientos import router as movimientos_router
 router = APIRouter()
 
 router.include_router(categorias_router)
+router.include_router(marcas_router)
 router.include_router(unidades_medida_router)
 # `unidades` antes que `productos`: su ruta literal `/productos/resolver-codigo`
 # tiene que ganarle al comodín `/productos/{producto_id}`.

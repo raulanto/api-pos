@@ -29,7 +29,7 @@ from app.modules.inventario.infrastructure.api.schemas import (
     CrearProductoRequest, ActualizarProductoRequest, ProductoResponse, ProductoKpisResponse,
 )
 from .common import (
-    prod_repo, cat_repo, exist_repo, comp_repo, unidad_repo, um_repo, mov_repo,
+    prod_repo, cat_repo, marca_repo, exist_repo, comp_repo, unidad_repo, um_repo, mov_repo,
     almacen_imagenes, traducir, traducir_create,
 )
 
@@ -39,7 +39,7 @@ _ORDEN_PRODUCTOS = make_sort_dependency(
     {"nombre", "sku", "precio_venta", "created_at"}, "nombre:asc"
 )
 _INC_PRODUCTOS = make_include_dependency(
-    {"categoria", "existencias", "componentes", "unidades", "imagenes"}
+    {"categoria", "marca", "existencias", "componentes", "unidades", "imagenes"}
 )
 
 """
@@ -62,10 +62,11 @@ async def crear_producto(
 ):
     try:
         producto = await CrearProductoUseCase(
-            prod_repo(db), cat_repo(db), um_repo(db)
+            prod_repo(db), cat_repo(db), um_repo(db), marca_repo(db)
         ).ejecutar(
             CrearProductoInput(
                 sku=body.sku, nombre=body.nombre, categoria_id=body.categoria_id,
+                marca_id=body.marca_id,
                 unidad_medida=body.unidad_medida,
                 unidad_medida_id=body.unidad_medida_id,
                 precio_venta=body.precio_venta,
@@ -121,6 +122,7 @@ async def listar_productos(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     categoria_id: list[UUID] | None = Query(default=None),
+    marca_id: list[UUID] | None = Query(default=None),
     activo: bool | None = Query(default=None),
     q: str | None = Query(default=None, description="Busca en nombre, sku y código de barras"),
     sucursal_id: list[UUID] | None = Query(
@@ -134,7 +136,7 @@ async def listar_productos(
     for s in sucursal_id or ():
         verificar_alcance_sucursal(actual, s)  # rol de sucursal no consulta otras
     filtro = FiltroProductos(
-        categoria_id=categoria_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
+        categoria_id=categoria_id, marca_id=marca_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
         tipo=tipo,
     )
     pagina = await ListarProductosUseCase(prod_repo(db)).ejecutar(filtro, paginacion, orden, include)
@@ -170,7 +172,7 @@ async def buscar_producto_por_codigo_barras(
 """
     Endpoint de KPIs del catálogo + valuación de stock.
 
-    Acepta los mismos filtros que GET /productos (categoria_id, activo, q,
+    Acepta los mismos filtros que GET /productos (categoria_id, marca_id, activo, q,
     sucursal_id) más: tipo, permite_stock_negativo, con_codigo_barras,
     precio_min/max, costo_min/max, solo_bajo_stock. Los KPIs de stock/valor se
     calculan sobre las existencias de las `sucursal_id` indicadas (todas si no
@@ -181,6 +183,7 @@ async def kpis_productos(
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.leer")),
     categoria_id: list[UUID] | None = Query(default=None),
+    marca_id: list[UUID] | None = Query(default=None),
     activo: bool | None = Query(default=None),
     q: str | None = Query(default=None, description="Busca en nombre, sku y código de barras"),
     sucursal_id: list[UUID] | None = Query(
@@ -200,7 +203,7 @@ async def kpis_productos(
     for s in sucursal_id or ():
         verificar_alcance_sucursal(actual, s)  # rol de sucursal no consulta otras
     filtro = FiltroProductos(
-        categoria_id=categoria_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
+        categoria_id=categoria_id, marca_id=marca_id, activo=activo, busqueda=q, sucursal_id=sucursal_id,
         tipo=tipo, permite_stock_negativo=permite_stock_negativo,
         con_codigo_barras=con_codigo_barras,
         precio_min=precio_min, precio_max=precio_max,
@@ -252,12 +255,13 @@ async def actualizar_producto(
     try:
         producto = await ActualizarProductoUseCase(
             prod_repo(db), cat_repo(db), comp_repo(db), unidad_repo(db), um_repo(db),
-            exist_repo(db),
+            exist_repo(db), marca_repo(db),
         ).ejecutar(
             ActualizarProductoInput(
                 producto_id=producto_id,
                 sku=body.sku,
                 nombre=body.nombre, descripcion=body.descripcion, categoria_id=body.categoria_id,
+                marca_id=body.marca_id, cambiar_marca_id=body.cambiar_marca_id,
                 unidad_medida=body.unidad_medida,
                 unidad_medida_id=body.unidad_medida_id,
                 cambiar_unidad_medida_id=body.cambiar_unidad_medida_id,

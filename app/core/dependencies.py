@@ -79,6 +79,14 @@ class UsuarioAutenticado:
         return self.usuario.sucursal_id
 
     @property
+    def nombre(self) -> str:
+        return self.usuario.nombre
+
+    @property
+    def email(self) -> str:
+        return self.usuario.email
+
+    @property
     def rol_id(self) -> uuid.UUID:
         return self.usuario.rol_id
 

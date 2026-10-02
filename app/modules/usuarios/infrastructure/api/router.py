@@ -107,14 +107,27 @@ def get_cerrar_sesion_use_case(db: AsyncSession = Depends(get_db)) -> CerrarSesi
 async def login(
     body: LoginRequest,
     request: Request,
+    db: AsyncSession = Depends(get_db),
     use_case: AutenticarUsuarioUseCase = Depends(get_autenticar_usuario_use_case),
 ):
     ua, ip = _cliente_info(request)
     login_rate_limiter.check(clave=f"{ip}:{body.email}")
     try:
-        return await use_case.ejecutar(AutenticarUsuarioInput(
+        token_res = await use_case.ejecutar(AutenticarUsuarioInput(
             email=body.email, password_plano=body.password, user_agent=ua, ip=ip,
         ))
+        usuario = await SqlAlchemyUsuarioRepository(db).obtener_por_email(body.email)
+        if usuario:
+            await event_bus.publicar("UsuarioSesionIniciada", {
+                "usuario_id": str(usuario.id),
+                "modulo": "usuarios",
+                "accion": "UsuarioSesionIniciada",
+                "entidad": "Usuario",
+                "entidad_id": str(usuario.id),
+                "sucursal_id": str(usuario.sucursal_id) if usuario.sucursal_id else None,
+                "detalle": {"email": usuario.email, "nombre": usuario.nombre, "ip": ip},
+            }, db)
+        return token_res
     except CredencialesInvalidas as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
@@ -126,6 +139,7 @@ async def login(
 )
 async def login_oauth2(
     request: Request,
+    db: AsyncSession = Depends(get_db),
     form: OAuth2PasswordRequestForm = Depends(),
     use_case: AutenticarUsuarioUseCase = Depends(get_autenticar_usuario_use_case),
 ):
@@ -138,9 +152,21 @@ async def login_oauth2(
     ua, ip = _cliente_info(request)
     login_rate_limiter.check(clave=f"{ip}:{form.username}")
     try:
-        return await use_case.ejecutar(AutenticarUsuarioInput(
+        token_res = await use_case.ejecutar(AutenticarUsuarioInput(
             email=form.username, password_plano=form.password, user_agent=ua, ip=ip,
         ))
+        usuario = await SqlAlchemyUsuarioRepository(db).obtener_por_email(form.username)
+        if usuario:
+            await event_bus.publicar("UsuarioSesionIniciada", {
+                "usuario_id": str(usuario.id),
+                "modulo": "usuarios",
+                "accion": "UsuarioSesionIniciada",
+                "entidad": "Usuario",
+                "entidad_id": str(usuario.id),
+                "sucursal_id": str(usuario.sucursal_id) if usuario.sucursal_id else None,
+                "detalle": {"email": usuario.email, "nombre": usuario.nombre, "ip": ip},
+            }, db)
+        return token_res
     except CredencialesInvalidas as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
@@ -163,10 +189,20 @@ async def refrescar(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     body: LogoutRequest,
+    db: AsyncSession = Depends(get_db),
     use_case: CerrarSesionUseCase = Depends(get_cerrar_sesion_use_case),
     actual: UsuarioAutenticado = Depends(get_current_user),
 ):
     await use_case.ejecutar(CerrarSesionInput(refresh_token=body.refresh_token))
+    await event_bus.publicar("UsuarioSesionCerrada", {
+        "usuario_id": str(actual.id),
+        "modulo": "usuarios",
+        "accion": "UsuarioSesionCerrada",
+        "entidad": "Usuario",
+        "entidad_id": str(actual.id),
+        "sucursal_id": str(actual.sucursal_id) if actual.sucursal_id else None,
+        "detalle": {"email": actual.email, "nombre": actual.nombre},
+    }, db)
 
 
 # --------------------------------------------------------------------------- #

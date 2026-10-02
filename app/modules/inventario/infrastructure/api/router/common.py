@@ -6,6 +6,7 @@ from app.core.dependencies import UsuarioAutenticado, sucursal_scope
 from app.modules.inventario.domain import exceptions as exc
 from app.modules.inventario.infrastructure.persistence.repositories import (
     SqlAlchemyCategoriaRepository,
+    SqlAlchemyMarcaRepository,
     SqlAlchemyUnidadMedidaRepository,
     SqlAlchemyProductoRepository,
     SqlAlchemyProductoComponenteRepository,
@@ -25,7 +26,7 @@ from app.modules.inventario.infrastructure.persistence.repositories import (
     @return: Instancia de la clase HTTPException.
 """
 _NOT_FOUND = (
-    exc.ProductoNoEncontrado, exc.CategoriaNoEncontrada, exc.ExistenciaNoEncontrada,
+    exc.ProductoNoEncontrado, exc.CategoriaNoEncontrada, exc.MarcaNoEncontrada, exc.ExistenciaNoEncontrada,
     exc.MovimientoNoEncontrado, exc.ComponenteNoEncontrado, exc.UnidadNoEncontrada,
     exc.UnidadMedidaNoEncontrada, exc.ImagenNoEncontrada, exc.LoteNoEncontrado,
     exc.InstanciaAbiertaNoEncontrada,
@@ -39,7 +40,7 @@ _NOT_FOUND = (
     @return: Instancia de la clase HTTPException.
 """
 _CONFLICT = (
-    exc.CategoriaConProductosActivos, exc.ProductoConStockActivo,
+    exc.CategoriaConProductosActivos, exc.MarcaConProductosActivos, exc.ProductoConStockActivo,
     exc.ProductoConHistorial,
     exc.ComponenteDuplicado, exc.ProductoEsComponenteDeKit,
     exc.UnidadDuplicada, exc.CodigoBarrasUnidadDuplicado,
@@ -90,7 +91,7 @@ def traducir(error: Exception) -> HTTPException:
     @return: Instancia de la clase HTTPException.
 """
 def traducir_create(error: Exception) -> HTTPException:
-    if isinstance(error, exc.CategoriaNoEncontrada):
+    if isinstance(error, (exc.CategoriaNoEncontrada, exc.MarcaNoEncontrada)):
         return HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(error))
     return traducir(error)
 
@@ -105,6 +106,16 @@ def traducir_create(error: Exception) -> HTTPException:
 """
 def cat_repo(db):
     return SqlAlchemyCategoriaRepository(db)
+
+
+"""
+    Fábrica de repositorio de marcas.
+
+    @param db: Sesión de la base de datos.
+    @return: Instancia de la clase SqlAlchemyMarcaRepository.
+"""
+def marca_repo(db):
+    return SqlAlchemyMarcaRepository(db)
 
 
 """

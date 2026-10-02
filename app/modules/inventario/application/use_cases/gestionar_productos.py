@@ -89,6 +89,8 @@ class ActualizarProductoInput:
     nombre: str | None = None
     descripcion: str | None = None
     categoria_id: UUID | None = None
+    marca_id: UUID | None = None
+    cambiar_marca_id: bool = False
     unidad_medida: str | None = None
     unidad_medida_id: UUID | None = None
     cambiar_unidad_medida_id: bool = False
@@ -131,6 +133,7 @@ class ActualizarProductoUseCase:
         unidad_repo: ProductoUnidadRepository,
         unidad_medida_repo: UnidadMedidaRepository | None = None,
         existencia_repo=None,
+        marca_repo=None,
     ):
         self._repo = producto_repo
         self._categoria_repo = categoria_repo
@@ -138,6 +141,7 @@ class ActualizarProductoUseCase:
         self._unidad_repo = unidad_repo
         self._unidad_medida_repo = unidad_medida_repo
         self._existencia_repo = existencia_repo
+        self._marca_repo = marca_repo
 
     async def ejecutar(self, data: ActualizarProductoInput) -> Producto:
         producto = await self._repo.obtener_por_id(data.producto_id)
@@ -148,6 +152,12 @@ class ActualizarProductoUseCase:
             categoria = await self._categoria_repo.obtener_por_id(data.categoria_id)
             if not categoria:
                 raise CategoriaNoEncontrada(f"No existe la categoría con id {data.categoria_id}")
+
+        if data.marca_id is not None and self._marca_repo is not None:
+            from app.modules.inventario.domain.exceptions import MarcaNoEncontrada
+            marca = await self._marca_repo.obtener_por_id(data.marca_id)
+            if not marca or not marca.activo:
+                raise MarcaNoEncontrada(f"No existe una marca activa con id {data.marca_id}")
 
         if data.unidad_medida_id is not None and self._unidad_medida_repo is not None:
             unidad = await self._unidad_medida_repo.obtener(data.unidad_medida_id)
@@ -208,6 +218,8 @@ class ActualizarProductoUseCase:
             nombre=data.nombre,
             descripcion=data.descripcion,
             categoria_id=data.categoria_id,
+            marca_id=data.marca_id,
+            cambiar_marca_id=data.cambiar_marca_id,
             unidad_medida=data.unidad_medida,
             unidad_medida_id=data.unidad_medida_id,
             cambiar_unidad_medida_id=data.cambiar_unidad_medida_id,

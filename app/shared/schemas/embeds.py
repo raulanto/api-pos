@@ -66,6 +66,13 @@ class CategoriaEmbed(BaseModel):
     activo: bool
 
 
+class MarcaEmbed(BaseModel):
+    model_config = _ORM
+    id: UUID
+    nombre: str
+    activo: bool
+
+
 class ProductoEmbed(BaseModel):
     model_config = _ORM
     id: UUID

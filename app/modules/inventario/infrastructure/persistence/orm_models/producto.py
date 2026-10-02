@@ -55,6 +55,7 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     nombre = Column(String(150), nullable=False)
     descripcion = Column(String, nullable=True)
     categoria_id = Column(PGUUID(as_uuid=True), ForeignKey("categoria.id"), nullable=False)
+    marca_id = Column(PGUUID(as_uuid=True), ForeignKey("marca.id"), nullable=True)
     unidad_medida = Column(String(20), nullable=False)
     # FK al catálogo normalizado (nullable mientras dure el backfill por texto).
     unidad_medida_id = Column(
@@ -93,8 +94,9 @@ class ProductoORM(Base, TimestampMixin, SoftDeleteMixin):
     requiere_recurso = Column(Boolean, default=False, nullable=False)
     disponibilidad_cruzada_activa = Column(Boolean, default=False, nullable=False)
 
-    # Solo lectura, para `?include=categoria,existencias,componentes`.
+    # Solo lectura, para `?include=categoria,marca,existencias,componentes`.
     categoria = relationship("CategoriaORM", viewonly=True, lazy="raise")
+    marca = relationship("MarcaORM", viewonly=True, lazy="raise")
     unidad = relationship(
         "UnidadMedidaORM",
         primaryjoin="foreign(ProductoORM.unidad_medida_id) == UnidadMedidaORM.id",

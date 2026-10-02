@@ -54,6 +54,9 @@ class AutenticarUsuarioUseCase:
 
         access_token = create_access_token(data={"sub": str(usuario.id), "rol": rol_codigo})
 
+        # Invalida/revoca cualquier sesión previa del usuario para evitar doble sesión abierta
+        await self._refresh_token_repo.revocar_todos_del_usuario(usuario.id)
+
         refresh_plano = generate_refresh_token()
         await self._refresh_token_repo.guardar(RefreshToken.crear(
             usuario_id=usuario.id,

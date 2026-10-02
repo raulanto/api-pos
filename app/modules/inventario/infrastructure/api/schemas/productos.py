@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.shared.responses import EmbeddableModel
 from app.shared.schemas.embeds import (
-    CategoriaEmbed, ComponenteEmbed, ExistenciaEmbed, ProductoEmbed, UnidadEmbed, ImagenEmbed,
+    CategoriaEmbed, MarcaEmbed, ComponenteEmbed, ExistenciaEmbed, ProductoEmbed, UnidadEmbed, ImagenEmbed,
 )
 
 _ORM = ConfigDict(from_attributes=True)
@@ -19,6 +19,7 @@ class CrearProductoRequest(BaseModel):
     sku: str = Field(min_length=1, max_length=50)
     nombre: str = Field(min_length=1, max_length=150)
     categoria_id: UUID
+    marca_id: Optional[UUID] = None
     unidad_medida: str = Field(min_length=1, max_length=20)
     unidad_medida_id: Optional[UUID] = None
     precio_venta: Decimal = Field(ge=0)
@@ -63,6 +64,8 @@ class ActualizarProductoRequest(BaseModel):
     nombre: Optional[str] = Field(default=None, min_length=1, max_length=150)
     descripcion: Optional[str] = None
     categoria_id: Optional[UUID] = None
+    marca_id: Optional[UUID] = None
+    cambiar_marca_id: bool = False
     unidad_medida: Optional[str] = Field(default=None, min_length=1, max_length=20)
     unidad_medida_id: Optional[UUID] = None
     cambiar_unidad_medida_id: bool = False
@@ -134,7 +137,7 @@ class ProductoKpisResponse(BaseModel):
 """
 class ProductoResponse(EmbeddableModel):
     _embed_fields: ClassVar[tuple[str, ...]] = (
-        "categoria", "existencias", "componentes", "unidades", "imagenes",
+        "categoria", "marca", "existencias", "componentes", "unidades", "imagenes",
     )
     id: UUID
     sku: str
@@ -142,6 +145,7 @@ class ProductoResponse(EmbeddableModel):
     nombre: str
     descripcion: Optional[str]
     categoria_id: UUID
+    marca_id: Optional[UUID] = None
     unidad_medida: str
     unidad_medida_id: Optional[UUID] = None
     precio_venta: Decimal
@@ -168,8 +172,9 @@ class ProductoResponse(EmbeddableModel):
     # Siempre presente (no depende de `?include=`): la imagen de portada del
     # producto, o null si no tiene ninguna marcada como principal.
     imagen_principal: Optional[ImagenEmbed] = None
-    # Embebidas (?include=categoria,existencias,componentes,unidades)
+    # Embebidas (?include=categoria,marca,existencias,componentes,unidades)
     categoria: Optional[CategoriaEmbed] = None
+    marca: Optional[MarcaEmbed] = None
     existencias: Optional[list[ExistenciaEmbed]] = None
     componentes: Optional[list[ComponenteEmbed]] = None
     unidades: Optional[list[UnidadEmbed]] = None

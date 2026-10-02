@@ -3,6 +3,11 @@ from .categorias import (
     ActualizarCategoriaRequest,
     CategoriaResponse,
 )
+from .marcas import (
+    CrearMarcaRequest,
+    ActualizarMarcaRequest,
+    MarcaResponse,
+)
 from .unidades_medida import (
     CrearUnidadMedidaRequest,
     ActualizarUnidadMedidaRequest,
@@ -57,6 +62,9 @@ __all__ = [
     "CrearCategoriaRequest",
     "ActualizarCategoriaRequest",
     "CategoriaResponse",
+    "CrearMarcaRequest",
+    "ActualizarMarcaRequest",
+    "MarcaResponse",
     "CrearUnidadMedidaRequest",
     "ActualizarUnidadMedidaRequest",
     "UnidadMedidaResponse",
