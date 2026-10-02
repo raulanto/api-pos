@@ -8,11 +8,13 @@ from app.core.database import get_db
 from app.core.dependencies import (
     require_permission, UsuarioAutenticado, sucursal_scope, verificar_alcance_sucursal,
 )
+from app.shared.client_info import obtener_ip_cliente
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
     page_params, make_sort_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 
 from app.modules.proveedores.domain import exceptions as pexc
 from app.modules.proveedores.domain.value_objects import (
@@ -151,6 +153,7 @@ def _aplicar_movimiento_uc(db: AsyncSession) -> AplicarMovimientoUseCase:
 )
 async def crear_proveedor(
     body: ProveedorCreateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("proveedores.crear")),
 ):
@@ -158,6 +161,15 @@ async def crear_proveedor(
         proveedor = await CrearProveedorUseCase(_prov_repo(db)).ejecutar(
             CrearProveedorInput(**body.model_dump())
         )
+        await event_bus.publicar("ProveedorCreado", {
+            "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
+            "modulo": "proveedores",
+            "accion": "crear_proveedor",
+            "entidad": "Proveedor",
+            "entidad_id": str(proveedor.id),
+            "detalle": {"nombre": proveedor.nombre, "rfc": proveedor.rfc},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(proveedor)
@@ -196,6 +208,7 @@ async def obtener_proveedor(
 async def actualizar_proveedor(
     proveedor_id: UUID,
     body: ProveedorUpdateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("proveedores.editar")),
 ):
@@ -203,6 +216,15 @@ async def actualizar_proveedor(
         proveedor = await ActualizarProveedorUseCase(_prov_repo(db)).ejecutar(
             ActualizarProveedorInput(proveedor_id=proveedor_id, **body.model_dump())
         )
+        await event_bus.publicar("ProveedorEditado", {
+            "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
+            "modulo": "proveedores",
+            "accion": "editar_proveedor",
+            "entidad": "Proveedor",
+            "entidad_id": str(proveedor.id),
+            "detalle": {"nombre": proveedor.nombre},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(proveedor)

@@ -10,6 +10,8 @@ from app.shared.responses import (
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
+from app.shared.client_info import obtener_ip_cliente
 from app.modules.inventario.application.dtos import FiltroCategorias
 from app.modules.inventario.application.use_cases.crear_categoria import (
     CrearCategoriaUseCase, CrearCategoriaInput,
@@ -35,6 +37,7 @@ _INC_CAT = make_include_dependency({"padre"})
 )
 async def crear_categoria(
     body: CrearCategoriaRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.crear")),
 ):
@@ -42,6 +45,15 @@ async def crear_categoria(
         categoria = await CrearCategoriaUseCase(cat_repo(db)).ejecutar(
             CrearCategoriaInput(nombre=body.nombre, categoria_padre_id=body.categoria_padre_id)
         )
+        await event_bus.publicar("CategoriaCreada", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "crear_categoria",
+            "entidad": "Categoria",
+            "entidad_id": str(categoria.id),
+            "detalle": {"nombre": categoria.nombre},
+            "ip_address": obtener_ip_cliente(request),
+        }, db)
     except Exception as e:
         raise traducir_create(e)
     return ok(categoria)
@@ -88,6 +100,7 @@ async def obtener_categoria(
 async def actualizar_categoria(
     categoria_id: UUID,
     body: ActualizarCategoriaRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
 ):
@@ -100,6 +113,15 @@ async def actualizar_categoria(
                 cambiar_padre=body.cambiar_padre,
             )
         )
+        await event_bus.publicar("CategoriaEditada", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "editar_categoria",
+            "entidad": "Categoria",
+            "entidad_id": str(categoria.id),
+            "detalle": {"nombre": categoria.nombre},
+            "ip_address": obtener_ip_cliente(request),
+        }, db)
     except Exception as e:
         raise traducir(e)
     return ok(categoria)

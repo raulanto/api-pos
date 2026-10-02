@@ -11,7 +11,9 @@ from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
     page_params, make_sort_dependency, ok, page_response,
 )
+from app.shared.client_info import obtener_ip_cliente
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 from app.modules.sucursales.application.dtos import FiltroSucursales
 from app.modules.sucursales.domain.entities import TipoSucursal
 from app.modules.sucursales.domain.exceptions import (
@@ -82,6 +84,7 @@ async def listar_sucursales(
 )
 async def crear_sucursal(
     body: CrearSucursalRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("sucursales.crear")),
 ):
@@ -96,6 +99,15 @@ async def crear_sucursal(
             horario_apertura=body.horario_apertura, horario_cierre=body.horario_cierre,
             sucursal_padre_id=body.sucursal_padre_id, permite_ventas=body.permite_ventas,
         ))
+        await event_bus.publicar("SucursalCreada", {
+            "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
+            "modulo": "sucursales",
+            "accion": "crear_sucursal",
+            "entidad": "Sucursal",
+            "entidad_id": str(sucursal.id),
+            "detalle": {"nombre": sucursal.nombre, "codigo": sucursal.codigo},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(sucursal)
@@ -118,6 +130,7 @@ async def obtener_sucursal(
 async def actualizar_sucursal(
     sucursal_id: UUID,
     body: ActualizarSucursalRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("sucursales.editar")),
 ):
@@ -139,6 +152,15 @@ async def actualizar_sucursal(
             cambiar_horario=body.cambiar_horario,
             sucursal_padre_id=body.sucursal_padre_id, cambiar_padre=body.cambiar_padre,
         ))
+        await event_bus.publicar("SucursalEditada", {
+            "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
+            "modulo": "sucursales",
+            "accion": "editar_sucursal",
+            "entidad": "Sucursal",
+            "entidad_id": str(sucursal.id),
+            "detalle": {"nombre": sucursal.nombre},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(sucursal)

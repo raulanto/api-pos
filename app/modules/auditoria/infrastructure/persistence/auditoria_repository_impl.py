@@ -11,6 +11,9 @@ from app.modules.auditoria.infrastructure.persistence.orm_models import LogAudit
 from app.shared.responses import Page, PageParams, Sort
 
 
+from app.modules.usuarios.infrastructure.persistence.orm_models import UsuarioORM
+
+
 def _to_domain(orm: LogAuditoriaORM, includes: frozenset[str] = frozenset()) -> LogAuditoria:
     log = LogAuditoria(
         id=orm.id,
@@ -31,6 +34,7 @@ def _to_domain(orm: LogAuditoriaORM, includes: frozenset[str] = frozenset()) -> 
 class SqlAlchemyAuditoriaRepository(AuditoriaRepository):
     _ORDEN = {
         "fecha": LogAuditoriaORM.fecha,
+        "created_at": LogAuditoriaORM.fecha,
         "modulo": LogAuditoriaORM.modulo,
         "accion": LogAuditoriaORM.accion,
     }
@@ -57,8 +61,13 @@ class SqlAlchemyAuditoriaRepository(AuditoriaRepository):
         includes: frozenset[str] = frozenset(),
     ) -> Page:
         condiciones = []
+        join_usuario = False
+
         if filtro.usuario_id is not None:
             condiciones.append(LogAuditoriaORM.usuario_id == filtro.usuario_id)
+        if filtro.sucursal_id is not None:
+            join_usuario = True
+            condiciones.append(UsuarioORM.sucursal_id == filtro.sucursal_id)
         if filtro.modulo:
             condiciones.append(LogAuditoriaORM.modulo == filtro.modulo)
         if filtro.accion:
@@ -75,12 +84,16 @@ class SqlAlchemyAuditoriaRepository(AuditoriaRepository):
         col = self._ORDEN.get(orden.field, LogAuditoriaORM.fecha)
         orden_expr = col.desc() if orden.descending else col.asc()
 
-        total = await self._db.scalar(
-            select(func.count()).select_from(LogAuditoriaORM).where(*condiciones)
-        )
+        stmt_count = select(func.count()).select_from(LogAuditoriaORM)
+        stmt_select = select(LogAuditoriaORM).options(*self._opts(includes))
+
+        if join_usuario:
+            stmt_count = stmt_count.join(UsuarioORM, LogAuditoriaORM.usuario_id == UsuarioORM.id)
+            stmt_select = stmt_select.join(UsuarioORM, LogAuditoriaORM.usuario_id == UsuarioORM.id)
+
+        total = await self._db.scalar(stmt_count.where(*condiciones))
         filas = (await self._db.execute(
-            select(LogAuditoriaORM)
-            .options(*self._opts(includes))
+            stmt_select
             .where(*condiciones)
             .order_by(orden_expr)
             .limit(paginacion.limit)

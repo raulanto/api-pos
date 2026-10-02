@@ -12,6 +12,7 @@ from app.shared.responses import (
 )
 from app.shared.filtering import active_filters
 from app.modules.auditoria.application.dtos import FiltroAuditoria
+from app.modules.auditoria.application.ports.auditoria_repository import AuditoriaRepository
 from app.modules.auditoria.application.use_cases.listar_auditoria import (
     ListarAuditoriaUseCase, ObtenerLogAuditoriaUseCase, LogNoEncontrado,
 )
@@ -22,20 +23,21 @@ from app.modules.auditoria.infrastructure.api.schemas import LogAuditoriaRespons
 
 router = APIRouter(route_class=EnvelopeRoute)
 
-_ORDEN_AUDITORIA = make_sort_dependency({"fecha", "modulo", "accion"}, "fecha:desc")
+_ORDEN_AUDITORIA = make_sort_dependency({"fecha", "created_at", "modulo", "accion"}, "fecha:desc")
 _INC_AUDITORIA = make_include_dependency({"usuario"})
 
 
-def _repo(db: AsyncSession) -> SqlAlchemyAuditoriaRepository:
+def get_auditoria_repo(db: AsyncSession = Depends(get_db)) -> AuditoriaRepository:
     return SqlAlchemyAuditoriaRepository(db)
 
 
 @router.get("", response_model=ApiResponse[list[LogAuditoriaResponse]])
 async def listar_auditoria(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    repo: AuditoriaRepository = Depends(get_auditoria_repo),
     actual: UsuarioAutenticado = Depends(require_permission("auditoria.leer")),
     usuario_id: UUID | None = Query(default=None),
+    sucursal_id: UUID | None = Query(default=None),
     modulo: str | None = Query(default=None),
     accion: str | None = Query(default=None),
     entidad: str | None = Query(default=None),
@@ -47,10 +49,10 @@ async def listar_auditoria(
     include: frozenset[str] = Depends(_INC_AUDITORIA),
 ):
     filtro = FiltroAuditoria(
-        usuario_id=usuario_id, modulo=modulo, accion=accion,
+        usuario_id=usuario_id, sucursal_id=sucursal_id, modulo=modulo, accion=accion,
         entidad=entidad, entidad_id=entidad_id, desde=desde, hasta=hasta,
     )
-    pagina = await ListarAuditoriaUseCase(_repo(db)).ejecutar(filtro, paginacion, orden, include)
+    pagina = await ListarAuditoriaUseCase(repo).ejecutar(filtro, paginacion, orden, include)
     return page_response(
         request, pagina, paginacion, sort=orden, filters=active_filters(filtro),
     )
@@ -59,12 +61,12 @@ async def listar_auditoria(
 @router.get("/{log_id}", response_model=ApiResponse[LogAuditoriaResponse])
 async def obtener_log(
     log_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    repo: AuditoriaRepository = Depends(get_auditoria_repo),
     actual: UsuarioAutenticado = Depends(require_permission("auditoria.leer")),
     include: frozenset[str] = Depends(_INC_AUDITORIA),
 ):
     try:
-        log = await ObtenerLogAuditoriaUseCase(_repo(db)).ejecutar(log_id, include)
+        log = await ObtenerLogAuditoriaUseCase(repo).ejecutar(log_id, include)
     except LogNoEncontrado as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(e))
     return ok(log)

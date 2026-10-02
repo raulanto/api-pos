@@ -6,11 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_permission, UsuarioAutenticado
+from app.shared.client_info import obtener_ip_cliente
 from app.shared.responses import (
     ApiResponse, EnvelopeRoute, PageParams, Sort,
     page_params, make_sort_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
 from app.modules.promociones.application.dtos import FiltroPromociones
 from app.modules.promociones.domain.entities import TipoPromocion
 from app.modules.promociones.domain.exceptions import (
@@ -92,6 +94,7 @@ async def listar_promociones(
 )
 async def crear_promocion(
     body: CrearPromocionRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("promociones.crear")),
 ):
@@ -111,6 +114,15 @@ async def crear_promocion(
             cliente_segmento=body.cliente_segmento,
             requiere_cupon=body.requiere_cupon,
         ))
+        await event_bus.publicar("PromocionCreada", {
+            "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
+            "modulo": "promociones",
+            "accion": "crear_promocion",
+            "entidad": "Promocion",
+            "entidad_id": str(promo.id),
+            "detalle": {"nombre": promo.nombre, "tipo": str(promo.tipo)},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(promo)
@@ -133,6 +145,7 @@ async def obtener_promocion(
 async def actualizar_promocion(
     promocion_id: UUID,
     body: ActualizarPromocionRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("promociones.editar")),
 ):
@@ -157,6 +170,15 @@ async def actualizar_promocion(
             cambiar_condiciones=body.cambiar_condiciones,
             objetivos=_objetivos(body.objetivos) if body.objetivos is not None else None,
         ))
+        await event_bus.publicar("PromocionEditada", {
+            "usuario_id": actual.id,
+            "ip_address": obtener_ip_cliente(request),
+            "modulo": "promociones",
+            "accion": "editar_promocion",
+            "entidad": "Promocion",
+            "entidad_id": str(promo.id),
+            "detalle": {"nombre": promo.nombre},
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(promo)

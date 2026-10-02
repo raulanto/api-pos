@@ -14,6 +14,7 @@ from app.shared.responses import (
 )
 from app.shared.filtering import active_filters
 
+from app.shared.events import event_bus
 from app.modules.agenda.domain import exceptions as aexc
 from app.modules.agenda.domain.value_objects import EstadoCita
 from app.modules.agenda.application.dtos import FiltroCitas
@@ -406,6 +407,18 @@ async def crear_cita(
             politica_cancelacion_horas=body.politica_cancelacion_horas,
             penalizacion_cancelacion=body.penalizacion_cancelacion,
         ))
+        await event_bus.publicar("CitaCreada", {
+            "modulo": "agenda",
+            "accion": "CitaCreada",
+            "entidad": "Cita",
+            "entidad_id": str(cita.id),
+            "sucursal_id": str(cita.sucursal_id),
+            "detalle": {
+                "ofertas": [{"empleado_id": str(a.empleado_id)} for a in cita.asignaciones],
+                "servicio_nombre": "Servicio de Cita",
+                "fecha_hora": cita.fecha_hora_inicio.isoformat() if cita.fecha_hora_inicio else "",
+            }
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(cita)
@@ -490,6 +503,17 @@ async def asignar_manual(
         cita = await AsignarManualUseCase(_cita_repo(db), _disp_repo(db)).ejecutar(
             AsignarManualInput(cita_id=cita_id, empleado_id=body.empleado_id)
         )
+        await event_bus.publicar("CitaAsignada", {
+            "modulo": "agenda",
+            "accion": "CitaAsignada",
+            "entidad": "Cita",
+            "entidad_id": str(cita.id),
+            "sucursal_id": str(cita.sucursal_id),
+            "detalle": {
+                "empleado_id": str(cita.empleado_id) if cita.empleado_id else None,
+                "cliente_nombre": "Cliente",
+            }
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(cita)
@@ -505,6 +529,17 @@ async def aceptar_oferta(
         cita = await AceptarOfertaUseCase(_cita_repo(db), _disp_repo(db)).ejecutar(
             ResponderOfertaInput(cita_id=cita_id, empleado_id=actual.id)
         )
+        await event_bus.publicar("CitaOfertaAceptada", {
+            "modulo": "agenda",
+            "accion": "CitaOfertaAceptada",
+            "entidad": "Cita",
+            "entidad_id": str(cita.id),
+            "sucursal_id": str(cita.sucursal_id),
+            "detalle": {
+                "empleado_id": str(cita.empleado_id) if cita.empleado_id else None,
+                "cliente_nombre": "Cliente",
+            }
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(cita)
@@ -542,6 +577,17 @@ async def iniciar_cita(
         existente = await ObtenerCitaUseCase(_cita_repo(db)).ejecutar(cita_id)
         _exige_dueno_o_gestor(actual, existente)
         cita = await IniciarCitaUseCase(_cita_repo(db)).ejecutar(cita_id)
+        await event_bus.publicar("CitaEstadoActualizado", {
+            "modulo": "agenda",
+            "accion": "CitaEstadoActualizado",
+            "entidad": "Cita",
+            "entidad_id": str(cita.id),
+            "sucursal_id": str(cita.sucursal_id),
+            "detalle": {
+                "empleado_id": str(cita.empleado_id) if cita.empleado_id else None,
+                "nuevo_estado": cita.estado.value if hasattr(cita.estado, 'value') else str(cita.estado),
+            }
+        }, db)
     except HTTPException:
         raise
     except Exception as e:
@@ -561,6 +607,17 @@ async def completar_cita(
         existente = await ObtenerCitaUseCase(_cita_repo(db)).ejecutar(cita_id)
         _exige_dueno_o_gestor(actual, existente)
         cita = await CompletarCitaUseCase(_cita_repo(db)).ejecutar(cita_id)
+        await event_bus.publicar("CitaEstadoActualizado", {
+            "modulo": "agenda",
+            "accion": "CitaEstadoActualizado",
+            "entidad": "Cita",
+            "entidad_id": str(cita.id),
+            "sucursal_id": str(cita.sucursal_id),
+            "detalle": {
+                "empleado_id": str(cita.empleado_id) if cita.empleado_id else None,
+                "nuevo_estado": cita.estado.value if hasattr(cita.estado, 'value') else str(cita.estado),
+            }
+        }, db)
     except HTTPException:
         raise
     except Exception as e:
@@ -577,6 +634,17 @@ async def cancelar_cita(
 ):
     try:
         cita = await CancelarCitaUseCase(_cita_repo(db)).ejecutar(cita_id, body.motivo)
+        await event_bus.publicar("CitaCancelada", {
+            "modulo": "agenda",
+            "accion": "CitaCancelada",
+            "entidad": "Cita",
+            "entidad_id": str(cita.id),
+            "sucursal_id": str(cita.sucursal_id),
+            "detalle": {
+                "empleado_id": str(cita.empleado_id) if cita.empleado_id else None,
+                "nuevo_estado": cita.estado.value if hasattr(cita.estado, 'value') else str(cita.estado),
+            }
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(cita)
@@ -590,6 +658,17 @@ async def marcar_no_show(
 ):
     try:
         cita = await MarcarNoShowUseCase(_cita_repo(db)).ejecutar(cita_id)
+        await event_bus.publicar("CitaEstadoActualizado", {
+            "modulo": "agenda",
+            "accion": "CitaEstadoActualizado",
+            "entidad": "Cita",
+            "entidad_id": str(cita.id),
+            "sucursal_id": str(cita.sucursal_id),
+            "detalle": {
+                "empleado_id": str(cita.empleado_id) if cita.empleado_id else None,
+                "nuevo_estado": cita.estado.value if hasattr(cita.estado, 'value') else str(cita.estado),
+            }
+        }, db)
     except Exception as e:
         raise _traducir(e)
     return ok(cita)

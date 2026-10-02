@@ -13,6 +13,8 @@ from app.shared.responses import (
     page_params, make_sort_dependency, make_include_dependency, ok, page_response,
 )
 from app.shared.filtering import active_filters
+from app.shared.events import event_bus
+from app.shared.client_info import obtener_ip_cliente
 from app.modules.inventario.application.dtos import FiltroProductos
 from app.modules.inventario.domain.value_objects import TipoProducto
 from app.modules.inventario.application.use_cases.crear_producto import (
@@ -54,6 +56,7 @@ _INC_PRODUCTOS = make_include_dependency(
 )
 async def crear_producto(
     body: CrearProductoRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.crear")),
 ):
@@ -87,6 +90,15 @@ async def crear_producto(
                 codigo_barras=body.codigo_barras, descripcion=body.descripcion,
             )
         )
+        await event_bus.publicar("ProductoCreado", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "crear_producto",
+            "entidad": "Producto",
+            "entidad_id": str(producto.id),
+            "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+            "ip_address": obtener_ip_cliente(request),
+        }, db)
     except Exception as e:
         raise traducir_create(e)
     return ok(producto)
@@ -233,6 +245,7 @@ async def obtener_producto(
 async def actualizar_producto(
     producto_id: UUID,
     body: ActualizarProductoRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
 ):
@@ -275,6 +288,15 @@ async def actualizar_producto(
                 cambiar_descripcion=body.cambiar_descripcion,
             )
         )
+        await event_bus.publicar("ProductoEditado", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "editar_producto",
+            "entidad": "Producto",
+            "entidad_id": str(producto.id),
+            "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+            "ip_address": obtener_ip_cliente(request),
+        }, db)
     except Exception as e:
         raise traducir(e)
     return ok(producto)
@@ -294,6 +316,7 @@ async def actualizar_producto(
 )
 async def desactivar_producto(
     producto_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     actual: UsuarioAutenticado = Depends(require_permission("inventario.editar")),
     confirmar_con_stock: bool = Query(default=False),
@@ -302,6 +325,15 @@ async def desactivar_producto(
         producto = await DesactivarProductoUseCase(
             prod_repo(db), exist_repo(db), comp_repo(db),
         ).ejecutar(producto_id, confirmar_con_stock=confirmar_con_stock)
+        await event_bus.publicar("ProductoDesactivado", {
+            "usuario_id": actual.id,
+            "modulo": "inventario",
+            "accion": "desactivar_producto",
+            "entidad": "Producto",
+            "entidad_id": str(producto.id),
+            "detalle": {"sku": producto.sku, "nombre": producto.nombre},
+            "ip_address": obtener_ip_cliente(request),
+        }, db)
     except Exception as e:
         raise traducir(e)
     return ok(producto)
